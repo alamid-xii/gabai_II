@@ -20,8 +20,8 @@ import {
 import { toast } from "sonner";
 import { Navbar } from "../../components/Navbar";
 import { useAuth } from "../../contexts/AuthContext";
+import { API } from "../../config/api";
 
-const API = "http://localhost:3000/api";
 const tok = () => ({
   Authorization: `Bearer ${localStorage.getItem("token")}`,
   "Content-Type": "application/json"

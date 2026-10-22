@@ -1,11 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
 import { BookOpen, School, ArrowLeft, FlaskConical, X, Upload, FileText, Loader2, CheckCircle2 } from 'lucide-react';
+import { API } from '../../config/api';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
-const ACCEPTED = ".pdf,.jpg,.jpeg,.png";
-const FILE_HINT = "Formats: PDF, JPG, JPEG, PNG · Max file size: 10MB";
-const API = 'http://localhost:3000/api';
 
 const levels = [
   { id: 'JHS', label: 'Junior High School', subtitle: 'Grade 7 – Grade 10', icon: School },
@@ -215,7 +213,7 @@ export function LevelSelection() {
       setSelected('JHS');
       // Check if student already has an SSC application
       const token = localStorage.getItem('token');
-      fetch('http://localhost:3000/api/enrollments/ssc-application/status', {
+      fetch(`${API}/enrollments/ssc-application/status`, {
         headers: { Authorization: `Bearer ${token}` },
       }).then(r => r.json()).then(data => {
         if (data.applied) { setSscDone(true); }
@@ -239,7 +237,7 @@ export function LevelSelection() {
       const token = localStorage.getItem('token');
       const fd = new FormData();
       fd.append('sscCard', sscFile);
-      const res = await fetch('http://localhost:3000/api/enrollments/ssc-application', {
+      const res = await fetch(`${API}/enrollments/ssc-application`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
         body: fd,

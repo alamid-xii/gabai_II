@@ -4,8 +4,7 @@ import { MapPin, Eye, EyeOff, UserPlus, Mail, Lock, User, Phone, AlertCircle, Lo
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
+import { API } from "../config/api";
 
 export function SignUp() {
   const [formData, setFormData] = useState({
@@ -58,7 +57,7 @@ export function SignUp() {
     setLoading(true);
 
     try {
-      const response = await fetch("http://localhost:3000/api/auth/register", {
+      const response = await fetch(`${API}/auth/register`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -112,7 +111,7 @@ export function SignUp() {
             <button
               onClick={async () => {
                 try {
-                  await fetch("http://localhost:3000/api/auth/resend-verification", {
+                  await fetch(`${API}/auth/resend-verification`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ email: registeredEmail })
@@ -366,7 +365,7 @@ export function SignUp() {
           </div>
           <button
             type="button"
-            onClick={() => window.location.assign(`${API_BASE_URL}/api/auth/google?mode=signup`)}
+            onClick={() => window.location.assign(`${API}/auth/google?mode=signup`)}
             className="w-full h-12 inline-flex items-center justify-center gap-3 rounded-lg border border-gray-300 bg-white text-[#001840] font-semibold hover:bg-gray-50"
           >
             <svg aria-hidden="true" viewBox="0 0 48 48" className="h-5 w-5 shrink-0">

@@ -18,6 +18,7 @@ import { Badge } from "../../components/ui/badge";
 import { AcademicSetup } from "../../components/admin/AcademicSetup";
 import { SectionManagement } from "./SectionManagement";
 import { useAuth } from "../../contexts/AuthContext";
+import { API, BACKEND_URL } from "../../config/api";
 
 
 import { AdminStatusBadge } from "./AdminShared";
@@ -51,7 +52,7 @@ export function AdminBuildings({ buildings, onRefresh }) {
         imageUrl: editingBuilding.imageUrl || "",
         color: editingBuilding.color || "#102A71"
       });
-      setPreviewUrl(editingBuilding.imageUrl ? `http://localhost:3000${editingBuilding.imageUrl}` : null);
+      setPreviewUrl(editingBuilding.imageUrl ? `${BACKEND_URL}${editingBuilding.imageUrl}` : null);
       setSelectedFile(null);
     } else {
       setFormData({
@@ -105,8 +106,8 @@ export function AdminBuildings({ buildings, onRefresh }) {
 
     try {
       const url = editingBuilding 
-        ? `http://localhost:3000/api/admin/buildings/${editingBuilding.id}`
-        : "http://localhost:3000/api/admin/buildings";
+        ? `${API}/admin/buildings/${editingBuilding.id}`
+        : `${API}/admin/buildings`;
       
       const response = await fetch(url, {
         method: editingBuilding ? "PUT" : "POST",
@@ -134,7 +135,7 @@ export function AdminBuildings({ buildings, onRefresh }) {
     
     const token = localStorage.getItem("token");
     try {
-      const response = await fetch(`http://localhost:3000/api/admin/buildings/${id}`, {
+      const response = await fetch(`${API}/admin/buildings/${id}`, {
         method: "DELETE",
         headers: { "Authorization": `Bearer ${token}` }
       });

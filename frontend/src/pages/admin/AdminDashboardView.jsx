@@ -21,6 +21,7 @@ import { useAuth } from "../../contexts/AuthContext";
 
 
 import { AdminStatusBadge } from "./AdminShared";
+import { API } from "../../config/api";
 
 export function AdminDashboardView({ stats }) {
   const [enrollStats, setEnrollStats] = useState(null);
@@ -28,7 +29,7 @@ export function AdminDashboardView({ stats }) {
 
   useEffect(() => {
     const token = localStorage.getItem("token");
-    fetch("http://localhost:3000/api/admin/enrollments/stats", {
+    fetch(`${API}/admin/enrollments/stats`, {
       headers: { Authorization: `Bearer ${token}` }
     })
       .then(r => r.ok ? r.json() : null)

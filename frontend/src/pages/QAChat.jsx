@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { Send, Bot, User, Sparkles, ThumbsUp, ThumbsDown, Loader2, Copy, Trash2, Check, AlertCircle } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
+import { API } from "../config/api";
 
 const quickFAQs = [
   "What are the admission requirements for Grade 7?",
@@ -114,7 +115,7 @@ export function QAChat() {
     setSuggestedQuestions([]);
 
     try {
-      const response = await fetch("http://localhost:3000/api/chat/message", {
+      const response = await fetch(`${API}/chat/message`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
@@ -188,7 +189,7 @@ export function QAChat() {
     if (!message || !message.chatLogId) return;
 
     try {
-      await fetch("http://localhost:3000/api/chat/feedback", {
+      await fetch(`${API}/chat/feedback`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ chatLogId: message.chatLogId, helpful }),

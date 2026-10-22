@@ -18,9 +18,8 @@ import { Badge } from "../../components/ui/badge";
 import { AcademicSetup } from "../../components/admin/AcademicSetup";
 import { SectionManagement } from "./SectionManagement";
 import { useAuth } from "../../contexts/AuthContext";
-
-
 import { AdminStatusBadge } from "./AdminShared";
+import { API } from "../../config/api";
 
 // ── Archives View ─────────────────────────────────────────────────────────────
 export function AdminArchives() {
@@ -33,7 +32,7 @@ export function AdminArchives() {
   const tok = () => ({ Authorization: `Bearer ${localStorage.getItem('token')}`, 'Content-Type': 'application/json' });
 
   useEffect(() => {
-    fetch('http://localhost:3000/api/academic/school-years')
+    fetch(`${API}/academic/school-years`)
       .then(r => r.ok ? r.json() : [])
       .then(data => {
         if (Array.isArray(data)) {
@@ -50,7 +49,7 @@ export function AdminArchives() {
     if (!selectedYear) return;
     setLoading(true);
     const token = localStorage.getItem('token');
-    fetch(`http://localhost:3000/api/admin/archive/${encodeURIComponent(selectedYear)}`, {
+    fetch(`${API}/admin/archive/${encodeURIComponent(selectedYear)}`, {
       headers: { Authorization: `Bearer ${token}` }
     })
       .then(r => r.ok ? r.json() : null)
@@ -204,7 +203,7 @@ function CreateUserModal({ onClose, onCreated }) {
     setLoading(true);
     try {
       const token = localStorage.getItem('token');
-      const res = await fetch('http://localhost:3000/api/admin/users/create', {
+      const res = await fetch(`${API}/admin/users/create`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify(form),

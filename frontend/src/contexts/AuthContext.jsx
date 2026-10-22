@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect } from "react";
 import { LogoutModal } from "../components/LogoutModal";
+import { API } from "../config/api";
 
 const AuthContext = createContext(null);
 
@@ -21,7 +22,7 @@ export function AuthProvider({ children }) {
       }
 
       try {
-        const response = await fetch("http://localhost:3000/api/auth/me", {
+        const response = await fetch(`${API}/auth/me`, {
           headers: { Authorization: `Bearer ${storedToken}` },
         });
 
@@ -74,7 +75,7 @@ export function AuthProvider({ children }) {
   const confirmLogout = async () => {
     setLoggingOut(true);
     try {
-      await fetch("http://localhost:3000/api/auth/logout", {
+      await fetch(`${API}/auth/logout`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

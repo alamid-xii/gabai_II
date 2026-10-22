@@ -1,8 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
 import { toast } from 'sonner';
 import { Plus, Trash2, Edit, BookOpen, Check, Clock, Calendar, Search, X, RefreshCw, ChevronLeft, ChevronRight } from 'lucide-react';
+import { API } from '../../config/api';
 
-const API = 'http://localhost:3000/api';
 const token = () => localStorage.getItem('token');
 const headers = () => ({ 'Authorization': `Bearer ${token()}`, 'Content-Type': 'application/json' });
 

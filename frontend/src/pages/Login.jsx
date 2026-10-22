@@ -5,8 +5,7 @@ import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { useAuth } from "../contexts/AuthContext";
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
+import { API } from "../config/api";
 
 export function Login() {
   const [email, setEmail] = useState("");
@@ -72,7 +71,7 @@ export function Login() {
     setLoading(true);
 
     try {
-      const response = await fetch("http://localhost:3000/api/auth/login", {
+      const response = await fetch(`${API}/auth/login`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -245,7 +244,7 @@ export function Login() {
           </div>
           <button
             type="button"
-            onClick={() => window.location.assign(`${API_BASE_URL}/api/auth/google?mode=login`)}
+            onClick={() => window.location.assign(`${API}/auth/google?mode=login`)}
             disabled={loading}
             className="w-full h-12 inline-flex items-center justify-center gap-3 rounded-lg border border-gray-300 bg-white text-[#001840] font-semibold hover:bg-gray-50 disabled:opacity-50"
           >

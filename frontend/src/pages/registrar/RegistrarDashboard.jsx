@@ -9,8 +9,8 @@ import { SectionsTab } from "./RegistrarSections";
 import { SSCBulkTab } from "./RegistrarScheduling";
 import { SchedulesTab } from "./RegistrarSchedules";
 import { StudentsTab } from "./RegistrarStudents";
+import { API } from "../../config/api";
 
-const API = "http://localhost:3000/api";
 const tok = () => ({
   Authorization: `Bearer ${localStorage.getItem("token")}`,
   "Content-Type": "application/json",

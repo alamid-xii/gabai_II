@@ -2,8 +2,8 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router';
 import { toast } from 'sonner';
 import { BookOpen, Clock, MapPin, User, Loader, AlertCircle, ArrowLeft, Award, CheckCircle, XCircle } from 'lucide-react';
+import { API } from '../../config/api';
 
-const API = 'http://localhost:3000/api';
 const getToken = () => localStorage.getItem('token');
 
 export function StudentDashboard() {

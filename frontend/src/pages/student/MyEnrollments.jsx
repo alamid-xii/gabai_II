@@ -7,8 +7,8 @@ import {
   CheckCircle, Clock, XCircle, AlertCircle, Calendar, BookOpen,
   UserX, ArrowRightLeft, RotateCcw, FlaskConical, Loader2
 } from 'lucide-react';
+import { API } from '../../config/api';
 
-const API = 'http://localhost:3000/api';
 const tok = () => ({ Authorization: `Bearer ${localStorage.getItem('token')}`, 'Content-Type': 'application/json' });
 
 export function MyEnrollments() {
@@ -46,7 +46,7 @@ export function MyEnrollments() {
   useEffect(() => {
     // Load active school year and enrollments in parallel
     Promise.all([
-      fetch('http://localhost:3000/api/academic/school-years/active').then(r => r.ok ? r.json() : null),
+      fetch(`${API}/academic/school-years/active`).then(r => r.ok ? r.json() : null),
       (async () => {
         const user = JSON.parse(localStorage.getItem('user') || '{}');
         return getUserEnrollments(user.id);

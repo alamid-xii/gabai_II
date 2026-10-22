@@ -6,8 +6,8 @@ import {
   RefreshCw, CheckCircle2, AlertCircle, ChevronRight,
   Sparkles, Layers, ShieldCheck, ArrowRight, Info
 } from 'lucide-react';
+import { API } from '../../config/api';
 
-const API = 'http://localhost:3000/api';
 const getToken = () => localStorage.getItem('token');
 
 // 30-minute intervals from 7:30 AM to 5:30 PM (21 slot marks, 20 intervals)

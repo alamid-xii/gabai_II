@@ -5,6 +5,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { AdminStatusBadge } from "./AdminShared";
+import { API } from "../../config/api";
 
 export function AdminEnrollmentsView() {
   const navigate = useNavigate();
@@ -23,7 +24,7 @@ export function AdminEnrollmentsView() {
 
   // Load school years once
   useEffect(() => {
-    fetch('http://localhost:3000/api/academic/school-years')
+    fetch(`${API}/academic/school-years`)
       .then(r => r.ok ? r.json() : [])
       .then(data => {
         if (Array.isArray(data)) {
@@ -40,7 +41,7 @@ export function AdminEnrollmentsView() {
     try {
       const params = new URLSearchParams();
       if (yearFilter) params.set('academicYear', yearFilter);
-      const res = await fetch(`http://localhost:3000/api/admin/enrollments?${params}`, { headers: tok() });
+      const res = await fetch(`${API}/admin/enrollments?${params}`, { headers: tok() });
       if (!res.ok) throw new Error('Failed to load');
       const data = await res.json();
       setEnrollments(Array.isArray(data) ? data : []);

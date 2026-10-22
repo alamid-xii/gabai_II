@@ -3,6 +3,7 @@ import { useNavigate, useParams, useLocation } from "react-router";
 import { toast } from "sonner";
 import { CheckCircle2, Upload, X, Loader2, FileText, ArrowLeft } from "lucide-react";
 import { uploadEnrollmentDocuments, getEnrollmentById } from "../../services/enrollmentApi";
+import { API } from "../../config/api";
 const JHS_GRADES = ["Grade 7","Grade 8","Grade 9","Grade 10"];
 const SHS_GRADES = ["Grade 11","Grade 12"];
 const SHS_STRANDS = ["STEM","ABM","HUMSS","TVL","Sports","Arts and Design"];
@@ -32,7 +33,6 @@ const TRANSFEREE_CREDS = [
   { key:"cert",  label:"GMRC / Certificate of Good Moral Character", required: true  },
   { key:"f137e", label:"Honorable Dismissal / Transfer Credential", required: true  },
 ];
-const API = "http://localhost:3000/api";
 const onlyDigits = (e) => { if (!/[0-9]/.test(e.key) && !["Backspace","Tab","ArrowLeft","ArrowRight","Delete"].includes(e.key)) e.preventDefault(); };
 const onlyLetters = (e) => { if (e.key.length === 1 && !/[\p{L}\p{M}\s\-']/u.test(e.key)) e.preventDefault(); };
 const keepDigits = (value, maxLength) => value.replace(/\D/g, "").slice(0, maxLength);

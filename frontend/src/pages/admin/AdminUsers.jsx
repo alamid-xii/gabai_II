@@ -5,6 +5,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "../../components/ui/badge";
+import { API } from "../../config/api";
 
 export function AdminUsers({ users: initialUsers = [] }) {
   const [users, setUsers] = useState(initialUsers);
@@ -40,7 +41,7 @@ export function AdminUsers({ users: initialUsers = [] }) {
     setTogglingId(u.id);
     try {
       const token = localStorage.getItem('token');
-      const res = await fetch(`http://localhost:3000/api/admin/users/${u.id}/status`, {
+      const res = await fetch(`${API}/admin/users/${u.id}/status`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -495,7 +496,7 @@ function EditUserModal({ user, onClose, onUpdated }) {
     setLoading(true);
     try {
       const token = localStorage.getItem('token');
-      const res = await fetch(`http://localhost:3000/api/admin/users/${user.id}`, {
+      const res = await fetch(`${API}/admin/users/${user.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -686,7 +687,7 @@ function ResetPasswordModal({ user, onClose }) {
     setLoading(true);
     try {
       const token = localStorage.getItem('token');
-      const res = await fetch(`http://localhost:3000/api/admin/users/${user.id}/reset-password`, {
+      const res = await fetch(`${API}/admin/users/${user.id}/reset-password`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -804,7 +805,7 @@ function CreateUserModal({ onClose, onCreated }) {
     setLoading(true);
     try {
       const token = localStorage.getItem('token');
-      const res = await fetch('http://localhost:3000/api/admin/users/create', {
+      const res = await fetch(`${API}/admin/users/create`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify(form),

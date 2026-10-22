@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useLocation, useNavigate, Link } from "react-router";
 import { CheckCircle2, XCircle, Loader2, Mail, MapPin, RefreshCw } from "lucide-react";
+import { API } from "../config/api";
 
 export function VerifyEmailPage() {
   const location = useLocation();
@@ -61,7 +62,7 @@ export function VerifyEmailPage() {
     setErrorMsg("");
 
     try {
-      const res = await fetch("http://localhost:3000/api/auth/verify-otp", {
+      const res = await fetch(`${API}/auth/verify-otp`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, otp: code }),
@@ -88,7 +89,7 @@ export function VerifyEmailPage() {
     setOtp(["", "", "", "", "", ""]);
     inputRefs.current[0]?.focus();
     try {
-      await fetch("http://localhost:3000/api/auth/resend-verification", {
+      await fetch(`${API}/auth/resend-verification`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email }),

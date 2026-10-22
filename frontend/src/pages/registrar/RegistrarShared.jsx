@@ -10,8 +10,9 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { Navbar } from '../../components/Navbar';
+import { API as CONFIG_API } from '../../config/api';
 
-export const API = 'http://localhost:3000/api';
+export const API = CONFIG_API;
 export const tok = () => ({ Authorization: `Bearer ${localStorage.getItem('token')}`, 'Content-Type': 'application/json' });
 
 // ── Application status config (enrollment pipeline) ──────────────────────────

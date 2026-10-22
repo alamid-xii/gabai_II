@@ -1,4 +1,6 @@
-﻿const API_URL = 'http://localhost:3000/api';
+import { API } from '../config/api';
+
+const API_URL = API;
 
 // Get auth token from localStorage
 const getAuthToken = () => {
@@ -53,7 +55,7 @@ export const createEnrollment = async (enrollmentData) => {
     
     // Check if it's a network error
     if (error.message.includes('Failed to fetch') || error.name === 'TypeError') {
-      throw new Error('Network error: Cannot connect to server. Make sure the backend is running on http://localhost:3000');
+      throw new Error('Network error: Cannot connect to server. Please check your internet connection.');
     }
     
     throw error;

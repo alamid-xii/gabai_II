@@ -19,7 +19,7 @@ import { AcademicSetup } from "../../components/admin/AcademicSetup";
 import { SectionManagement } from "./SectionManagement";
 import { useAuth } from "../../contexts/AuthContext";
 import { Navbar } from "../../components/Navbar";
-
+import { API } from "../../config/api";
 
 import { AdminDashboardView } from "./AdminDashboardView";
 import { AdminEnrollmentsView } from "./AdminEnrollmentsView";
@@ -69,10 +69,10 @@ export function AdminDashboard({ initialTab = "dashboard" }) {
       };
 
       const [statsRes, faqsRes, usersRes, buildingsRes] = await Promise.all([
-        fetch("http://localhost:3000/api/admin/stats", { headers }),
-        fetch("http://localhost:3000/api/admin/faqs", { headers }),
-        fetch("http://localhost:3000/api/admin/users", { headers }),
-        fetch("http://localhost:3000/api/buildings", { headers })
+        fetch(`${API}/admin/stats`, { headers }),
+        fetch(`${API}/admin/faqs`, { headers }),
+        fetch(`${API}/admin/users`, { headers }),
+        fetch(`${API}/buildings`, { headers })
       ]);
 
       if (statsRes.status === 401 || statsRes.status === 403) {
@@ -101,7 +101,7 @@ export function AdminDashboard({ initialTab = "dashboard" }) {
   async function handleCreateFAQ(faqData) {
     try {
       const token = localStorage.getItem("token");
-      const response = await fetch("http://localhost:3000/api/admin/faqs", {
+      const response = await fetch(`${API}/admin/faqs`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -122,7 +122,7 @@ export function AdminDashboard({ initialTab = "dashboard" }) {
   async function handleUpdateFAQ(id, faqData) {
     try {
       const token = localStorage.getItem("token");
-      const response = await fetch(`http://localhost:3000/api/admin/faqs/${id}`, {
+      const response = await fetch(`${API}/admin/faqs/${id}`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
@@ -145,7 +145,7 @@ export function AdminDashboard({ initialTab = "dashboard" }) {
 
     try {
       const token = localStorage.getItem("token");
-      const response = await fetch(`http://localhost:3000/api/admin/faqs/${id}`, {
+      const response = await fetch(`${API}/admin/faqs/${id}`, {
         method: "DELETE",
         headers: {
           "Authorization": `Bearer ${token}`

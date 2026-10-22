@@ -8,7 +8,8 @@ import {
   Zap, ChevronDown, ChevronUp, Download
 } from 'lucide-react';
 
-const API = 'http://localhost:3000/api';
+import { API } from '../../config/api';
+
 const tok = () => ({ Authorization: `Bearer ${localStorage.getItem('token')}`, 'Content-Type': 'application/json' });
 
 const COURSES = ['JHS', 'SHS'];

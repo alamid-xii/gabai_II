@@ -3,6 +3,7 @@ import { useParams, useNavigate } from "react-router";
 import { toast } from "sonner";
 import { AlertCircle, Upload, X, FileText, CheckCircle2, Loader2, ChevronLeft } from "lucide-react";
 import { getEnrollmentById, getEnrollmentDocuments, uploadEnrollmentDocuments, deleteEnrollmentDocument, resubmitEnrollment } from "../../services/enrollmentApi";
+import { BACKEND_URL } from "../../config/api";
 
 const CREDENTIALS = [
   { key: "f138", label: "F-138" },
@@ -161,7 +162,7 @@ export function ResubmitPage() {
                     </div>
                     {uploaded ? (
                       <div className="flex items-center gap-3">
-                        <a href={`http://localhost:3000${uploaded.filePath}`} target="_blank" rel="noopener noreferrer"
+                        <a href={`${BACKEND_URL}${uploaded.filePath}`} target="_blank" rel="noopener noreferrer"
                           className="flex items-center gap-1.5 text-xs text-blue-600 hover:underline truncate flex-1">
                           <FileText size={13} /> {uploaded.originalName}
                         </a>

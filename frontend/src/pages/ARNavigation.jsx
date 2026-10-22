@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef } from "react";
 import { Search, MapPin, X, Building2, ChevronRight, Info, RefreshCw } from "lucide-react";
 import { PanoramaViewer } from "../components/PanoramaViewer";
+import { API, BACKEND_URL } from "../config/api";
 
 const aerialPhoto = "/emc_aerial.jpg";
-const API = "http://localhost:3000/api";
 
 export function ARNavigation() {
   const [search, setSearch] = useState("");
@@ -209,7 +209,7 @@ export function ARNavigation() {
                     </div>
                     <div className="rounded-xl overflow-hidden ring-2 ring-[#F5C400]/30">
                       <PanoramaViewer
-                        src={`http://localhost:3000${selectedBuilding.imageUrl}`}
+                        src={`${BACKEND_URL}${selectedBuilding.imageUrl}`}
                         height="420px"
                       />
                     </div>

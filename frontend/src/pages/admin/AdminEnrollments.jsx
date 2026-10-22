@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
+import { API } from '../../config/api';
 import { 
   Search, Filter, Download, CheckCircle, XCircle, 
   FileText, TrendingUp, Users, Calendar, Eye, BookOpen,
@@ -44,7 +45,7 @@ export function AdminEnrollments() {
       
       console.log('Loading enrollments with token:', token.substring(0, 20) + '...');
       
-      const response = await fetch('http://localhost:3000/api/admin/enrollments', {
+      const response = await fetch(`${API}/admin/enrollments`, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -106,7 +107,7 @@ export function AdminEnrollments() {
   
   const handleApprove = async (id, comment) => {
     try {
-      const res = await fetch(`http://localhost:3000/api/admin/enrollments/${id}/approve`, {
+      const res = await fetch(`${API}/admin/enrollments/${id}/approve`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -139,7 +140,7 @@ export function AdminEnrollments() {
   
   const handleReject = async (id, comment) => {
     try {
-      await fetch(`http://localhost:3000/api/admin/enrollments/${id}/reject`, {
+      await fetch(`${API}/admin/enrollments/${id}/reject`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -162,7 +163,7 @@ export function AdminEnrollments() {
         toast.error('Please select an exam date');
         return;
       }
-      await fetch(`http://localhost:3000/api/enrollments/${id}/ssc-schedule`, {
+      await fetch(`${API}/enrollments/${id}/ssc-schedule`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -189,7 +190,7 @@ export function AdminEnrollments() {
         toast.error('Please enter the exam score');
         return;
       }
-      const res = await fetch(`http://localhost:3000/api/enrollments/${id}/ssc-result`, {
+      const res = await fetch(`${API}/enrollments/${id}/ssc-result`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -214,7 +215,7 @@ export function AdminEnrollments() {
     }
     
     try {
-      const response = await fetch('http://localhost:3000/api/admin/enrollments/bulk-export', {
+      const response = await fetch(`${API}/admin/enrollments/bulk-export`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
