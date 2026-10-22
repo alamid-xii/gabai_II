@@ -1,4 +1,4 @@
-﻿import { Clock, Smile, TrendingUp, Heart, Target, GraduationCap } from "lucide-react";
+import { Clock, Smile, TrendingUp, Heart, Target, GraduationCap } from "lucide-react";
 import { ImageWithFallback } from "./figma/ImageWithFallback";
 
 export function Impact() {
@@ -32,7 +32,7 @@ export function Impact() {
 
   return (
     <section className="bg-[#FFFDF0] py-20 lg:py-28">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="max-w-7xl mx-auto px-5 sm:px-6 lg:px-8">
         {/* Header */}
         <div className="text-center max-w-3xl mx-auto mb-16">
           <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-[#001840] mb-6">
@@ -52,7 +52,7 @@ export function Impact() {
                 key={index}
                 className="bg-white p-8 rounded-2xl shadow-sm hover:shadow-md transition-shadow duration-200"
               >
-                <div className="bg-gradient-to-br from-[#F5C400] to-[#FFDC5F] w-14 h-14 rounded-xl flex items-center justify-center mb-4">
+                <div className="bg-linear-to-br from-[#F5C400] to-[#FFDC5F] w-14 h-14 rounded-xl flex items-center justify-center mb-4">
                   <Icon className="w-7 h-7 text-[#001840]" />
                 </div>
                 <h3 className="text-xl font-semibold text-[#001840] mb-3">
@@ -113,7 +113,7 @@ export function Impact() {
         </div>
 
         {/* Stats Banner */}
-        <div className="mt-16 bg-gradient-to-r from-[#001840] to-[#102A71] rounded-2xl p-12">
+        <div className="mt-16 bg-linear-to-r from-[#001840] to-[#102A71] rounded-2xl p-12">
           <div className="grid sm:grid-cols-3 gap-8 text-center">
             <div>
               <div className="text-4xl font-bold text-[#F5C400] mb-2">85%</div>

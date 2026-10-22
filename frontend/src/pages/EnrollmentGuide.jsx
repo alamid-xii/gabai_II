@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import {
   CheckCircle2,
   Circle,
@@ -198,7 +198,7 @@ export function EnrollmentGuide() {
           </div>
           <div className="w-full bg-gray-100 rounded-full h-4 overflow-hidden shadow-inner">
             <div
-              className="h-4 rounded-full bg-gradient-to-r from-[#F5C400] to-[#FFDC5F] transition-all duration-500 shadow-sm"
+              className="h-4 rounded-full bg-linear-to-r from-[#F5C400] to-[#FFDC5F] transition-all duration-500 shadow-sm"
               style={{ width: `${progress}%` }}
             />
           </div>
@@ -242,7 +242,7 @@ export function EnrollmentGuide() {
 
         {/* Important Info Cards */}
         <div className="grid sm:grid-cols-2 gap-4 mb-8">
-          <div className="bg-gradient-to-br from-blue-50 to-blue-100 border border-blue-200 rounded-xl p-4">
+          <div className="bg-linear-to-br from-blue-50 to-blue-100 border border-blue-200 rounded-xl p-4">
             <div className="flex items-start gap-3">
               <Calendar className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
               <div>
@@ -253,7 +253,7 @@ export function EnrollmentGuide() {
             </div>
           </div>
 
-          <div className="bg-gradient-to-br from-green-50 to-green-100 border border-green-200 rounded-xl p-4">
+          <div className="bg-linear-to-br from-green-50 to-green-100 border border-green-200 rounded-xl p-4">
             <div className="flex items-start gap-3">
               <MapPin className="w-5 h-5 text-green-600 shrink-0 mt-0.5" />
               <div>
@@ -264,7 +264,7 @@ export function EnrollmentGuide() {
             </div>
           </div>
 
-          <div className="bg-gradient-to-br from-purple-50 to-purple-100 border border-purple-200 rounded-xl p-4">
+          <div className="bg-linear-to-br from-purple-50 to-purple-100 border border-purple-200 rounded-xl p-4">
             <div className="flex items-start gap-3">
               <Phone className="w-5 h-5 text-purple-600 shrink-0 mt-0.5" />
               <div>
@@ -275,7 +275,7 @@ export function EnrollmentGuide() {
             </div>
           </div>
 
-          <div className="bg-gradient-to-br from-orange-50 to-orange-100 border border-orange-200 rounded-xl p-4">
+          <div className="bg-linear-to-br from-orange-50 to-orange-100 border border-orange-200 rounded-xl p-4">
             <div className="flex items-start gap-3">
               <AlertCircle className="w-5 h-5 text-orange-600 shrink-0 mt-0.5" />
               <div>
@@ -317,7 +317,7 @@ export function EnrollmentGuide() {
 
                   {/* Icon */}
                   <div
-                    className={`hidden sm:flex w-12 h-12 rounded-xl items-center justify-center shrink-0 bg-gradient-to-br ${step.color} shadow-md`}
+                    className={`hidden sm:flex w-12 h-12 rounded-xl items-center justify-center shrink-0 bg-linear-to-br ${step.color} shadow-md`}
                   >
                     <Icon className="w-6 h-6 text-[#FFDC5F]" />
                   </div>
@@ -411,7 +411,7 @@ export function EnrollmentGuide() {
 
         {/* All done banner */}
         {completed.size === steps.length && (
-          <div className="mt-8 bg-gradient-to-r from-green-500 to-green-600 rounded-2xl p-8 text-center shadow-2xl animate-fadeIn">
+          <div className="mt-8 bg-linear-to-r from-green-500 to-green-600 rounded-2xl p-8 text-center shadow-2xl animate-fadeIn">
             <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg">
               <CheckCircle2 className="w-12 h-12 text-green-600" />
             </div>

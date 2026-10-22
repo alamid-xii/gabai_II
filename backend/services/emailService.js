@@ -6,7 +6,7 @@ const transporter = nodemailer.createTransport({
   service: process.env.EMAIL_SERVICE || "gmail",
   auth: {
     user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASSWORD,
+    pass: process.env.EMAIL_PASSWORD?.replace(/\s+/g, ""),
   },
 });
 
@@ -53,12 +53,14 @@ function info(label, value) {
 async function send(to, subject, html) {
   if (!process.env.EMAIL_USER || !process.env.EMAIL_PASSWORD) {
     console.warn("[Email] Skipped — EMAIL_USER or EMAIL_PASSWORD not set");
-    return;
+    return false;
   }
   try {
     await transporter.sendMail({ from: FROM, to, subject, html });
+    return true;
   } catch (err) {
     console.error(`[Email] Failed to send "${subject}" to ${to}:`, err.message);
+    return false;
   }
 }
 
@@ -208,7 +210,7 @@ export async function sendOtpEmail(user, otp) {
     </div>
     <p style="color:#888;font-size:13px;text-align:center;">This OTP expires in <strong>10 minutes</strong>.</p>
     <p style="color:#aaa;font-size:12px;margin-top:16px;">If you did not create this account, please ignore this email.</p>`;
-  await send(user.email, "Your Verification OTP — GabAI EMC", wrap("Email Verification Code", body));
+  return send(user.email, "Your Verification OTP — GabAI EMC", wrap("Email Verification Code", body));
 }
 
 // ── Life Status Changed (Dropped / Transferred Out / Retained) ────────────────

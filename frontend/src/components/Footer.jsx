@@ -1,4 +1,4 @@
-﻿import { MapPin, Mail, Phone, Facebook, Twitter, Instagram } from "lucide-react";
+import { MapPin, Mail, Phone, Facebook, Twitter, Instagram } from "lucide-react";
 import { Link } from "react-router";
 
 export function Footer() {
@@ -30,7 +30,6 @@ export function Footer() {
             <h4 className="font-semibold text-lg mb-4 text-[#F5C400]">Quick Links</h4>
             <ul className="space-y-3">
               <li><Link to="/enroll" className="text-[#FFFDF0] hover:text-[#FFDC5F] transition-colors duration-200">Admissions</Link></li>
-              <li><Link to="/campus-map" className="text-[#FFFDF0] hover:text-[#FFDC5F] transition-colors duration-200">Campus Map</Link></li>
               <li><Link to="/my-enrollments" className="text-[#FFFDF0] hover:text-[#FFDC5F] transition-colors duration-200">My Enrollments</Link></li>
               <li><Link to="/qa" className="text-[#FFFDF0] hover:text-[#FFDC5F] transition-colors duration-200">Help & Support</Link></li>
             </ul>
@@ -52,17 +51,17 @@ export function Footer() {
             <h4 className="font-semibold text-lg mb-4 text-[#F5C400]">Contact</h4>
             <ul className="space-y-3">
               <li className="flex items-start gap-2 text-[#FFFDF0] text-sm">
-                <MapPin className="w-4 h-4 mt-1 flex-shrink-0 text-[#FFDC5F]" />
+                <MapPin className="w-4 h-4 mt-1 shrink-0 text-[#FFDC5F]" />
                 <span>Vicente Ylagan St. Bagong Bayan II, Bongabong, Philippines, 5211</span>
               </li>
               <li className="flex items-center gap-2 text-[#FFFDF0] text-sm">
-                <Mail className="w-4 h-4 flex-shrink-0 text-[#FFDC5F]" />
+                <Mail className="w-4 h-4 shrink-0 text-[#FFDC5F]" />
                 <a href="mailto:info@emc.edu.ph" className="hover:text-[#FFDC5F] transition-colors duration-200">
                   emc_1945@yahoo.com
                 </a>
               </li>
               <li className="flex items-center gap-2 text-[#FFFDF0] text-sm">
-                <Phone className="w-4 h-4 flex-shrink-0 text-[#FFDC5F]" />
+                <Phone className="w-4 h-4 shrink-0 text-[#FFDC5F]" />
                 <span>(043) 123-4567</span>
               </li>
             </ul>
@@ -71,14 +70,7 @@ export function Footer() {
                 className="bg-[#102A71] hover:bg-[#F5C400] w-9 h-9 rounded-lg flex items-center justify-center transition-colors duration-200 group">
                 <Facebook className="w-4 h-4 text-[#FFFDF0] group-hover:text-[#001840]" />
               </a>
-              <a href="https://twitter.com" target="_blank" rel="noopener noreferrer"
-                className="bg-[#102A71] hover:bg-[#F5C400] w-9 h-9 rounded-lg flex items-center justify-center transition-colors duration-200 group">
-                <Twitter className="w-4 h-4 text-[#FFFDF0] group-hover:text-[#001840]" />
-              </a>
-              <a href="https://instagram.com" target="_blank" rel="noopener noreferrer"
-                className="bg-[#102A71] hover:bg-[#F5C400] w-9 h-9 rounded-lg flex items-center justify-center transition-colors duration-200 group">
-                <Instagram className="w-4 h-4 text-[#FFFDF0] group-hover:text-[#001840]" />
-              </a>
+              
             </div>
           </div>
         </div>

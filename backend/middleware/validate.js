@@ -64,12 +64,74 @@ export function isValidStudentNumber(sn) {
 
 // ── Enrollment middleware ─────────────────────────────────────────────────────
 
+const ENROLLMENT_STRING_LIMITS = {
+  gradeLevel: 20,
+  strand: 50,
+  lrn: 12,
+  guardianTelephone: 11,
+  grade6School: 200,
+  grade6SchoolAddress: 200,
+  grade6Section: 50,
+  grade6SYStart: 4,
+  grade6SYEnd: 4,
+  grade6Average: 10,
+  grade6Remarks: 50,
+  lastHSSchool: 200,
+  lastHSCurriculumYear: 20,
+  lastHSSection: 50,
+  lastHSSYStart: 4,
+  lastHSSYEnd: 4,
+  enrollmentType: 20,
+  studentNumber: 10,
+  academicYear: 20,
+  dateEnrolled: 10,
+  familyName: 100,
+  firstName: 100,
+  middleName: 100,
+  dateOfBirth: 10,
+  placeOfBirth: 200,
+  email: 100,
+  mobileNumber: 20,
+  fatherName: 200,
+  fatherOccupation: 100,
+  fatherAddress: 500,
+  motherName: 200,
+  motherOccupation: 100,
+  motherAddress: 500,
+  parentsAddress: 500,
+  guardianName: 200,
+  guardianOccupation: 100,
+  guardianAddress: 500,
+  studentSignature: 200,
+  parentGuardianSignature: 200,
+};
+
+function validateEnrollmentStringLimits(body, errors) {
+  for (const [field, maxLength] of Object.entries(ENROLLMENT_STRING_LIMITS)) {
+    const value = body[field];
+    if (value === undefined || value === null || value === '') continue;
+    if (typeof value !== 'string') {
+      errors.push({ field, message: `${field} must be text` });
+    } else if (value.length > maxLength) {
+      errors.push({ field, message: `${field} must be ${maxLength} characters or less` });
+    }
+  }
+
+  for (const field of ['grade6SYStart', 'grade6SYEnd', 'lastHSSYStart', 'lastHSSYEnd']) {
+    const value = body[field];
+    if (value && !/^\d{4}$/.test(value)) {
+      errors.push({ field, message: `${field} must be a four-digit year` });
+    }
+  }
+}
+
 /**
  * Validate required fields for POST /api/enrollments
  */
 export function validateEnrollmentCreate(req, res, next) {
   const b = req.body;
   const errors = [];
+  validateEnrollmentStringLimits(b, errors);
 
   // Core identity
   if (!b.familyName?.trim())  errors.push({ field: 'familyName',  message: 'Family name is required' });
@@ -104,8 +166,8 @@ export function validateEnrollmentCreate(req, res, next) {
   if (b.educationLevel && !['JHS', 'SHS'].includes(b.educationLevel)) {
     errors.push({ field: 'educationLevel', message: 'Education level must be JHS or SHS' });
   }
-  if (b.enrollmentType && !['new', 'old', 'transferee'].includes(b.enrollmentType)) {
-    errors.push({ field: 'enrollmentType', message: 'Enrollment type must be new, old, or transferee' });
+  if (b.enrollmentType && !['new', 'old', 'transferee', 'returnee'].includes(b.enrollmentType)) {
+    errors.push({ field: 'enrollmentType', message: 'Enrollment type must be new, old, transferee, or returnee' });
   }
   if (b.sex && !['Male', 'Female'].includes(b.sex)) {
     errors.push({ field: 'sex', message: 'Sex must be Male or Female' });
@@ -133,6 +195,13 @@ export function validateEnrollmentCreate(req, res, next) {
   if (b.firstName  && /\d/.test(b.firstName))  errors.push({ field: 'firstName',  message: 'First name must not contain numbers' });
   if (b.middleName && /\d/.test(b.middleName)) errors.push({ field: 'middleName', message: 'Middle name must not contain numbers' });
 
+  if (b.guardianTelephone && !isValidPhone(b.guardianTelephone)) {
+    errors.push({ field: 'guardianTelephone', message: 'Guardian telephone must be 11 digits starting with 09' });
+  }
+  if (b.grade6Average && (!Number.isFinite(Number(b.grade6Average)) || Number(b.grade6Average) < 0 || Number(b.grade6Average) > 100)) {
+    errors.push({ field: 'grade6Average', message: 'General average must be between 0 and 100' });
+  }
+
   if (errors.length > 0) {
     return res.status(400).json({ message: 'Validation failed', errors });
   }
@@ -145,6 +214,7 @@ export function validateEnrollmentCreate(req, res, next) {
 export function validateEnrollmentUpdate(req, res, next) {
   const b = req.body;
   const errors = [];
+  validateEnrollmentStringLimits(b, errors);
 
   if (b.email !== undefined && !isValidEmail(b.email)) {
     errors.push({ field: 'email', message: 'Invalid email format' });
@@ -161,6 +231,12 @@ export function validateEnrollmentUpdate(req, res, next) {
   if (b.familyName !== undefined && /\d/.test(b.familyName)) errors.push({ field: 'familyName', message: 'Family name must not contain numbers' });
   if (b.firstName  !== undefined && /\d/.test(b.firstName))  errors.push({ field: 'firstName',  message: 'First name must not contain numbers' });
   if (b.middleName !== undefined && /\d/.test(b.middleName)) errors.push({ field: 'middleName', message: 'Middle name must not contain numbers' });
+  if (b.guardianTelephone && !isValidPhone(b.guardianTelephone)) {
+    errors.push({ field: 'guardianTelephone', message: 'Guardian telephone must be 11 digits starting with 09' });
+  }
+  if (b.grade6Average && (!Number.isFinite(Number(b.grade6Average)) || Number(b.grade6Average) < 0 || Number(b.grade6Average) > 100)) {
+    errors.push({ field: 'grade6Average', message: 'General average must be between 0 and 100' });
+  }
 
   if (errors.length > 0) {
     return res.status(400).json({ message: 'Validation failed', errors });

@@ -1,4 +1,4 @@
-﻿
+
 /*
     MIT License
     
@@ -26,17 +26,20 @@
     
 import express from "express";
 import { homePage } from "../controllers/homeController.js";
-import { loginPage, registerPage, forgotPasswordPage, dashboardPage, loginUser, registerUser, logoutUser, verifyEmail, resendVerification } from "../controllers/authController.js";
+import { loginPage, registerPage, forgotPasswordPage, dashboardPage, loginUser, registerUser, logoutUser, verifyEmail, resendVerification, startGoogleAuth, completeGoogleAuth, consumeGoogleAuth, getCurrentUser, updateProfile } from "../controllers/authController.js";
 import { sendMessage, rateFeedback } from "../controllers/chatController.js";
 import { getAllBuildings, getBuildingById, createBuilding, updateBuilding, deleteBuilding, upload } from "../controllers/buildingController.js";
-import { requireAdmin, getDashboardStats, getAllFAQs, createFAQ, updateFAQ, deleteFAQ, getAllUsers, updateUser, deleteUser } from "../controllers/adminController.js";
-import { requireRegistrar, requireAdminOrRegistrar } from "../middleware/auth.js";
+import { requireAdmin, getDashboardStats, getAllFAQs, createFAQ, updateFAQ, deleteFAQ, getAllUsers, updateUser, deleteUser, resetUserPassword, toggleUserStatus } from "../controllers/adminController.js";
+import { requireRegistrar, requireAdminOrRegistrar, authenticateToken } from "../middleware/auth.js";
 import { sanitizeBody, validateLogin, validateRegister, validateFAQ } from "../middleware/validate.js";
 import { getAllTeachers, createUser, assignTeacherToSection } from "../controllers/teacherController.js";
 import {
   getGradingPeriods, setupGradingPeriods, openGradingPeriod, closeGradingPeriod,
   getStudentGrades, getSectionGrades
 } from "../controllers/gradingController.js";
+import {
+  getClassSchedules, createClassSchedule, deleteClassSchedule, getStudentSchedule, downloadStudentSchedulePDF
+} from "../controllers/scheduleController.js";
 import enrollmentRoutes from "./enrollmentRoutes.js";
 import adminEnrollmentRoutes from "./adminEnrollmentRoutes.js";
 import registrarRoutes from "./registrarRoutes.js";
@@ -64,9 +67,14 @@ router.get("/logout", logoutUser);
 // Auth API routes (for React frontend)
 router.post("/api/auth/login", sanitizeBody, validateLogin, loginUser);
 router.post("/api/auth/register", sanitizeBody, validateRegister, registerUser);
+router.get("/api/auth/google", startGoogleAuth);
+router.get("/api/auth/google/callback", completeGoogleAuth);
+router.get("/api/auth/google/session", consumeGoogleAuth);
 router.post("/api/auth/logout", logoutUser);
 router.post("/api/auth/verify-otp", sanitizeBody, verifyEmail);
 router.post("/api/auth/resend-verification", sanitizeBody, resendVerification);
+router.get("/api/auth/me", authenticateToken, getCurrentUser);
+router.put("/api/auth/profile", authenticateToken, sanitizeBody, updateProfile);
 
 // Protected routes
 router.get("/dashboard", dashboardPage);
@@ -88,9 +96,12 @@ router.delete("/api/admin/faqs/:id", requireAdmin, deleteFAQ);
 router.get("/api/admin/users", requireAdmin, getAllUsers);
 router.post("/api/admin/users/create", requireAdmin, sanitizeBody, createUser);
 router.put("/api/admin/users/:id", requireAdmin, updateUser);
+router.put("/api/admin/users/:id/status", requireAdmin, toggleUserStatus);
+router.post("/api/admin/users/:id/reset-password", requireAdmin, resetUserPassword);
 router.delete("/api/admin/users/:id", requireAdmin, deleteUser);
-router.get("/api/admin/teachers", requireAdmin, getAllTeachers);
-router.put("/api/admin/sections/:id/assign-teacher", requireAdmin, sanitizeBody, assignTeacherToSection);
+router.get("/api/admin/teachers", authenticateToken, requireAdminOrRegistrar, getAllTeachers);
+router.get("/api/academic/teachers", authenticateToken, requireAdminOrRegistrar, getAllTeachers);
+router.put("/api/admin/sections/:id/assign-teacher", authenticateToken, requireAdminOrRegistrar, sanitizeBody, assignTeacherToSection);
 router.post("/api/admin/buildings", requireAdmin, upload.single("photo360"), createBuilding);
 router.put("/api/admin/buildings/:id", requireAdmin, upload.single("photo360"), updateBuilding);
 router.delete("/api/admin/buildings/:id", requireAdmin, deleteBuilding);
@@ -137,6 +148,15 @@ router.put("/api/admin/grading-periods/:id/open", requireAdmin, openGradingPerio
 router.put("/api/admin/grading-periods/:id/close", requireAdmin, closeGradingPeriod);
 
 // ── Section grades view (admin/registrar) ─────────────────────────────────────
-router.get("/api/admin/sections/:sectionId/grades", requireAdminOrRegistrar, getSectionGrades);
+router.get("/api/admin/sections/:sectionId/grades", authenticateToken, requireAdminOrRegistrar, getSectionGrades);
+
+// ── Class schedules ──────────────────────────────────────────────────────────
+router.get("/api/academic/schedules", authenticateToken, getClassSchedules);
+router.post("/api/academic/schedules", authenticateToken, requireAdminOrRegistrar, sanitizeBody, createClassSchedule);
+router.delete("/api/academic/schedules/:id", authenticateToken, requireAdminOrRegistrar, deleteClassSchedule);
+
+// ── Student schedule ─────────────────────────────────────────────────────────
+router.get("/api/student/my-schedule", authenticateToken, getStudentSchedule);
+router.get("/api/student/my-schedule/pdf", authenticateToken, downloadStudentSchedulePDF);
 
 export default router;

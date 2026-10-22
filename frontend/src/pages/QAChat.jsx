@@ -1,4 +1,4 @@
-﻿import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Send, Bot, User, Sparkles, ThumbsUp, ThumbsDown, Loader2, Copy, Trash2, Check, AlertCircle } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 
@@ -226,7 +226,7 @@ export function QAChat() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#FFFDF0] via-[#FFF9E6] to-[#FFFDF0] flex flex-col">
+    <div className="h-full min-h-0 bg-linear-to-br from-[#FFFDF0] via-[#FFF9E6] to-[#FFFDF0] flex flex-col">
       
 
       {/* Error Banner */}
@@ -240,13 +240,13 @@ export function QAChat() {
       )}
 
       {/* Chat Container */}
-      <div className="flex-1 px-4 sm:px-6 lg:px-8 py-6 flex flex-col overflow-hidden">
-        <div className="max-w-6xl mx-auto w-full flex flex-col h-full">
+      <div className="flex-1 min-h-0 px-4 sm:px-6 lg:px-8 py-4 sm:py-6 flex flex-col overflow-hidden">
+        <div className="max-w-6xl mx-auto w-full flex flex-col h-full min-h-0">
           
           {/* Messages */}
           <div 
             ref={chatContainerRef}
-            className="flex-1 overflow-y-auto space-y-6 mb-6 pr-2"
+            className="flex-1 min-h-0 overflow-y-auto space-y-6 mb-6 pr-2"
             style={{ scrollBehavior: 'smooth' }}
           >
             {messages.map((msg) => (
@@ -258,8 +258,8 @@ export function QAChat() {
                   <div
                     className={`w-10 h-10 rounded-full flex items-center justify-center shadow-lg ${
                       msg.from === "bot"
-                        ? "bg-gradient-to-br from-[#001840] to-[#102A71] text-[#F5C400]"
-                        : "bg-gradient-to-br from-[#F5C400] to-[#FFDC5F] text-[#001840]"
+                        ? "bg-linear-to-br from-[#001840] to-[#102A71] text-[#F5C400]"
+                        : "bg-linear-to-br from-[#F5C400] to-[#FFDC5F] text-[#001840]"
                     }`}
                   >
                     {msg.from === "bot" ? <Bot className="w-5 h-5" /> : <User className="w-5 h-5" />}
@@ -273,7 +273,7 @@ export function QAChat() {
                         ? msg.isError 
                           ? "bg-red-50 border border-red-200 text-red-900"
                           : "bg-white border border-gray-200 text-gray-800"
-                        : "bg-gradient-to-br from-[#001840] to-[#102A71] text-white"
+                        : "bg-linear-to-br from-[#001840] to-[#102A71] text-white"
                     }`}
                   >
                     <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">
@@ -330,7 +330,7 @@ export function QAChat() {
 
             {typing && (
               <div className="flex gap-3 animate-fadeIn">
-                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#001840] to-[#102A71] text-[#F5C400] flex items-center justify-center shadow-lg">
+                <div className="w-10 h-10 rounded-full bg-linear-to-br from-[#001840] to-[#102A71] text-[#F5C400] flex items-center justify-center shadow-lg">
                   <Bot className="w-5 h-5" />
                 </div>
                 <div className="bg-white border border-gray-200 px-5 py-4 rounded-2xl shadow-md">
@@ -366,18 +366,18 @@ export function QAChat() {
 
           {/* Quick FAQs */}
           {messages.length === 1 && (
-            <div className="mb-4 animate-fadeIn">
-              <p className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+            <div className="mb-3 animate-fadeIn">
+              <p className="text-xs font-semibold text-gray-700 mb-2 flex items-center gap-2">
                 <Sparkles className="w-4 h-4 text-[#F5C400]" />
                 Quick Questions:
               </p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div className="flex gap-2 overflow-x-auto pb-1 sm:grid sm:grid-cols-2 sm:overflow-visible">
                 {quickFAQs.map((q) => (
                   <button
                     key={q}
                     onClick={() => sendMessage(q)}
                     disabled={typing}
-                    className="text-left px-4 py-3 bg-white hover:bg-[#FFFDF0] border border-gray-200 hover:border-[#F5C400] rounded-xl text-sm text-gray-700 transition-all group shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="min-w-[220px] sm:min-w-0 text-left px-3 py-2 bg-white hover:bg-[#FFFDF0] border border-gray-200 hover:border-[#F5C400] rounded-lg text-xs text-gray-700 transition-all group shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <span className="flex items-center justify-between">
                       <span className="line-clamp-1">{q}</span>
@@ -406,7 +406,7 @@ export function QAChat() {
               <button
                 onClick={() => sendMessage(input)}
                 disabled={!input.trim() || typing}
-                className="bg-gradient-to-r from-[#001840] to-[#102A71] hover:from-[#102A71] hover:to-[#001840] disabled:from-gray-300 disabled:to-gray-300 text-white p-3 rounded-xl transition-all disabled:cursor-not-allowed shadow-lg hover:shadow-xl transform hover:scale-105 disabled:transform-none"
+                className="bg-linear-to-r from-[#001840] to-[#102A71] hover:from-[#102A71] hover:to-[#001840] disabled:from-gray-300 disabled:to-gray-300 text-white p-3 rounded-xl transition-all disabled:cursor-not-allowed shadow-lg hover:shadow-xl transform hover:scale-105 disabled:transform-none"
               >
                 {typing ? (
                   <Loader2 className="w-5 h-5 animate-spin" />

@@ -18,6 +18,7 @@ import { ChatLog } from './chatLogModel.js';
 import { FAQ } from './faqModel.js';
 import { Building } from './buildingModel.js';
 import { EnrollmentDocument } from './enrollmentDocumentModel.js';
+import { ClassSchedule } from './classScheduleModel.js';
 
 // Export all models
 export {
@@ -34,4 +35,5 @@ export {
   FAQ,
   Building,
   EnrollmentDocument,
+  ClassSchedule,
 };

@@ -265,7 +265,7 @@ router.put("/:id/ssc-choice", requireAuth, async (req, res) => {
 
     await sequelize.query(
       `UPDATE enrollment_records
-       SET sscClass = ?, sscChoiceMade = 1, updatedAt = datetime('now')
+       SET sscClass = ?, sscChoiceMade = 1, updatedAt = NOW()
        WHERE id = ?`,
       { replacements: [choice, enrollment.id] }
     );
@@ -369,7 +369,7 @@ router.post("/:id/resubmit", requireAuth, async (req, res) => {
     if (enrollment.status !== "returned") return res.status(400).json({ error: "Only returned enrollments can be resubmitted" });
 
     await sequelize.query(
-      "UPDATE enrollment_records SET status = 'submitted', updatedAt = datetime('now') WHERE id = ?",
+      "UPDATE enrollment_records SET status = 'submitted', updatedAt = NOW() WHERE id = ?",
       { replacements: [enrollmentId] }
     );
     const [[updated]] = await sequelize.query("SELECT * FROM enrollment_records WHERE id = ?", { replacements: [enrollmentId] });

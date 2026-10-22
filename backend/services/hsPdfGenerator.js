@@ -38,9 +38,9 @@ export const generateHSEnrollmentPDF = (enrollment) => {
 
       // ── Real doc ──────────────────────────────────────────────────────────
       // Page height will be calculated after measuring pledge content in the real doc.
-      // Use a generous initial height; we'll trim at the end via the actual y position.
+      // Standard 8.5 x 13 inch paper (Philippine Long / Folio): 8.5 * 72 = 612pt, 13 * 72 = 936pt
       const doc = new PDFDocument({
-        size: [612, 1100],
+        size: [612, 936],
         margins: { top: 36, bottom: 36, left: 36, right: 36 }
       });
 
@@ -57,7 +57,7 @@ export const generateHSEnrollmentPDF = (enrollment) => {
       const line = (x1, y1, x2, y2) => doc.moveTo(x1, y1).lineTo(x2, y2).stroke();
       const box  = (x, bY, w, h)    => doc.rect(x, bY, w, h).stroke();
       const val  = (text, x, vY, w, opts = {}) => {
-        doc.fontSize(9).font('Helvetica').text(String(text || ''), x, vY, { width: w, lineBreak: false, ...opts });
+        doc.fontSize(9).font('Helvetica').text(String(text || ''), x, vY, { width: w, lineBreak: false, ellipsis: true, ...opts });
       };
       const label = (text, x, lY, opts = {}) => {
         doc.fontSize(10).font('Helvetica').text(text, x, lY, { lineBreak: false, ...opts });
@@ -156,10 +156,7 @@ export const generateHSEnrollmentPDF = (enrollment) => {
       y += ROW + 6;
 
       // ─── PERSONAL INFO BOX ─────────────────────────────────────────────────
-      // Draw outer box — tall enough for all 9 items
-      const piH = ROW * 14 + 10;
       const piTop = y;
-      box(L, piTop, W, piH);
       y = piTop + 6;
 
       // 1. Name + LRN + Sex
@@ -252,35 +249,38 @@ export const generateHSEnrollmentPDF = (enrollment) => {
       field(enrollment.lastHSSchool || '', L + 152, y, R - L - 152 - 4);
       y += ROW;
 
-      label('Curriculum Year (G7-G8-G9-G10-G11-G12)', L + 16, y);
-      field(enrollment.lastHSCurriculumYear || '', L + 210, y, 40);
+      doc.fontSize(8.5).font('Helvetica').text('Curriculum Year (G7-G8-G9-G10-G11-G12)', L + 16, y + 1, { lineBreak: false });
+      field(enrollment.lastHSCurriculumYear || '', L + 195, y, 55);
       label('Section', L + 258, y);
-      field(enrollment.lastHSSection || '', L + 292, y, 80);
+      field(enrollment.lastHSSection || '', L + 296, y, 76);
       label('School Year', L + 380, y);
-      field(enrollment.lastHSSYStart || '', L + 436, y, 38);
-      label('-', L + 477, y);
-      field(enrollment.lastHSSYEnd || '', L + 484, y, R - L - 484 - 4);
+      field(enrollment.lastHSSYStart || '', L + 438, y, 36);
+      label('-', L + 478, y);
+      field(enrollment.lastHSSYEnd || '', L + 486, y, R - L - 486 - 4);
       y += ROW + 4;
 
+      // Draw Personal Info box cleanly around items 1 to 9
+      box(L, piTop, W, y - piTop);
+      y += 8;
+
       // ─── PLEDGE BOX ────────────────────────────────────────────────────────
-      // Render content first to get exact heights, then draw the box around it
-      const pledgeTitleText = 'Ako ay nangangako sa aking pagpapatala na aking susundin ang lahat ng mga alituntunin at regulasyon ng paaralan upang makatapos ng High School sa EASTERN MINDORO COLLEGE';
+      const pledgeLine1 = 'Ako ay nangangako sa aking pagpapatala na aking susundin ang lahat ng mga alituntunin at regulasyon ng paaralan';
+      const pledgeLine2 = 'upang makatapos ng High School sa EASTERN MINDORO COLLEGE';
 
       const pledgeStartY = y;
-      y += 6; // top padding inside box
+      y += 6; // top padding inside box header
 
-      // Title — underlined bold centered
-      const titleStartY = y;
-      doc.fontSize(9).font('Helvetica-Bold').text(
-        pledgeTitleText,
-        L + 6, y, { width: W - 12, align: 'center', lineGap: 1 }
-      );
-      const actualTitleH = doc.fontSize(9).font('Helvetica-Bold')
-        .heightOfString(pledgeTitleText, { width: W - 12, align: 'center', lineGap: 1 });
-      y += actualTitleH + 4;
+      // Title — 2 lines cleanly spaced
+      doc.fontSize(9).font('Helvetica-Bold')
+        .text(pledgeLine1, L + 6, y, { width: W - 12, align: 'center', lineBreak: false });
+      y += 12;
+      doc.fontSize(9).font('Helvetica-Bold')
+        .text(pledgeLine2, L + 6, y, { width: W - 12, align: 'center', lineBreak: false });
+      y += 14;
 
-      // Underline the title
-      line(L + 6, titleStartY + actualTitleH + 1, R - 6, titleStartY + actualTitleH + 1);
+      // Divider line separating pledge header from numbered items
+      line(L, y, R, y);
+      y += 8; // clear padding before item 1
 
       // Pledge items
       doc.fontSize(8.5).font('Helvetica');
@@ -288,7 +288,7 @@ export const generateHSEnrollmentPDF = (enrollment) => {
         const text = `${i + 1}. ${item}`;
         const h = doc.heightOfString(text, { width: W - 20, align: 'justify' });
         doc.text(text, L + 10, y, { width: W - 20, align: 'justify', lineGap: 0.5 });
-        y += h + 2;
+        y += h + 2.5;
       });
       y += 6; // bottom padding
 

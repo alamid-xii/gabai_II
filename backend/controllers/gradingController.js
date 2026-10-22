@@ -132,6 +132,7 @@ export const closeGradingPeriod = async (req, res) => {
 export const getTeacherClasses = async (req, res) => {
   try {
     const teacherId = req.user.id;
+    const teacherName = req.user.name;
 
     const [classes] = await sequelize.query(`
       SELECT DISTINCT
@@ -147,12 +148,12 @@ export const getTeacherClasses = async (req, res) => {
         COUNT(es.id) AS studentCount
       FROM enrollment_subjects es
       LEFT JOIN sections s ON es.sectionId = s.id
-      WHERE es.teacherId = ?
+      WHERE (es.teacherId = ? OR es.instructor = ? OR s.teacherId = ? OR s.instructor = ?)
         AND es.status = 'enrolled'
         AND (s.isActive = 1 OR s.isActive IS NULL)
       GROUP BY es.subjectCode, es.sectionId
       ORDER BY s.yearLevel ASC, es.subjectCode ASC, es.sectionName ASC
-    `, { replacements: [teacherId] });
+    `, { replacements: [teacherId, teacherName, teacherId, teacherName] });
 
     res.json(classes || []);
   } catch (err) {
@@ -169,15 +170,19 @@ export const getTeacherClasses = async (req, res) => {
 export const getGradeSheet = async (req, res) => {
   try {
     const teacherId = req.user.id;
+    const teacherName = req.user.name;
     const sectionId = parseInt(req.params.sectionId);
     const { subjectCode } = req.params;
 
     if (isNaN(sectionId)) return res.status(400).json({ error: 'Invalid section ID' });
 
-    // Verify teacher is assigned to this subject+section
+    // Verify teacher is assigned to this subject+section or is section adviser
     const [[check]] = await sequelize.query(
-      `SELECT id FROM enrollment_subjects WHERE teacherId = ? AND sectionId = ? AND subjectCode = ? LIMIT 1`,
-      { replacements: [teacherId, sectionId, subjectCode] }
+      `SELECT es.id FROM enrollment_subjects es
+       LEFT JOIN sections s ON es.sectionId = s.id
+       WHERE (es.teacherId = ? OR es.instructor = ? OR s.teacherId = ? OR s.instructor = ?)
+         AND es.sectionId = ? AND es.subjectCode = ? LIMIT 1`,
+      { replacements: [teacherId, teacherName, teacherId, teacherName, sectionId, subjectCode] }
     );
     if (!check) {
       return res.status(403).json({ error: 'You are not assigned to this subject in this section' });
@@ -254,10 +259,14 @@ export const saveGrade = async (req, res) => {
       return res.status(400).json({ error: 'Grade must be a number between 0 and 100' });
     }
 
-    // Verify teacher owns this enrollment subject
+    const teacherName = req.user.name;
+
+    // Verify teacher owns this enrollment subject or is section adviser
     const [[es]] = await sequelize.query(
-      `SELECT * FROM enrollment_subjects WHERE id = ? AND teacherId = ?`,
-      { replacements: [enrollmentSubjectId, teacherId] }
+      `SELECT es.* FROM enrollment_subjects es
+       LEFT JOIN sections s ON es.sectionId = s.id
+       WHERE es.id = ? AND (es.teacherId = ? OR es.instructor = ? OR s.teacherId = ? OR s.instructor = ?)`,
+      { replacements: [enrollmentSubjectId, teacherId, teacherName, teacherId, teacherName] }
     );
     if (!es) return res.status(403).json({ error: 'You are not authorized to grade this student for this subject' });
 
@@ -293,7 +302,7 @@ export const saveGrade = async (req, res) => {
 
     await sequelize.query(
       `UPDATE enrollment_subjects
-       SET ${col} = ?, finalGrade = ?, remarks = ?, updatedAt = datetime('now')
+       SET ${col} = ?, finalGrade = ?, remarks = ?, updatedAt = NOW()
        WHERE id = ?`,
       { replacements: [gradeValue, finalGrade, remarks, enrollmentSubjectId] }
     );

@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { toast } from 'sonner';
-import { Plus, Trash2, Edit, BookOpen, Check, Clock, Calendar } from 'lucide-react';
+import { Plus, Trash2, Edit, BookOpen, Check, Clock, Calendar, Search, X, RefreshCw, ChevronLeft, ChevronRight } from 'lucide-react';
 
 const API = 'http://localhost:3000/api';
 const token = () => localStorage.getItem('token');
@@ -230,9 +230,14 @@ export function AcademicSetup() {
   const [tab, setTab] = useState('subjects');
   const [subjects, setSubjects] = useState([]);
   const [schoolYears, setSchoolYears] = useState([]);
-  const [filterProgram, setFilterProgram] = useState('JHS');
-  const [filterYear, setFilterYear] = useState('');
-  const [filterSem, setFilterSem] = useState('');
+  const [subjectsLoading, setSubjectsLoading] = useState(false);
+  const [search, setSearch] = useState('');
+  const [levelFilter, setLevelFilter] = useState('');
+  const [gradeFilter, setGradeFilter] = useState('');
+  const [semesterFilter, setSemesterFilter] = useState('');
+  const [strandFilter, setStrandFilter] = useState('');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const [showSubjectForm, setShowSubjectForm] = useState(false);
   const [showSYForm, setShowSYForm] = useState(false);
   const [editingSubject, setEditingSubject] = useState(null);
@@ -243,7 +248,6 @@ export function AcademicSetup() {
   const [syForm, setSyForm] = useState({ year: '' });
 
   useEffect(() => { loadAll(); }, []);
-  useEffect(() => { loadSubjects(); }, [filterProgram, filterYear, filterSem]);
 
   async function loadAll() {
     loadSubjects();
@@ -251,14 +255,16 @@ export function AcademicSetup() {
   }
 
   async function loadSubjects() {
+    setSubjectsLoading(true);
     try {
-      const params = new URLSearchParams({ programCode: filterProgram });
-      if (filterYear) params.append('yearLevel', filterYear);
-      if (filterSem) params.append('semester', filterSem);
-      const res = await fetch(`${API}/academic/subjects?${params}`);
+      const res = await fetch(`${API}/academic/subjects`);
       const data = await res.json();
       setSubjects(Array.isArray(data) ? data : []);
-    } catch { setSubjects([]); }
+    } catch {
+      setSubjects([]);
+    } finally {
+      setSubjectsLoading(false);
+    }
   }
 
   async function loadSchoolYears() {
@@ -269,7 +275,7 @@ export function AcademicSetup() {
     } catch { setSchoolYears([]); }
   }
 
-  function resetSubjectForm(programCode = filterProgram) {
+  function resetSubjectForm(programCode = 'JHS') {
     setSubjectForm({
       code: '', description: '', units: 1,
       programCode,
@@ -330,6 +336,82 @@ export function AcademicSetup() {
   const isSHS = subjectForm.programCode === 'SHS';
   const gradeLevels = subjectForm.programCode === 'JHS' ? JHS_GRADE_LEVELS : SHS_GRADE_LEVELS;
 
+  // Level & Grade filter handling
+  const handleLevelGradeChange = (val) => {
+    if (!val) {
+      setLevelFilter('');
+      setGradeFilter('');
+    } else if (val.startsWith('LEVEL:')) {
+      setLevelFilter(val.replace('LEVEL:', ''));
+      setGradeFilter('');
+    } else if (val.startsWith('GRADE:')) {
+      const grd = val.replace('GRADE:', '');
+      const num = parseInt(grd.replace(/\D/g, ''), 10);
+      setLevelFilter(num >= 11 ? 'SHS' : 'JHS');
+      setGradeFilter(grd);
+    }
+    setPage(1);
+  };
+
+  const selectedLevelGrade = gradeFilter
+    ? `GRADE:${gradeFilter}`
+    : levelFilter
+      ? `LEVEL:${levelFilter}`
+      : '';
+
+  const handleResetFilters = () => {
+    setSearch('');
+    setLevelFilter('');
+    setGradeFilter('');
+    setSemesterFilter('');
+    setStrandFilter('');
+    setPage(1);
+  };
+
+  const hasActiveFilters = Boolean(search || levelFilter || gradeFilter || semesterFilter || strandFilter);
+
+  // Filter subjects
+  const filteredSubjects = useMemo(() => {
+    return subjects.filter(s => {
+      // Search
+      if (search.trim()) {
+        const q = search.trim().toLowerCase();
+        const codeMatch = s.code?.toLowerCase().includes(q);
+        const descMatch = s.description?.toLowerCase().includes(q);
+        const strandMatch = s.strand?.toLowerCase().includes(q);
+        if (!codeMatch && !descMatch && !strandMatch) return false;
+      }
+      // Level
+      if (levelFilter && s.programCode !== levelFilter) return false;
+      // Grade
+      if (gradeFilter) {
+        const gNum = parseInt(gradeFilter.replace(/\D/g, ''), 10);
+        if (s.gradeLevel !== gNum) return false;
+      }
+      // Semester
+      if (semesterFilter && s.semester !== semesterFilter) return false;
+      // Strand
+      if (strandFilter) {
+        if (strandFilter === 'CORE') {
+          if (s.strand && s.strand.trim() !== '') return false;
+        } else {
+          if (s.strand !== strandFilter) return false;
+        }
+      }
+      return true;
+    });
+  }, [subjects, search, levelFilter, gradeFilter, semesterFilter, strandFilter]);
+
+  // Statistics
+  const totalCount = subjects.length;
+  const jhsCount = subjects.filter(s => s.programCode === 'JHS').length;
+  const shsCount = subjects.filter(s => s.programCode === 'SHS').length;
+  const filteredCount = filteredSubjects.length;
+
+  // Pagination
+  const totalPages = Math.max(1, Math.ceil(filteredSubjects.length / pageSize));
+  const paginatedSubjects = filteredSubjects.slice((page - 1) * pageSize, page * pageSize);
+
   const tabs = [
     { id: 'subjects',    label: 'Subjects',        icon: BookOpen },
     { id: 'schoolyears', label: 'School Years',    icon: Calendar },
@@ -359,147 +441,494 @@ export function AcademicSetup() {
 
       {/* ── SUBJECTS TAB ─────────────────────────────────────────────────── */}
       {tab === 'subjects' && (
-        <div>
-          {/* Filters */}
-          <div className="flex flex-wrap gap-3 mb-4">
-            <select value={filterProgram} onChange={e => { setFilterProgram(e.target.value); setFilterYear(''); }}
-              className="px-3 py-2 border border-gray-300 rounded-lg text-sm">
-              {PROGRAMS.map(p => <option key={p}>{p}</option>)}
-            </select>
-            <select value={filterYear} onChange={e => setFilterYear(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded-lg text-sm">
-              <option value="">All Grade Levels</option>
-              {(filterProgram === 'JHS' ? JHS_GRADE_LEVELS : SHS_GRADE_LEVELS).map(y => (
-                <option key={y} value={y}>Grade {y}</option>
-              ))}
-            </select>
-            <select value={filterSem} onChange={e => setFilterSem(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded-lg text-sm">
-              <option value="">All Semesters</option>
-              {SEMESTERS.map(s => <option key={s}>{s}</option>)}
-            </select>
-            <button
-              onClick={() => { setEditingSubject(null); resetSubjectForm(); setShowSubjectForm(true); }}
-              className="ml-auto flex items-center gap-2 px-4 py-2 bg-[#102A71] text-white rounded-lg text-sm font-medium hover:bg-[#001840]">
-              <Plus className="w-4 h-4" /> Add Subject
-            </button>
+        <div className="space-y-4">
+          {/* Quick Stat Cards */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="bg-white rounded-xl border border-gray-100 p-3.5 shadow-xs">
+              <p className="text-xs text-gray-500 font-medium">Total Curriculum</p>
+              <p className="text-xl font-bold text-[#001840] mt-0.5">{totalCount} <span className="text-xs font-normal text-gray-400">subjects</span></p>
+            </div>
+            <div className="bg-white rounded-xl border border-gray-100 p-3.5 shadow-xs">
+              <p className="text-xs text-blue-600 font-medium">Junior High (JHS)</p>
+              <p className="text-xl font-bold text-[#001840] mt-0.5">{jhsCount} <span className="text-xs font-normal text-gray-400">subjects</span></p>
+            </div>
+            <div className="bg-white rounded-xl border border-gray-100 p-3.5 shadow-xs">
+              <p className="text-xs text-purple-600 font-medium">Senior High (SHS)</p>
+              <p className="text-xl font-bold text-[#001840] mt-0.5">{shsCount} <span className="text-xs font-normal text-gray-400">subjects</span></p>
+            </div>
+            <div className="bg-white rounded-xl border border-gray-100 p-3.5 shadow-xs">
+              <p className="text-xs text-emerald-600 font-medium">Filtered Results</p>
+              <p className="text-xl font-bold text-[#001840] mt-0.5">{filteredCount} <span className="text-xs font-normal text-gray-400">matches</span></p>
+            </div>
           </div>
 
-          {/* Subject Form */}
-          {showSubjectForm && (
-            <div className="bg-[#FFFDF0] border border-[#F5C400] rounded-xl p-4 mb-4">
-              <h3 className="font-semibold text-[#001840] mb-3">
-                {editingSubject ? 'Edit Subject' : 'New Subject'}
-              </h3>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                <input placeholder="Subject Code *" value={subjectForm.code}
-                  onChange={e => setSubjectForm(p => ({ ...p, code: e.target.value }))}
-                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm" />
-                <input placeholder="Description *" value={subjectForm.description}
-                  onChange={e => setSubjectForm(p => ({ ...p, description: e.target.value }))}
-                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm col-span-2" />
-                <input type="number" min="0.5" step="0.5" placeholder="Units" value={subjectForm.units}
-                  onChange={e => setSubjectForm(p => ({ ...p, units: e.target.value }))}
-                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm" />
-                <select value={subjectForm.programCode}
-                  onChange={e => {
-                    const v = e.target.value;
-                    setSubjectForm(p => ({ ...p, programCode: v, gradeLevel: v === 'JHS' ? 7 : 11, strand: '' }));
-                  }}
-                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm">
-                  {PROGRAMS.map(p => <option key={p}>{p}</option>)}
-                </select>
-                <select value={subjectForm.gradeLevel}
-                  onChange={e => setSubjectForm(p => ({ ...p, gradeLevel: parseInt(e.target.value) }))}
-                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm">
-                  {gradeLevels.map(y => <option key={y} value={y}>Grade {y}</option>)}
-                </select>
-                <select value={subjectForm.semester}
-                  onChange={e => setSubjectForm(p => ({ ...p, semester: e.target.value }))}
-                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm">
-                  {SEMESTERS.map(s => <option key={s}>{s}</option>)}
-                </select>
-                {isSHS && (
-                  <select value={subjectForm.strand}
-                    onChange={e => setSubjectForm(p => ({ ...p, strand: e.target.value }))}
-                    className="px-3 py-2 border border-gray-300 rounded-lg text-sm">
-                    <option value="">All Strands (Core)</option>
-                    {SHS_STRANDS.map(s => <option key={s}>{s}</option>)}
-                  </select>
+          {/* Filter & Action Bar */}
+          <div className="bg-white rounded-2xl border border-gray-100 p-4 shadow-xs">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+              {/* Search Box */}
+              <div className="relative flex-1 min-w-[220px]">
+                <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Search by code or subject description..."
+                  value={search}
+                  onChange={e => { setSearch(e.target.value); setPage(1); }}
+                  className="w-full pl-9 pr-8 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-[#001840] transition-colors"
+                />
+                {search && (
+                  <button
+                    type="button"
+                    onClick={() => { setSearch(''); setPage(1); }}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  >
+                    <X size={14} />
+                  </button>
                 )}
               </div>
-              <div className="flex gap-2 mt-3">
-                <button onClick={saveSubject}
-                  className="px-4 py-2 bg-[#F5C400] text-[#001840] rounded-lg text-sm font-semibold hover:bg-[#FFDC5F]">
-                  Save
+
+              {/* Filters & Action */}
+              <div className="flex flex-wrap items-center gap-2">
+                {/* Combined Level & Grade */}
+                <select
+                  value={selectedLevelGrade}
+                  onChange={e => handleLevelGradeChange(e.target.value)}
+                  className={`px-3 py-2 border rounded-lg text-sm focus:outline-none transition-colors ${
+                    selectedLevelGrade ? 'border-[#001840] bg-[#001840]/5 font-medium text-[#001840]' : 'border-gray-200 bg-white text-gray-700'
+                  }`}
+                >
+                  <option value="">All Levels & Grades</option>
+                  <optgroup label="Junior High School (JHS)">
+                    <option value="LEVEL:JHS">All JHS</option>
+                    <option value="GRADE:Grade 7">Grade 7</option>
+                    <option value="GRADE:Grade 8">Grade 8</option>
+                    <option value="GRADE:Grade 9">Grade 9</option>
+                    <option value="GRADE:Grade 10">Grade 10</option>
+                  </optgroup>
+                  <optgroup label="Senior High School (SHS)">
+                    <option value="LEVEL:SHS">All SHS</option>
+                    <option value="GRADE:Grade 11">Grade 11</option>
+                    <option value="GRADE:Grade 12">Grade 12</option>
+                  </optgroup>
+                </select>
+
+                {/* Semester */}
+                <select
+                  value={semesterFilter}
+                  onChange={e => { setSemesterFilter(e.target.value); setPage(1); }}
+                  className={`px-3 py-2 border rounded-lg text-sm focus:outline-none transition-colors ${
+                    semesterFilter ? 'border-[#001840] bg-[#001840]/5 font-medium text-[#001840]' : 'border-gray-200 bg-white text-gray-700'
+                  }`}
+                >
+                  <option value="">All Semesters</option>
+                  {SEMESTERS.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+
+                {/* Strand Filter */}
+                {levelFilter !== 'JHS' && (
+                  <select
+                    value={strandFilter}
+                    onChange={e => { setStrandFilter(e.target.value); setPage(1); }}
+                    className={`px-3 py-2 border rounded-lg text-sm focus:outline-none transition-colors ${
+                      strandFilter ? 'border-[#001840] bg-[#001840]/5 font-medium text-[#001840]' : 'border-gray-200 bg-white text-gray-700'
+                    }`}
+                  >
+                    <option value="">All Strands</option>
+                    <option value="CORE">Core (All Strands)</option>
+                    {SHS_STRANDS.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                )}
+
+                {/* Refresh */}
+                <button
+                  type="button"
+                  onClick={loadSubjects}
+                  title="Refresh subjects list"
+                  className="p-2 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors text-gray-500 hover:text-gray-700"
+                >
+                  <RefreshCw size={14} className={subjectsLoading ? 'animate-spin' : ''} />
                 </button>
-                <button onClick={() => { setShowSubjectForm(false); setEditingSubject(null); }}
-                  className="px-4 py-2 border border-gray-300 rounded-lg text-sm hover:bg-gray-50">
-                  Cancel
+
+                {/* Clear Filters */}
+                {hasActiveFilters && (
+                  <button
+                    type="button"
+                    onClick={handleResetFilters}
+                    title="Clear all filters"
+                    className="inline-flex items-center gap-1 px-2.5 py-2 text-xs text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors font-medium"
+                  >
+                    <X size={12} /> Clear
+                  </button>
+                )}
+
+                {/* Add Subject Button */}
+                <button
+                  type="button"
+                  onClick={() => { setEditingSubject(null); resetSubjectForm('JHS'); setShowSubjectForm(true); }}
+                  className="flex items-center gap-1.5 px-4 py-2 bg-[#102A71] text-white rounded-lg text-sm font-semibold hover:bg-[#001840] transition-colors shadow-xs"
+                >
+                  <Plus size={15} /> Add Subject
                 </button>
               </div>
             </div>
-          )}
-
-          {/* Subjects Table */}
-          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50 border-b border-gray-200">
-                <tr>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-600">Code</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-600">Description</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-600">Units</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-600">Grade</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-600">Strand</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-600">Semester</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-600">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {subjects.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} className="px-4 py-8 text-center text-gray-400">
-                      No subjects found
-                    </td>
-                  </tr>
-                ) : subjects.map(s => (
-                  <tr key={s.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 font-mono font-semibold text-[#102A71]">{s.code}</td>
-                    <td className="px-4 py-3">{s.description}</td>
-                    <td className="px-4 py-3">{s.units}</td>
-                    <td className="px-4 py-3">Grade {s.gradeLevel}</td>
-                    <td className="px-4 py-3">
-                      {s.strand
-                        ? <span className="px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full text-xs">{s.strand}</span>
-                        : <span className="text-gray-400 text-xs">Core</span>}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full text-xs">{s.semester}</span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex gap-2">
-                        <button onClick={() => {
-                          setEditingSubject(s);
-                          setSubjectForm({
-                            code: s.code, description: s.description, units: s.units,
-                            programCode: s.programCode, gradeLevel: s.gradeLevel,
-                            semester: s.semester, strand: s.strand || ''
-                          });
-                          setShowSubjectForm(true);
-                        }} className="p-1.5 text-[#102A71] hover:bg-blue-50 rounded">
-                          <Edit className="w-4 h-4" />
-                        </button>
-                        <button onClick={() => deleteSubject(s.id)}
-                          className="p-1.5 text-red-500 hover:bg-red-50 rounded">
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
           </div>
+
+          {/* Subjects Table Card */}
+          <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-xs">
+            {subjectsLoading ? (
+              <div className="flex items-center justify-center py-16 gap-2 text-gray-400 text-sm">
+                <RefreshCw size={16} className="animate-spin text-[#001840]" /> Loading curriculum subjects...
+              </div>
+            ) : filteredSubjects.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16 text-gray-400">
+                <BookOpen size={40} className="mb-3 opacity-30 text-gray-400" />
+                <p className="text-sm font-semibold text-gray-600">No subjects found</p>
+                <p className="text-xs mt-1 text-gray-400">
+                  {hasActiveFilters ? 'Try adjusting your search query or filter options' : 'No subjects have been added to the curriculum yet.'}
+                </p>
+                {hasActiveFilters && (
+                  <button
+                    type="button"
+                    onClick={handleResetFilters}
+                    className="mt-3 px-3 py-1.5 text-xs text-[#102A71] bg-blue-50 hover:bg-blue-100 rounded-lg font-medium transition-colors"
+                  >
+                    Reset All Filters
+                  </button>
+                )}
+              </div>
+            ) : (
+              <>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm text-left">
+                    <thead>
+                      <tr className="border-b border-gray-100 bg-gray-50/70">
+                        <th className="px-5 py-3.5 text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Code</th>
+                        <th className="px-5 py-3.5 text-xs font-semibold text-gray-500 uppercase tracking-wider">Subject Title / Description</th>
+                        <th className="px-5 py-3.5 text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Level & Grade</th>
+                        <th className="px-5 py-3.5 text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Strand / Track</th>
+                        <th className="px-5 py-3.5 text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">Semester</th>
+                        <th className="px-5 py-3.5 text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {paginatedSubjects.map(s => {
+                        const isJHS = s.programCode === 'JHS';
+                        return (
+                          <tr key={s.id} className="hover:bg-gray-50/60 transition-colors">
+                            {/* Code */}
+                            <td className="px-5 py-3.5 whitespace-nowrap">
+                              <span className="font-mono font-bold text-[#102A71] text-sm">
+                                {s.code}
+                              </span>
+                            </td>
+
+                            {/* Description */}
+                            <td className="px-5 py-3.5">
+                              <p className="font-semibold text-gray-900">{s.description}</p>
+                              <p className="text-xs text-gray-400 mt-0.5">
+                                {s.programCode === 'SHS' ? 'Senior High School Curriculum' : 'Junior High School Curriculum'}
+                              </p>
+                            </td>
+
+                            {/* Level & Grade */}
+                            <td className="px-5 py-3.5 whitespace-nowrap">
+                              <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${
+                                isJHS
+                                  ? 'bg-blue-50 text-blue-700 border border-blue-200/70'
+                                  : 'bg-purple-50 text-purple-700 border border-purple-200/70'
+                              }`}>
+                                <span className={`w-1.5 h-1.5 rounded-full ${isJHS ? 'bg-blue-500' : 'bg-purple-500'}`} />
+                                {s.programCode} · Grade {s.gradeLevel}
+                              </span>
+                            </td>
+
+                            {/* Strand / Track */}
+                            <td className="px-5 py-3.5 whitespace-nowrap">
+                              {s.strand ? (
+                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-200">
+                                  {s.strand}
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center px-2.5 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600">
+                                  Core Subject
+                                </span>
+                              )}
+                            </td>
+
+                            {/* Semester */}
+                            <td className="px-5 py-3.5 whitespace-nowrap">
+                              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                s.semester === '1st Semester'
+                                  ? 'bg-sky-50 text-sky-700 border border-sky-200/60'
+                                  : 'bg-teal-50 text-teal-700 border border-teal-200/60'
+                              }`}>
+                                {s.semester || '1st Semester'}
+                              </span>
+                            </td>
+
+                            {/* Actions */}
+                            <td className="px-5 py-3.5 whitespace-nowrap text-right">
+                              <div className="flex items-center justify-end gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingSubject(s);
+                                    setSubjectForm({
+                                      code: s.code,
+                                      description: s.description,
+                                      units: s.units,
+                                      programCode: s.programCode,
+                                      gradeLevel: s.gradeLevel,
+                                      semester: s.semester,
+                                      strand: s.strand || ''
+                                    });
+                                    setShowSubjectForm(true);
+                                  }}
+                                  title="Edit Subject"
+                                  className="p-1.5 text-gray-500 hover:text-[#102A71] hover:bg-blue-50 rounded-lg transition-colors"
+                                >
+                                  <Edit className="w-4 h-4" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => deleteSubject(s.id)}
+                                  title="Delete Subject"
+                                  className="p-1.5 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Pagination Controls */}
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-6 py-4 border-t border-gray-100 bg-white">
+                  <div className="flex items-center gap-3">
+                    <p className="text-sm text-gray-500">
+                      Showing <span className="font-semibold text-gray-800">{(page - 1) * pageSize + 1}</span> to{' '}
+                      <span className="font-semibold text-gray-800">{Math.min(page * pageSize, filteredSubjects.length)}</span> of{' '}
+                      <span className="font-semibold text-gray-800">{filteredSubjects.length}</span> subjects
+                    </p>
+                    <div className="flex items-center gap-1.5 text-xs text-gray-500">
+                      <span>Show:</span>
+                      <select
+                        value={pageSize}
+                        onChange={e => { setPageSize(Number(e.target.value)); setPage(1); }}
+                        className="px-2 py-1 border border-gray-200 rounded-md text-xs text-gray-700 bg-white focus:outline-none"
+                      >
+                        <option value={10}>10</option>
+                        <option value={20}>20</option>
+                        <option value={50}>50</option>
+                        <option value={100}>All</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Page Navigation */}
+                  {totalPages > 1 && (
+                    <div className="flex items-center gap-1.5 flex-wrap justify-center sm:justify-end">
+                      <button
+                        type="button"
+                        onClick={() => setPage(p => Math.max(1, p - 1))}
+                        disabled={page === 1}
+                        className="inline-flex items-center gap-1 px-3 py-1.5 text-sm font-normal rounded-lg border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 hover:text-gray-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                      >
+                        <ChevronLeft size={15} className="text-gray-400" />
+                        <span>Previous</span>
+                      </button>
+
+                      {Array.from({ length: totalPages }, (_, i) => i + 1)
+                        .filter(p => p === 1 || p === totalPages || Math.abs(p - page) <= 2)
+                        .reduce((acc, p, idx, arr) => {
+                          if (idx > 0 && p - arr[idx - 1] > 1) acc.push('...');
+                          acc.push(p);
+                          return acc;
+                        }, [])
+                        .map((p, idx) => {
+                          if (p === '...') {
+                            return (
+                              <span key={`ellipsis-${idx}`} className="w-8 h-8 flex items-center justify-center text-sm text-gray-400">
+                                ...
+                              </span>
+                            );
+                          }
+                          const isCurrent = p === page;
+                          return (
+                            <button
+                              key={p}
+                              type="button"
+                              onClick={() => setPage(p)}
+                              className={`w-8 h-8 rounded-lg text-sm transition-colors flex items-center justify-center ${
+                                isCurrent
+                                  ? 'bg-[#F5C400] text-gray-900 font-semibold shadow-xs'
+                                  : 'text-gray-700 hover:bg-gray-100 font-normal'
+                              }`}
+                            >
+                              {p}
+                            </button>
+                          );
+                        })}
+
+                      <button
+                        type="button"
+                        onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                        disabled={page === totalPages}
+                        className="inline-flex items-center gap-1 px-3 py-1.5 text-sm font-normal rounded-lg border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                      >
+                        <span>Next</span>
+                        <ChevronRight size={15} className="text-gray-400" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Subject Add/Edit Modal */}
+          {showSubjectForm && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+              <div
+                className="absolute inset-0 bg-black/40 backdrop-blur-xs transition-opacity"
+                onClick={() => { setShowSubjectForm(false); setEditingSubject(null); }}
+              />
+              <div className="relative bg-white rounded-2xl shadow-2xl border border-gray-100 w-full max-w-lg z-10 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+                <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gray-50/50">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-[#001840]/5 flex items-center justify-center text-[#102A71]">
+                      <BookOpen size={20} />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-[#001840] text-base">
+                        {editingSubject ? 'Edit Subject' : 'Add New Subject'}
+                      </h3>
+                      <p className="text-xs text-gray-500">Configure curriculum subject details</p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => { setShowSubjectForm(false); setEditingSubject(null); }}
+                    className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+
+                <form onSubmit={(e) => { e.preventDefault(); saveSubject(); }} className="p-6 space-y-4">
+                  <div className="grid grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-700 mb-1">Subject Code *</label>
+                      <input
+                        required
+                        placeholder="e.g. MATH7"
+                        value={subjectForm.code}
+                        onChange={e => setSubjectForm(p => ({ ...p, code: e.target.value.toUpperCase() }))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:outline-none focus:border-[#102A71]"
+                      />
+                    </div>
+                    <div className="col-span-2">
+                      <label className="block text-xs font-semibold text-gray-700 mb-1">Subject Title / Description *</label>
+                      <input
+                        required
+                        placeholder="e.g. General Mathematics"
+                        value={subjectForm.description}
+                        onChange={e => setSubjectForm(p => ({ ...p, description: e.target.value }))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-[#102A71]"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-700 mb-1">Program</label>
+                      <select
+                        value={subjectForm.programCode}
+                        onChange={e => {
+                          const v = e.target.value;
+                          setSubjectForm(p => ({
+                            ...p,
+                            programCode: v,
+                            gradeLevel: v === 'JHS' ? 7 : 11,
+                            strand: ''
+                          }));
+                        }}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-[#102A71]"
+                      >
+                        {PROGRAMS.map(p => <option key={p} value={p}>{p}</option>)}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-700 mb-1">Grade Level</label>
+                      <select
+                        value={subjectForm.gradeLevel}
+                        onChange={e => setSubjectForm(p => ({ ...p, gradeLevel: parseInt(e.target.value) }))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-[#102A71]"
+                      >
+                        {gradeLevels.map(y => <option key={y} value={y}>Grade {y}</option>)}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-700 mb-1">Semester</label>
+                      <select
+                        value={subjectForm.semester}
+                        onChange={e => setSubjectForm(p => ({ ...p, semester: e.target.value }))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-[#102A71]"
+                      >
+                        {SEMESTERS.map(s => <option key={s} value={s}>{s}</option>)}
+                      </select>
+                    </div>
+
+                    {isSHS ? (
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-700 mb-1">Strand / Track</label>
+                        <select
+                          value={subjectForm.strand}
+                          onChange={e => setSubjectForm(p => ({ ...p, strand: e.target.value }))}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-[#102A71]"
+                        >
+                          <option value="">Core (All Strands)</option>
+                          {SHS_STRANDS.map(s => <option key={s} value={s}>{s}</option>)}
+                        </select>
+                      </div>
+                    ) : (
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-700 mb-1">Curriculum Track</label>
+                        <input
+                          disabled
+                          value="Junior High Core"
+                          className="w-full px-3 py-2 border border-gray-200 bg-gray-50 rounded-lg text-sm text-gray-500"
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex items-center justify-end gap-2 pt-4 border-t border-gray-100">
+                    <button
+                      type="button"
+                      onClick={() => { setShowSubjectForm(false); setEditingSubject(null); }}
+                      className="px-4 py-2 border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      className="px-5 py-2 bg-[#102A71] text-white rounded-lg text-sm font-semibold hover:bg-[#001840] transition-colors shadow-xs"
+                    >
+                      {editingSubject ? 'Update Subject' : 'Save Subject'}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

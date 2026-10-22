@@ -1,5 +1,5 @@
 import express from 'express';
-import { requireAdminOrRegistrar } from '../middleware/auth.js';
+import { authenticateToken, requireAdminOrRegistrar } from '../middleware/auth.js';
 import { sanitizeBody, validateSection } from '../middleware/validate.js';
 import { sequelize } from '../models/db.js';
 import {
@@ -21,7 +21,7 @@ import {
 const router = express.Router();
 
 // All section routes require admin or registrar
-router.use(requireAdminOrRegistrar);
+router.use(authenticateToken, requireAdminOrRegistrar);
 
 // Section CRUD
 router.get('/', getAllSections);
@@ -79,7 +79,7 @@ router.get('/:id/subject-teachers', async (req, res) => {
 router.put('/:id/subject-teachers', sanitizeBody, async (req, res) => {
   try {
     const sectionId = parseInt(req.params.id);
-    const { subjectCode, teacherId } = req.body;
+    const { subjectCode, teacherId, schedule, room } = req.body;
     if (!subjectCode) return res.status(400).json({ error: 'subjectCode is required' });
 
     let instructorName = null;
@@ -95,21 +95,41 @@ router.put('/:id/subject-teachers', sanitizeBody, async (req, res) => {
       instructorName = teacher.name;
     }
 
+    const setClauses = ['updatedAt = NOW()'];
+    const replacements = [];
+
+    if (teacherId !== undefined) {
+      setClauses.push('instructor = ?', 'teacherId = ?');
+      replacements.push(instructorName, resolvedTeacherId);
+    }
+    if (schedule !== undefined) {
+      setClauses.push('schedule = ?');
+      replacements.push(schedule || null);
+    }
+    if (room !== undefined) {
+      setClauses.push('room = ?');
+      replacements.push(room || null);
+    }
+
+    replacements.push(sectionId, subjectCode);
+
     await sequelize.query(
       `UPDATE enrollment_subjects
-       SET instructor = ?, teacherId = ?, updatedAt = datetime('now')
+       SET ${setClauses.join(', ')}
        WHERE sectionId = ? AND subjectCode = ?`,
-      { replacements: [instructorName, resolvedTeacherId, sectionId, subjectCode] }
+      { replacements }
     );
 
     res.json({
-      message: `Subject ${subjectCode} assigned to ${instructorName || 'no teacher'}`,
+      message: `Subject ${subjectCode} schedule updated successfully`,
       instructor: instructorName,
-      teacherId: resolvedTeacherId
+      teacherId: resolvedTeacherId,
+      schedule: schedule || null,
+      room: room || null
     });
   } catch (err) {
     console.error('Update subject teacher error:', err);
-    res.status(500).json({ error: 'Failed to update instructor' });
+    res.status(500).json({ error: 'Failed to update subject schedule/instructor' });
   }
 });
 

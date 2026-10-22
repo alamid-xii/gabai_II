@@ -1,4 +1,4 @@
-﻿import { useState } from "react";
+import { useState } from "react";
 import { Link, useLocation } from "react-router";
 import { MessageCircle, X, Sparkles, ArrowRight } from "lucide-react";
 
@@ -15,7 +15,7 @@ export function FloatingChat() {
       {open && (
         <div className="bg-white rounded-2xl shadow-2xl border border-gray-100 w-72 overflow-hidden animate-fade-in">
           {/* Card Header */}
-          <div className="bg-gradient-to-r from-[#001840] to-[#102A71] px-5 py-4 flex items-center justify-between">
+          <div className="bg-linear-to-r from-[#001840] to-[#102A71] px-5 py-4 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <div className="bg-[#F5C400] w-8 h-8 rounded-full flex items-center justify-center">
                 <Sparkles className="w-4 h-4 text-[#001840]" />

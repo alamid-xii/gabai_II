@@ -5,7 +5,7 @@ import { SchoolYear } from '../models/schoolYearModel.js';
 import { sequelize } from '../models/db.js';
 import { Op } from 'sequelize';
 
-await sequelize.sync();
+try { await sequelize.authenticate(); } catch (err) { console.warn("DB unavailable at import (academicController):", err.message); }
 
 // ── Programs ──────────────────────────────────────────────
 export const getPrograms = async (req, res) => {
@@ -111,7 +111,7 @@ export const closeSchoolYear = async (req, res) => {
       `UPDATE enrollment_records
        SET status = 'completed',
            lifeStatus = 'completed',
-           updatedAt = datetime('now')
+           updatedAt = NOW()
        WHERE status IN ('enrolled', 'active', 'subjects_enrolled')
          AND (lifeStatus IS NULL OR lifeStatus NOT IN ('dropped', 'transferred_out'))`
     );

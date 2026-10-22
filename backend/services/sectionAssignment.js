@@ -72,7 +72,7 @@ async function autoEnrollSubjects(enrollmentId, enrollment, section) {
           (enrollmentId, subjectId, subjectCode, subjectDescription, units,
            sectionId, sectionName, schedule, instructor, room,
            assignedAt, status, createdAt, updatedAt)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), 'enrolled', datetime('now'), datetime('now'))`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), 'enrolled', NOW(), NOW())`,
         {
           replacements: [
             enrollmentId,
@@ -197,7 +197,7 @@ export async function autoAssignSection(enrollmentId) {
     await sequelize.query(
       `UPDATE enrollment_records
        SET sectionId = ?, sectionName = ?, status = 'enrolled',
-           updatedAt = datetime('now')
+           updatedAt = NOW()
        WHERE id = ?`,
       { replacements: [section.id, section.code, enrollmentId] }
     );
@@ -205,7 +205,7 @@ export async function autoAssignSection(enrollmentId) {
     // Increment section count
     await sequelize.query(
       `UPDATE sections
-       SET currentEnrollment = currentEnrollment + 1, updatedAt = datetime('now')
+       SET currentEnrollment = currentEnrollment + 1, updatedAt = NOW()
        WHERE id = ?`,
       { replacements: [section.id] }
     );
@@ -239,14 +239,14 @@ export async function removeFromSection(enrollmentId) {
     await sequelize.query(
       `UPDATE enrollment_records
        SET sectionId = NULL, sectionName = NULL, status = 'approved',
-           updatedAt = datetime('now')
+           updatedAt = NOW()
        WHERE id = ?`,
       { replacements: [enrollmentId] }
     );
 
     await sequelize.query(
       `UPDATE sections
-       SET currentEnrollment = MAX(0, currentEnrollment - 1), updatedAt = datetime('now')
+       SET currentEnrollment = MAX(0, currentEnrollment - 1), updatedAt = NOW()
        WHERE id = ?`,
       { replacements: [oldSectionId] }
     );
@@ -284,7 +284,7 @@ export async function moveToSection(enrollmentId, newSectionId) {
     await sequelize.query(
       `UPDATE enrollment_records
        SET sectionId = ?, sectionName = ?, status = 'enrolled',
-           updatedAt = datetime('now')
+           updatedAt = NOW()
        WHERE id = ?`,
       { replacements: [newSection.id, newSection.code, enrollmentId] }
     );
@@ -292,7 +292,7 @@ export async function moveToSection(enrollmentId, newSectionId) {
     if (oldSectionId) {
       await sequelize.query(
         `UPDATE sections
-         SET currentEnrollment = MAX(0, currentEnrollment - 1), updatedAt = datetime('now')
+         SET currentEnrollment = MAX(0, currentEnrollment - 1), updatedAt = NOW()
          WHERE id = ?`,
         { replacements: [oldSectionId] }
       );
@@ -300,7 +300,7 @@ export async function moveToSection(enrollmentId, newSectionId) {
 
     await sequelize.query(
       `UPDATE sections
-       SET currentEnrollment = currentEnrollment + 1, updatedAt = datetime('now')
+       SET currentEnrollment = currentEnrollment + 1, updatedAt = NOW()
        WHERE id = ?`,
       { replacements: [newSection.id] }
     );

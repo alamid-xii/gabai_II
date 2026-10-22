@@ -30,7 +30,7 @@ import { sequelize } from "../models/db.js";
 import jwt from "jsonwebtoken";
 import { generateEnrollmentPDF, formatEnrollmentData } from "../services/pdfGenerator.js";
 
-await sequelize.sync();
+try { await sequelize.authenticate(); } catch (err) { console.warn("DB unavailable at import (enrollmentController):", err.message); }
 
 const JWT_SECRET = process.env.JWT_SECRET || "emc-secret-key-2025";
 
@@ -187,7 +187,7 @@ export const validateEnumValues = (req, res, next) => {
   const errors = [];
   
   // Validate enrollmentType
-  const validEnrollmentTypes = ['new', 'old', 'transferee'];
+  const validEnrollmentTypes = ['new', 'old', 'transferee', 'returnee'];
   if (req.body.enrollmentType && !validEnrollmentTypes.includes(req.body.enrollmentType)) {
     errors.push({ field: 'enrollmentType', message: `Enrollment type must be one of: ${validEnrollmentTypes.join(', ')}` });
   }
@@ -286,7 +286,7 @@ export const createEnrollment = async (req, res) => {
           const setClause = updates.map(k => `${k} = ?`).join(', ');
           const values = updates.map(k => k === 'admissionCredentials' ? JSON.stringify(body[k]) : body[k]);
           await sequelize.query(
-            `UPDATE enrollment_records SET ${setClause}, updatedAt = datetime('now') WHERE id = ?`,
+            `UPDATE enrollment_records SET ${setClause}, updatedAt = NOW() WHERE id = ?`,
             { replacements: [...values, existingRecord.id] }
           );
         }

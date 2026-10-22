@@ -13,12 +13,23 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
-await sequelize.sync();
+try { await sequelize.authenticate(); } catch (err) { console.warn("DB unavailable at import (chatController):", err.message); }
 
-// Initialize Groq (much faster than OpenAI)
-const groq = new Groq({
-  apiKey: process.env.GROQ_API_KEY
-});
+// Initialize Groq lazily so a missing key never crashes boot.
+// The chat handler falls back to FAQ matching when Groq is unavailable.
+let groq = null;
+function getGroq() {
+  if (groq) return groq;
+  const apiKey = process.env.GROQ_API_KEY;
+  if (!apiKey) return null;
+  try {
+    groq = new Groq({ apiKey });
+    return groq;
+  } catch (err) {
+    console.warn("Groq init failed:", err.message);
+    return null;
+  }
+}
 
 // Tokenise a string into cleaned lowercase words (strip punctuation, drop stop-words)
 const STOP_WORDS = new Set([
@@ -487,7 +498,9 @@ A: F-138, F-137-A, Certificate of Good Moral Character, Birth Certificate. Trans
     let suggestedQuestions = [];
     
     try {
-      const completion = await groq.chat.completions.create({
+      const client = getGroq();
+      if (!client) throw new Error("Groq API key not configured");
+      const completion = await client.chat.completions.create({
         model: "groq/compound-mini",
         messages: messages,
         temperature: 0.65,   // More natural and conversational

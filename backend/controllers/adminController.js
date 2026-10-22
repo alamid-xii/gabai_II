@@ -1,4 +1,4 @@
-﻿/*
+/*
     MIT License
     
     Copyright (c) 2025 Christian I. Cabrera || XianFire Framework
@@ -11,7 +11,7 @@ import { ChatLog } from "../models/chatLogModel.js";
 import { Building } from "../models/buildingModel.js";
 import { sequelize } from "../models/db.js";
 
-await sequelize.sync();
+try { await sequelize.authenticate(); } catch (err) { console.warn("DB unavailable at import (adminController):", err.message); }
 
 // Set up associations
 ChatLog.belongsTo(User, { foreignKey: 'userId', as: 'user' });
@@ -157,19 +157,107 @@ export const updateUser = async (req, res) => {
   try {
     const user = await User.findByPk(req.params.id);
     if (!user) return res.status(404).json({ error: "User not found" });
-    // Only allow updating safe fields — never role, password, or isVerified via this endpoint
-    const { name, department } = req.body;
+    
+    const { name, email, role, department, isActive } = req.body;
     const updates = {};
+    
     if (name !== undefined) {
       if (!name.trim()) return res.status(400).json({ error: "Name cannot be empty" });
       if (name.length > 100) return res.status(400).json({ error: "Name must be 100 characters or less" });
       updates.name = name.trim();
     }
+    if (email !== undefined) {
+      const cleanEmail = email.trim().toLowerCase();
+      if (!cleanEmail) return res.status(400).json({ error: "Email cannot be empty" });
+      const existing = await User.findOne({ where: { email: cleanEmail } });
+      if (existing && existing.id !== user.id) {
+        return res.status(400).json({ error: "Email address is already in use" });
+      }
+      updates.email = cleanEmail;
+    }
+    if (role !== undefined) {
+      const validRoles = ['student', 'teacher', 'registrar', 'admin'];
+      if (!validRoles.includes(role)) {
+        return res.status(400).json({ error: "Invalid role specified" });
+      }
+      if (req.user?.id === user.id && role !== 'admin') {
+        return res.status(400).json({ error: "You cannot change your own admin role" });
+      }
+      updates.role = role;
+    }
     if (department !== undefined) updates.department = department;
+    if (isActive !== undefined) updates.isActive = Boolean(isActive);
+
     await user.update(updates);
-    res.json({ id: user.id, name: user.name, email: user.email, role: user.role, department: user.department });
+    res.json({
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      department: user.department,
+      isActive: user.isActive
+    });
   } catch (error) {
+    console.error("Update user error:", error);
     res.status(500).json({ error: "Failed to update user" });
+  }
+};
+
+// Toggle user active / suspended status
+export const toggleUserStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const adminId = req.user?.id;
+
+    if (parseInt(id) === adminId) {
+      return res.status(400).json({ error: "You cannot deactivate your own account" });
+    }
+
+    const user = await User.findByPk(id);
+    if (!user) return res.status(404).json({ error: "User not found" });
+
+    user.isActive = !user.isActive;
+    await user.save();
+
+    res.json({
+      success: true,
+      id: user.id,
+      name: user.name,
+      isActive: user.isActive,
+      message: `Account for ${user.name} is now ${user.isActive ? 'Active' : 'Suspended'}`
+    });
+  } catch (error) {
+    console.error("Toggle user status error:", error);
+    res.status(500).json({ error: "Failed to toggle user status" });
+  }
+};
+
+// Reset user password (admin temporary password override)
+export const resetUserPassword = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { newPassword } = req.body;
+
+    if (!newPassword || newPassword.length < 6) {
+      return res.status(400).json({ error: "New password must be at least 6 characters" });
+    }
+
+    const user = await User.findByPk(id);
+    if (!user) return res.status(404).json({ error: "User not found" });
+
+    const bcrypt = (await import('bcrypt')).default;
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    user.password = hashedPassword;
+    await user.save();
+
+    res.json({
+      success: true,
+      message: `Password successfully reset for ${user.name}`
+    });
+  } catch (error) {
+    console.error("Reset password error:", error);
+    res.status(500).json({ error: "Failed to reset user password" });
   }
 };
 
@@ -204,7 +292,7 @@ export const deleteUser = async (req, res) => {
         await sequelize.query(
           `UPDATE sections 
            SET currentEnrollment = MAX(0, currentEnrollment - 1), 
-               updatedAt = datetime('now')
+               updatedAt = NOW()
            WHERE id = ?`,
           { replacements: [e.sectionId] }
         );

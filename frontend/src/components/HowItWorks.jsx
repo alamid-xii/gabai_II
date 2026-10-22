@@ -1,4 +1,4 @@
-﻿import { MessageCircle, FileText, Smartphone, CheckCircle } from "lucide-react";
+import { MessageCircle, FileText, Smartphone, CheckCircle } from "lucide-react";
 
 export function HowItWorks() {
   const steps = [
@@ -30,7 +30,7 @@ export function HowItWorks() {
 
   return (
     <section className="bg-[#FFFDF0] py-20 lg:py-28">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="max-w-7xl mx-auto px-5 sm:px-6 lg:px-8">
         <div className="text-center max-w-3xl mx-auto mb-16">
           <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-[#001840] mb-6">
             How It Works
@@ -42,7 +42,7 @@ export function HowItWorks() {
 
         <div className="relative">
           {/* Connection Lines - Hidden on mobile */}
-          <div className="hidden lg:block absolute top-24 left-0 right-0 h-1 bg-gradient-to-r from-[#F5C400] via-[#FFDC5F] to-[#F5C400] opacity-30 mx-24"></div>
+          <div className="hidden lg:block absolute top-24 left-0 right-0 h-1 bg-linear-to-r from-[#F5C400] via-[#FFDC5F] to-[#F5C400] opacity-30 mx-24"></div>
 
           <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8 relative">
             {steps.map((step, index) => {

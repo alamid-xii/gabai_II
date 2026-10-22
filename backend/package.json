@@ -4,10 +4,12 @@
   "main": "index.js",
   "type": "module",
   "scripts": {
+    "start": "node index.js",
     "xian-start": "node index.js",
     "xian": "nodemon index.js",
     "migrate": "node migrate.js",
-    "seed": "node seed.js",
+    "seed:users": "node seed-users.js",
+    "seed:students": "node seed-students.js",
     "create:model": "node create.js model",
     "create:controller": "node create.js controller"
   },
@@ -20,6 +22,7 @@
     "dotenv": "^17.3.1",
     "express": "^4.19.2",
     "express-session": "^1.17.3",
+    "google-auth-library": "^11.1.0",
     "groq-sdk": "^1.1.1",
     "hbs": "^4.2.0",
     "inquirer": "^9.2.15",
@@ -29,7 +32,6 @@
     "nodemailer": "^8.0.7",
     "openai": "^6.29.0",
     "pdfkit": "^0.18.0",
-    "sequelize": "^6.37.3",
-    "sqlite3": "^6.0.1"
+    "sequelize": "^6.37.3"
   }
 }

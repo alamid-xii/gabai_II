@@ -137,7 +137,7 @@ export const EnrollmentRecord = sequelize.define("EnrollmentRecord", {
 
   // Enrollment Type
   enrollmentType: {
-    type: DataTypes.ENUM('new', 'old', 'transferee'),
+    type: DataTypes.ENUM('new', 'old', 'transferee', 'returnee'),
     allowNull: true
   },
 

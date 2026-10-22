@@ -30,19 +30,30 @@ import { User } from "./models/userModel.js";
 import inquirer from "inquirer";
 
 // Server-level connection (no database selected)
-const rootSequelize = new Sequelize("mysql://root:@localhost:3306/");
+const rootSequelize = new Sequelize(
+  "mysql",
+  process.env.DB_USER || "root",
+  process.env.DB_PASSWORD || "",
+  {
+    host: process.env.DB_HOST || "localhost",
+    port: Number(process.env.DB_PORT || 3306),
+    dialect: "mysql",
+    logging: false
+  }
+);
 
 const { createDb } = await inquirer.prompt([
   {
     type: "confirm",
     name: "createDb",
-    message: "Database 'backend' may not exist. Create it?",
+    message: `Database '${process.env.DB_NAME || "backend"}' may not exist. Create it?`,
     default: true,
   },
 ]);
 
 if (createDb) {
-  await rootSequelize.query("CREATE DATABASE IF NOT EXISTS backend;");
+  const databaseName = process.env.DB_NAME || "backend";
+  await rootSequelize.query(`CREATE DATABASE IF NOT EXISTS \`${databaseName}\`;`);
   console.log("✅ Database created (if it did not exist)");
 }
 

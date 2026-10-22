@@ -1,4 +1,4 @@
-﻿import { sendEnrollmentVerifiedEmail, sendEnrollmentReturnedEmail, sendSSCExamScheduledEmail, sendSSCResultEmail, sendEnrollmentApprovedEmail, sendLifeStatusEmail } from '../services/emailService.js';
+import { sendEnrollmentVerifiedEmail, sendEnrollmentReturnedEmail, sendSSCExamScheduledEmail, sendSSCResultEmail, sendEnrollmentApprovedEmail, sendLifeStatusEmail } from '../services/emailService.js';
 import { sequelize } from '../models/db.js';
 import { autoAssignSection } from '../services/sectionAssignment.js';
 
@@ -37,6 +37,7 @@ export const getRegistrarStats = async (req, res) => {
         SUM(CASE WHEN status = 'verified'     THEN 1 ELSE 0 END) as verified,
         SUM(CASE WHEN status = 'returned'     THEN 1 ELSE 0 END) as returned,
         SUM(CASE WHEN status = 'approved'     THEN 1 ELSE 0 END) as approved,
+        SUM(CASE WHEN status = 'enrolled'     THEN 1 ELSE 0 END) as enrolled,
         SUM(CASE WHEN educationLevel = 'JHS'  THEN 1 ELSE 0 END) as jhs,
         SUM(CASE WHEN educationLevel = 'SHS'  THEN 1 ELSE 0 END) as shs
       FROM enrollment_records
@@ -44,9 +45,16 @@ export const getRegistrarStats = async (req, res) => {
       ${yearFilter}
     `, { replacements: yearParam });
 
+    // Total students already enrolled/active (for the Students tab badge)
+    const [[totalStudentsRow]] = await sequelize.query(`
+      SELECT COUNT(*) as count FROM enrollment_records
+      WHERE status IN ('enrolled', 'active', 'completed', 'subjects_enrolled', 'approved')
+      ${yearFilter}
+    `, { replacements: yearParam });
+
     const [recentActivity] = await sequelize.query(`
       SELECT er.id, er.firstName, er.familyName, er.educationLevel,
-             er.course, er.gradeLevel, er.status, er.verified_at, er.updatedAt,
+             er.gradeLevel, er.course, er.status, er.createdAt, er.updatedAt,
              er.academicYear, u.name as user_name, u.email as userEmail
       FROM enrollment_records er
       LEFT JOIN users u ON er.userId = u.id
@@ -58,12 +66,15 @@ export const getRegistrarStats = async (req, res) => {
 
     res.json({
       summary: {
-        submitted:    Number(summary?.submitted)    || 0,
-        pending_exam: Number(summary?.pending_exam) || 0,
-        verified:     Number(summary?.verified)     || 0,
-        approved:     Number(summary?.approved)     || 0,
-        jhs:          Number(summary?.jhs)          || 0,
-        shs:          Number(summary?.shs)          || 0,
+        submitted:     Number(summary?.submitted)    || 0,
+        pending_exam:  Number(summary?.pending_exam) || 0,
+        verified:      Number(summary?.verified)     || 0,
+        returned:      Number(summary?.returned)     || 0,
+        approved:      Number(summary?.approved)     || 0,
+        enrolled:      Number(summary?.enrolled)     || 0,
+        jhs:           Number(summary?.jhs)          || 0,
+        shs:           Number(summary?.shs)          || 0,
+        totalStudents: Number(totalStudentsRow?.count) || 0,
       },
       recentActivity: recentActivity || []
     });
@@ -114,12 +125,12 @@ export const getRegistrarEnrollments = async (req, res) => {
     }
 
     if (search) {
-      query += ` AND (er.firstName LIKE ? OR er.familyName LIKE ? OR er.studentNumber LIKE ? OR er.gradeLevel LIKE ?)`;
+      query += ` AND (er.firstName LIKE ? OR er.familyName LIKE ? OR er.studentNumber LIKE ? OR er.lrn LIKE ? OR er.gradeLevel LIKE ?)`;
       const s = `%${search}%`;
-      params.push(s, s, s, s);
+      params.push(s, s, s, s, s);
     }
 
-    query += ` ORDER BY er.createdAt ASC`;
+    query += ` ORDER BY er.createdAt DESC`;
 
     const [results] = await sequelize.query(query, { replacements: params });
     res.json(results || []);
@@ -152,8 +163,8 @@ export const verifyEnrollment = async (req, res) => {
        SET status = 'verified',
            registrar_remarks = ?,
            verified_by = ?,
-           verified_at = datetime('now'),
-           updatedAt = datetime('now')
+           verified_at = NOW(),
+           updatedAt = NOW()
        WHERE id = ?`,
       { replacements: [remarks || null, registrarId, id] }
     );
@@ -207,10 +218,10 @@ export const approveEnrollment = async (req, res) => {
            studentNumber = ?,
            registrar_remarks = ?,
            verified_by = ?,
-           verified_at = datetime('now'),
+           verified_at = NOW(),
            approved_by = ?,
-           approved_at = datetime('now'),
-           updatedAt = datetime('now')
+           approved_at = NOW(),
+           updatedAt = NOW()
        WHERE id = ?`,
       { replacements: [autoLifeStatus, studentNumber, remarks || null, registrarId, registrarId, id] }
     );
@@ -264,8 +275,8 @@ export const returnEnrollment = async (req, res) => {
        SET status = 'returned',
            registrar_remarks = ?,
            verified_by = ?,
-           verified_at = datetime('now'),
-           updatedAt = datetime('now')
+           verified_at = NOW(),
+           updatedAt = NOW()
        WHERE id = ?`,
       { replacements: [remarks, registrarId, id] }
     );
@@ -310,7 +321,7 @@ export const scheduleSSCExam = async (req, res) => {
       `UPDATE enrollment_records
        SET sscExamDate = ?,
            sscPassingScore = ?,
-           updatedAt = datetime('now')
+           updatedAt = NOW()
        WHERE id = ?`,
       { replacements: [examDate, passingScore || 75, id] }
     );
@@ -362,7 +373,7 @@ export const bulkScheduleSSCExam = async (req, res) => {
 
         await sequelize.query(
           `UPDATE enrollment_records
-           SET sscExamDate = ?, sscPassingScore = ?, updatedAt = datetime('now')
+           SET sscExamDate = ?, sscPassingScore = ?, updatedAt = NOW()
            WHERE id = ?`,
           { replacements: [examDate, passing, id] }
         );
@@ -425,7 +436,7 @@ export const recordSSCResult = async (req, res) => {
            sscResult = ?,
            sscClass = ?,
            status = 'submitted',
-           updatedAt = datetime('now')
+           updatedAt = NOW()
        WHERE id = ?`,
       { replacements: [score, passed ? 'passed' : 'failed', passed ? 'SSC' : 'Regular', id] }
     );
@@ -478,7 +489,7 @@ export const evaluateTOR = async (req, res) => {
        SET tor_evaluated = 1,
            tor_remarks = ?,
            verified_by = ?,
-           updatedAt = datetime('now')
+           updatedAt = NOW()
        WHERE id = ?`,
       { replacements: [remarks || null, registrarId, id] }
     );
@@ -554,7 +565,7 @@ export const updateLifeStatus = async (req, res) => {
            lifeStatusDate      = ?,
            lifeStatusUpdatedBy = ?,
            destinationSchool   = ?,
-           updatedAt           = datetime('now')
+           updatedAt           = NOW()
        WHERE id = ?`,
       { replacements: [lifeStatus, reason.trim(), effectiveDate, registrarId, destinationSchool?.trim() || null, id] }
     );
@@ -562,7 +573,7 @@ export const updateLifeStatus = async (req, res) => {
     // If dropped or transferred out — free up the section slot
     if (['dropped', 'transferred_out'].includes(lifeStatus) && enrollment.sectionId) {
       await sequelize.query(
-        `UPDATE sections SET currentEnrollment = MAX(0, currentEnrollment - 1), updatedAt = datetime('now') WHERE id = ?`,
+        `UPDATE sections SET currentEnrollment = MAX(0, currentEnrollment - 1), updatedAt = NOW() WHERE id = ?`,
         { replacements: [enrollment.sectionId] }
       ).catch(() => {}); // non-blocking
     }
@@ -596,7 +607,7 @@ export const updateLifeStatus = async (req, res) => {
  */
 export const getStudentsByLifeStatus = async (req, res) => {
   try {
-    const { lifeStatus, educationLevel, gradeLevel, search, academicYear } = req.query;
+    const { lifeStatus, educationLevel, gradeLevel, search, academicYear, strand, sectionName } = req.query;
 
     // Default to active school year
     let yearFilter = academicYear;
@@ -635,9 +646,23 @@ export const getStudentsByLifeStatus = async (req, res) => {
       params.push(educationLevel);
     }
 
-    if (gradeLevel) {
+    if (gradeLevel && gradeLevel !== 'all') {
       query += ` AND er.gradeLevel = ?`;
       params.push(gradeLevel);
+    }
+
+    if (strand && strand !== 'all') {
+      if (strand === 'Regular') {
+        query += ` AND (er.strand IS NULL OR er.strand = '' OR er.strand = 'Regular')`;
+      } else {
+        query += ` AND er.strand = ?`;
+        params.push(strand);
+      }
+    }
+
+    if (sectionName && sectionName !== 'all') {
+      query += ` AND (er.sectionName = ? OR er.sectionId = ?)`;
+      params.push(sectionName, sectionName);
     }
 
     if (search) {

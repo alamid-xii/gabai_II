@@ -15,7 +15,7 @@ import fs from "fs";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-await sequelize.sync();
+try { await sequelize.authenticate(); } catch (err) { console.warn("DB unavailable at import (buildingController):", err.message); }
 
 // Configure multer for 360° photo uploads
 const storage = multer.diskStorage({

@@ -1,4 +1,4 @@
-﻿import { BrowserRouter, Routes, Route } from "react-router";
+import { BrowserRouter, Routes, Route } from "react-router";
 import { AuthProvider } from "./contexts/AuthContext";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { ScrollToTop } from "./components/ScrollToTop";
@@ -7,21 +7,26 @@ import { Home } from "./pages/Home";
 import { QAChat } from "./pages/QAChat";
 import { ARNavigation } from "./pages/ARNavigation";
 import { EnrollmentGuide } from "./pages/EnrollmentGuide";
-import { CampusMap } from "./pages/CampusMap";
 import { Login } from "./pages/Login";
 import { SignUp } from "./pages/SignUp";
-import { AdminDashboard } from "./pages/AdminDashboard";
-import { RegistrarDashboard } from "./pages/RegistrarDashboard";
-import { HSEnrollmentForm } from "./pages/HSEnrollmentForm";
-import { MyEnrollments } from "./pages/MyEnrollments";
-import { EnrollmentDetail } from "./pages/EnrollmentDetail";
-import { AdminEnrollments } from "./pages/AdminEnrollments";
-import { LevelSelection } from "./pages/LevelSelection";
-import { StudentDashboard } from "./pages/StudentDashboard";
-import { SectionManagement } from "./pages/SectionManagement";
-import { ResubmitPage } from "./pages/ResubmitPage";
+import { AdminDashboard } from "./pages/admin/AdminDashboard";
+import { AdminProfile } from "./pages/admin/AdminProfile";
+import { RegistrarDashboard } from "./pages/registrar/RegistrarDashboard";
+import { RegistrarProfile } from "./pages/registrar/RegistrarProfile";
+import { TeacherProfile } from "./pages/teacher/TeacherProfile";
+import { HSEnrollmentForm } from "./pages/student/HSEnrollmentForm";
+import { MyEnrollments } from "./pages/student/MyEnrollments";
+import { MySchedule } from "./pages/student/MySchedule";
+import { EnrollmentDetail } from "./pages/student/EnrollmentDetail";
+import { AdminEnrollments } from "./pages/admin/AdminEnrollments";
+import { LevelSelection } from "./pages/student/LevelSelection";
+import { StudentDashboard } from "./pages/student/StudentDashboard";
+import { SectionManagement } from "./pages/admin/SectionManagement";
+import { ResubmitPage } from "./pages/student/ResubmitPage";
 import { VerifyEmailPage } from "./pages/VerifyEmailPage";
-import { TeacherDashboard } from "./pages/TeacherDashboard";
+import { TeacherSections } from "./pages/teacher/TeacherSections";
+import { TeacherClasses } from "./pages/teacher/TeacherClasses";
+import { TeacherSchedule } from "./pages/teacher/TeacherSchedule";
 import { Toaster } from "sonner";
 
 export default function App() {
@@ -37,7 +42,6 @@ export default function App() {
             <Route path="qa" element={<QAChat />} />
             <Route path="ar-navigation" element={<ARNavigation />} />
             <Route path="enrollment-guide" element={<EnrollmentGuide />} />
-            <Route path="campus-map" element={<CampusMap />} />
             <Route
               path="enroll"
               element={
@@ -67,6 +71,14 @@ export default function App() {
               element={
                 <ProtectedRoute>
                   <MyEnrollments />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="my-schedule"
+              element={
+                <ProtectedRoute>
+                  <MySchedule />
                 </ProtectedRoute>
               }
             />
@@ -101,13 +113,34 @@ export default function App() {
             }
           />
           <Route
-            path="/registrar"
+            path="/admin/profile"
             element={
-              <ProtectedRoute>
-                <RegistrarDashboard />
+              <ProtectedRoute requireAdmin>
+                <AdminProfile />
               </ProtectedRoute>
             }
           />
+          <Route
+            path="/registrar"
+            element={
+              <ProtectedRoute>
+                <RegistrarDashboard initialTab="overview" />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/registrar/profile"
+            element={
+              <ProtectedRoute>
+                <RegistrarProfile />
+              </ProtectedRoute>
+            }
+          />
+          <Route path="/registrar/enrollments" element={<ProtectedRoute><RegistrarDashboard initialTab="enrollments" /></ProtectedRoute>} />
+          <Route path="/registrar/students" element={<ProtectedRoute><RegistrarDashboard initialTab="students" /></ProtectedRoute>} />
+          <Route path="/registrar/scheduling" element={<ProtectedRoute><RegistrarDashboard initialTab="ssc" /></ProtectedRoute>} />
+          <Route path="/registrar/schedules" element={<ProtectedRoute><RegistrarDashboard initialTab="schedules" /></ProtectedRoute>} />
+          <Route path="/registrar/sections" element={<ProtectedRoute><RegistrarDashboard initialTab="sections" /></ProtectedRoute>} />
           <Route
             path="/registrar/enrollment/:id"
             element={
@@ -120,7 +153,39 @@ export default function App() {
             path="/teacher"
             element={
               <ProtectedRoute>
-                <TeacherDashboard />
+                <TeacherSections />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/teacher/profile"
+            element={
+              <ProtectedRoute>
+                <TeacherProfile />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/teacher/sections"
+            element={
+              <ProtectedRoute>
+                <TeacherSections />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/teacher/classes"
+            element={
+              <ProtectedRoute>
+                <TeacherClasses />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/teacher/schedule"
+            element={
+              <ProtectedRoute>
+                <TeacherSchedule />
               </ProtectedRoute>
             }
           />
@@ -128,7 +193,7 @@ export default function App() {
             path="/admin/enrollments"
             element={
               <ProtectedRoute requireAdmin>
-                <AdminEnrollments />
+                <AdminDashboard initialTab="enrollments" />
               </ProtectedRoute>
             }
           />
@@ -136,7 +201,7 @@ export default function App() {
             path="/admin/sections"
             element={
               <ProtectedRoute requireAdmin>
-                <SectionManagement />
+                <AdminDashboard initialTab="sections" />
               </ProtectedRoute>
             }
           />

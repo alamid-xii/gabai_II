@@ -6,7 +6,7 @@ import { sequelize } from '../models/db.js';
 import { Op } from 'sequelize';
 import { removeFromSection, moveToSection, autoAssignSection } from '../services/sectionAssignment.js';
 
-await sequelize.sync();
+try { await sequelize.authenticate(); } catch (err) { console.warn("DB unavailable at import (sectionController):", err.message); }
 
 // Get all sections with real-time student count from enrollment_records
 export const getAllSections = async (req, res) => {
@@ -214,15 +214,42 @@ export const getSectionStudents = async (req, res) => {
     if (!section) return res.status(404).json({ error: 'Section not found' });
 
     const [students] = await sequelize.query(
-      `SELECT id, firstName, familyName, studentNumber, course, gradeLevel,
-              educationLevel, enrollmentType, status, sectionName, approved_at
+      `SELECT id, firstName, familyName, middleName, studentNumber, lrn, sex, gradeLevel, strand,
+              educationLevel, educationLevel AS course, enrollmentType, status, lifeStatus, lifeStatusDate, sectionName, approved_at, createdAt
        FROM enrollment_records
        WHERE sectionId = ?
        ORDER BY familyName ASC, firstName ASC`,
       { replacements: [id] }
     );
 
-    res.json({ section: section.toJSON(), students: students || [] });
+    // Fetch subjects assigned to this section
+    let [subjects] = await sequelize.query(
+      `SELECT DISTINCT subjectCode AS code, subjectDescription AS description, units, schedule, instructor, room
+       FROM enrollment_subjects
+       WHERE sectionId = ?
+       ORDER BY subjectCode ASC`,
+      { replacements: [id] }
+    );
+
+    if (!subjects || subjects.length === 0) {
+      const gradeNum = parseInt(section.yearLevel) || 7;
+      const strandFilter = section.course === 'SHS' && section.strand ? section.strand : null;
+      let query = `
+        SELECT code, description, units, null AS schedule, ? AS instructor, ? AS room
+        FROM subjects
+        WHERE programCode = ? AND gradeLevel = ? AND isActive = 1
+      `;
+      const params = [section.instructor || null, section.room || null, section.course, gradeNum];
+      if (strandFilter) {
+        query += ` AND (strand = ? OR strand IS NULL OR strand = '')`;
+        params.push(strandFilter);
+      }
+      query += ` ORDER BY code ASC`;
+      const [curriculumSubjects] = await sequelize.query(query, { replacements: params });
+      subjects = curriculumSubjects || [];
+    }
+
+    res.json({ section: section.toJSON(), students: students || [], subjects: subjects || [] });
   } catch (error) {
     console.error('Get section students error:', error);
     res.status(500).json({ error: 'Failed to fetch section students' });
@@ -233,8 +260,8 @@ export const getSectionStudents = async (req, res) => {
 export const getUnassignedStudents = async (req, res) => {
   try {
     const [students] = await sequelize.query(
-      `SELECT id, firstName, familyName, studentNumber, course, gradeLevel,
-              educationLevel, enrollmentType, status, approved_at
+      `SELECT id, firstName, familyName, studentNumber, educationLevel, educationLevel AS course, gradeLevel,
+              enrollmentType, status, approved_at
        FROM enrollment_records
        WHERE status = 'approved' AND (sectionId IS NULL OR sectionId = '')
        ORDER BY approved_at ASC`,

@@ -1,4 +1,4 @@
-﻿import { GraduationCap, Users, MapPinned, Globe } from "lucide-react";
+import { GraduationCap, Users, MapPinned, Globe } from "lucide-react";
 import { ImageWithFallback } from "./figma/ImageWithFallback";
 
 export function TargetUsers() {
@@ -27,7 +27,7 @@ export function TargetUsers() {
 
   return (
     <section className="bg-white py-20 lg:py-28">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="max-w-7xl mx-auto px-5 sm:px-6 lg:px-8">
         <div className="grid lg:grid-cols-2 gap-12 items-center">
           {/* Left Content */}
           <div>
@@ -51,7 +51,7 @@ export function TargetUsers() {
                     key={index}
                     className="flex gap-4 items-start bg-[#FFFDF0] p-6 rounded-xl hover:shadow-md transition-shadow duration-200"
                   >
-                    <div className="bg-[#F5C400] w-12 h-12 rounded-lg flex items-center justify-center flex-shrink-0">
+                    <div className="bg-[#F5C400] w-12 h-12 rounded-lg flex items-center justify-center shrink-0">
                       <Icon className="w-6 h-6 text-[#001840]" />
                     </div>
                     <div>
@@ -82,7 +82,7 @@ export function TargetUsers() {
                 alt="Diverse group of students studying together"
                 className="w-full h-[600px] object-cover"
               />
-              <div className="absolute inset-0 bg-gradient-to-t from-[#001840]/50 to-transparent"></div>
+              <div className="absolute inset-0 bg-linear-to-t from-[#001840]/50 to-transparent"></div>
             </div>
 
             {/* Floating Stats */}

@@ -108,8 +108,8 @@ export const approveEnrollment = async (req, res) => {
            studentNumber = ?,
            admin_comments = ?,
            approved_by = ?,
-           approved_at = datetime('now'),
-           updatedAt = datetime('now')
+           approved_at = NOW(),
+           updatedAt = NOW()
        WHERE id = ?`,
       { replacements: [studentNumber, comment || null, adminId, id] }
     );
@@ -158,8 +158,8 @@ export const rejectEnrollment = async (req, res) => {
        SET status = 'rejected',
            admin_comments = ?,
            approved_by = ?,
-           approved_at = datetime('now'),
-           updatedAt = datetime('now')
+           approved_at = NOW(),
+           updatedAt = NOW()
        WHERE id = ?`,
       { replacements: [comment, adminId, id] }
     );
@@ -196,12 +196,12 @@ export const bulkApproveVerified = async (req, res) => {
     if (ids && Array.isArray(ids) && ids.length > 0) {
       const placeholders = ids.map(() => '?').join(',');
       query = `UPDATE enrollment_records
-               SET status = 'approved', approved_by = ?, approved_at = datetime('now'), updatedAt = datetime('now')
+               SET status = 'approved', approved_by = ?, approved_at = NOW(), updatedAt = NOW()
                WHERE id IN (${placeholders}) AND status = 'verified'`;
       params = [adminId, ...ids];
     } else {
       query = `UPDATE enrollment_records
-               SET status = 'approved', approved_by = ?, approved_at = datetime('now'), updatedAt = datetime('now')
+               SET status = 'approved', approved_by = ?, approved_at = NOW(), updatedAt = NOW()
                WHERE status = 'verified'`;
       params = [adminId];
     }
@@ -233,7 +233,7 @@ export const bulkApproveVerified = async (req, res) => {
         if (enr && !enr.studentNumber) {
           const sn = await generateStudentNumber();
           await sequelize.query(
-            `UPDATE enrollment_records SET studentNumber = ?, updatedAt = datetime('now') WHERE id = ?`,
+            `UPDATE enrollment_records SET studentNumber = ?, updatedAt = NOW() WHERE id = ?`,
             { replacements: [sn, eid] }
           );
         }
@@ -453,8 +453,8 @@ export const updateEnrollmentStatus = async (req, res) => {
        SET status = ?,
            admin_comments = ?,
            approved_by = ?,
-           approved_at = datetime('now'),
-           updatedAt = datetime('now')
+           approved_at = NOW(),
+           updatedAt = NOW()
        WHERE id = ?`,
       { replacements: [status, comment || null, adminId, id] }
     );

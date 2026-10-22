@@ -7,6 +7,7 @@ import { sequelize } from '../models/db.js';
 export const getTeacherSections = async (req, res) => {
   try {
     const teacherId = req.user.id;
+    const teacherName = req.user.name;
 
     const [sections] = await sequelize.query(
       `SELECT s.id, s.code, s.course, s.yearLevel, s.strand, s.semester,
@@ -16,10 +17,10 @@ export const getTeacherSections = async (req, res) => {
        FROM sections s
        LEFT JOIN enrollment_records er
          ON er.sectionId = s.id AND er.status IN ('enrolled','active','completed')
-       WHERE s.teacherId = ? AND s.isActive = 1
+       WHERE (s.teacherId = ? OR s.instructor = ?) AND s.isActive = 1
        GROUP BY s.id
        ORDER BY s.course ASC, s.yearLevel ASC, s.code ASC`,
-      { replacements: [teacherId] }
+      { replacements: [teacherId, teacherName] }
     );
 
     res.json(sections || []);
@@ -36,6 +37,7 @@ export const getTeacherSections = async (req, res) => {
 export const getSectionStudents = async (req, res) => {
   try {
     const teacherId = req.user.id;
+    const teacherName = req.user.name;
     const sectionId = parseInt(req.params.id);
 
     if (isNaN(sectionId)) {
@@ -46,8 +48,8 @@ export const getSectionStudents = async (req, res) => {
     const [[section]] = await sequelize.query(
       `SELECT id, code, course, yearLevel, strand, semester, schoolYear,
               instructor, schedule, room, capacity, currentEnrollment
-       FROM sections WHERE id = ? AND teacherId = ? AND isActive = 1`,
-      { replacements: [sectionId, teacherId] }
+       FROM sections WHERE id = ? AND (s.teacherId = ? OR s.instructor = ? OR teacherId = ? OR instructor = ?) AND isActive = 1`,
+      { replacements: [sectionId, teacherId, teacherName, teacherId, teacherName] }
     );
 
     if (!section) {
@@ -132,7 +134,7 @@ export const createUser = async (req, res) => {
 
     await sequelize.query(
       `INSERT INTO users (name, email, password, role, department, isActive, isVerified, createdAt, updatedAt)
-       VALUES (?, ?, ?, ?, ?, 1, 1, datetime('now'), datetime('now'))`,
+       VALUES (?, ?, ?, ?, ?, 1, 1, NOW(), NOW())`,
       { replacements: [name.trim(), email.trim().toLowerCase(), hashed, role, department || null] }
     );
 
@@ -164,7 +166,7 @@ export const assignTeacherToSection = async (req, res) => {
     // If teacherId is null/empty, unassign
     if (!teacherId) {
       await sequelize.query(
-        `UPDATE sections SET teacherId = NULL, updatedAt = datetime('now') WHERE id = ?`,
+        `UPDATE sections SET teacherId = NULL, updatedAt = NOW() WHERE id = ?`,
         { replacements: [sectionId] }
       );
       return res.json({ message: 'Teacher unassigned from section' });
@@ -180,7 +182,7 @@ export const assignTeacherToSection = async (req, res) => {
     }
 
     await sequelize.query(
-      `UPDATE sections SET teacherId = ?, instructor = ?, updatedAt = datetime('now') WHERE id = ?`,
+      `UPDATE sections SET teacherId = ?, instructor = ?, updatedAt = NOW() WHERE id = ?`,
       { replacements: [teacherId, teacher.name, sectionId] }
     );
 

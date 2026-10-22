@@ -1,4 +1,4 @@
-﻿/*
+/*
     MIT License
     
     Copyright (c) 2025 Christian I. Cabrera || XianFire Framework
@@ -37,6 +37,7 @@ import { dirname } from "path";
 import { sequelize } from "./models/db.js";
 import "./models/enrollmentDocumentModel.js"; // ensure table is synced
 import "./models/gradingPeriodModel.js";       // ensure grading_periods table is synced
+import "./models/classScheduleModel.js";      // ensure class_schedules table is synced
 
 // Load environment variables
 dotenv.config();
@@ -118,7 +119,9 @@ fs.readdir(partialsDir, (err, files) => {
 app.use("/", router);
 
 // Sync only new tables, don't alter existing ones (SQLite doesn't support ALTER well)
-sequelize.sync({ alter: false }).catch(err => console.error("DB sync error:", err));
+const syncPromise = sequelize.sync({ alter: false }).catch(err => {
+  console.error("DB sync error:", err);
+});
 
 // Manually add new columns if they don't exist yet (safe for SQLite)
 async function addMissingColumns() {
@@ -127,9 +130,16 @@ async function addMissingColumns() {
       `ALTER TABLE enrollment_records ADD COLUMN sectionId INTEGER`,
       `ALTER TABLE enrollment_records ADD COLUMN sectionName VARCHAR(50)`,
       `ALTER TABLE sections ADD COLUMN strand VARCHAR(50)`,
+      `ALTER TABLE users ADD COLUMN role ENUM('student', 'registrar', 'admin', 'teacher') NOT NULL DEFAULT 'student'`,
+      `ALTER TABLE users ADD COLUMN department VARCHAR(100)`,
+      `ALTER TABLE users ADD COLUMN isActive BOOLEAN NOT NULL DEFAULT 1`,
       `ALTER TABLE users ADD COLUMN isVerified BOOLEAN DEFAULT 0`,
       `ALTER TABLE users ADD COLUMN verificationToken VARCHAR(100)`,
       `ALTER TABLE users ADD COLUMN verificationExpires DATETIME`,
+      `ALTER TABLE users ADD COLUMN authProvider VARCHAR(20) NOT NULL DEFAULT 'password'`,
+      `ALTER TABLE users ADD COLUMN googleId VARCHAR(255) NULL`,
+      `CREATE UNIQUE INDEX users_googleId_unique ON users (googleId)`,
+      `ALTER TABLE enrollment_records MODIFY COLUMN enrollmentType ENUM('new', 'old', 'transferee', 'returnee') NULL`,
       `ALTER TABLE sections ADD COLUMN teacherId INTEGER`,
       `ALTER TABLE enrollment_records ADD COLUMN lifeStatus VARCHAR(20)`,
       `ALTER TABLE enrollment_records ADD COLUMN lifeStatusReason TEXT`,
@@ -156,10 +166,22 @@ async function addMissingColumns() {
     console.error('Column migration error:', err.message);
   }
 }
-addMissingColumns();
+await syncPromise;
+await addMissingColumns();
 
 export default app;
 
 if (!process.env.ELECTRON) {
-  app.listen(PORT, () => console.log(`🔥 XianFire running at http://localhost:${PORT}`));
+  const server = app.listen(PORT, () => console.log(`🔥 XianFire running at http://localhost:${PORT}`));
+  server.on("error", (err) => {
+    if (err.code === "EADDRINUSE") {
+      console.error(`❌ Port ${PORT} is already in use. Stop the other process (e.g. npx kill-port ${PORT}) and restart.`);
+      process.exitCode = 1;
+    } else {
+      console.error("Server error:", err);
+    }
+  });
+  process.on("unhandledRejection", (reason) => {
+    console.error("Unhandled rejection:", reason);
+  });
 }
