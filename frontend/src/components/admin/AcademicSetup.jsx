@@ -10,7 +10,7 @@ const PROGRAMS = ['JHS', 'SHS'];
 const SHS_STRANDS = ['STEM', 'ABM', 'HUMSS', 'TVL', 'Sports', 'Arts and Design'];
 const JHS_GRADE_LEVELS = [7, 8, 9, 10];
 const SHS_GRADE_LEVELS = [11, 12];
-const SEMESTERS = ['1st Semester', '2nd Semester'];
+const SEMESTERS = ['1st Trimester', '2nd Trimester', '3rd Trimester'];
 
 // ── Close School Year Button ──────────────────────────────────────────────────
 function CloseSchoolYearButton() {
@@ -243,7 +243,7 @@ export function AcademicSetup() {
   const [editingSubject, setEditingSubject] = useState(null);
   const [subjectForm, setSubjectForm] = useState({
     code: '', description: '', units: 1,
-    programCode: 'JHS', gradeLevel: 7, semester: '1st Semester', strand: ''
+    programCode: 'JHS', gradeLevel: 7, semester: '1st Trimester', strand: ''
   });
   const [syForm, setSyForm] = useState({ year: '' });
 
@@ -280,7 +280,7 @@ export function AcademicSetup() {
       code: '', description: '', units: 1,
       programCode,
       gradeLevel: programCode === 'JHS' ? 7 : 11,
-      semester: '1st Semester',
+      semester: '1st Trimester',
       strand: ''
     });
   }
@@ -657,11 +657,13 @@ export function AcademicSetup() {
                             {/* Semester */}
                             <td className="px-5 py-3.5 whitespace-nowrap">
                               <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                                s.semester === '1st Semester'
+                                (s.semester || '').includes('1st')
                                   ? 'bg-sky-50 text-sky-700 border border-sky-200/60'
-                                  : 'bg-teal-50 text-teal-700 border border-teal-200/60'
+                                  : (s.semester || '').includes('2nd')
+                                  ? 'bg-teal-50 text-teal-700 border border-teal-200/60'
+                                  : 'bg-purple-50 text-purple-700 border border-purple-200/60'
                               }`}>
-                                {s.semester || '1st Semester'}
+                                {s.semester || '1st Trimester'}
                               </span>
                             </td>
 

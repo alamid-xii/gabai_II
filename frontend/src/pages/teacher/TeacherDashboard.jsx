@@ -262,7 +262,8 @@ function GradeSheet({ cls, onBack }) {
   const [saving, setSaving] = useState({}); // { enrollmentSubjectId_quarter: true }
   const [edits, setEdits] = useState({});   // { `${esId}_${quarter}`: value }
 
-  const QUARTERS = ['Q1', 'Q2', 'Q3', 'Q4'];
+  const QUARTERS = ['Q1', 'Q2', 'Q3'];
+  const QUARTER_LABELS = { Q1: '1st Tri', Q2: '2nd Tri', Q3: '3rd Tri' };
 
   const load = useCallback(() => {
     setLoading(true);
@@ -355,9 +356,10 @@ function GradeSheet({ cls, onBack }) {
           <div className="flex gap-2 mt-4 flex-wrap">
             {QUARTERS.map(q => {
               const period = data.gradingPeriods.find(p => p.quarter === q);
+              const label = QUARTER_LABELS[q] || q;
               if (!period) return (
                 <span key={q} className="flex items-center gap-1 px-2.5 py-1 bg-gray-100 text-gray-400 text-xs rounded-full">
-                  <Lock size={9} /> {q} — Not set up
+                  <Lock size={9} /> {label} — Not set up
                 </span>
               );
               return (
@@ -365,7 +367,7 @@ function GradeSheet({ cls, onBack }) {
                   period.isOpen ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500'
                 }`}>
                   {period.isOpen ? <CheckCircle size={9} /> : <Lock size={9} />}
-                  {q} — {period.isOpen ? 'Open' : 'Closed'}
+                  {label} — {period.isOpen ? 'Open' : 'Closed'}
                 </span>
               );
             })}
@@ -394,7 +396,7 @@ function GradeSheet({ cls, onBack }) {
                     <th key={q} className="text-center px-4 py-3 text-xs font-bold uppercase tracking-wider whitespace-nowrap">
                       <span className={openQuarters.has(q) ? 'text-emerald-600' : 'text-gray-300'}>
                         {openQuarters.has(q) ? <CheckCircle size={10} className="inline mr-1" /> : <Lock size={10} className="inline mr-1" />}
-                        {q}
+                        {QUARTER_LABELS[q] || q}
                       </span>
                     </th>
                   ))}

@@ -3,7 +3,9 @@ import { GradingPeriod } from '../models/gradingPeriodModel.js';
 
 // ── Helper: compute final grade + remarks ────────────────────────────────────
 function computeFinalAndRemarks(q1, q2, q3, q4) {
-  const quarters = [q1, q2, q3, q4].map(v => (v !== null && v !== undefined && v !== '' ? parseFloat(v) : null));
+  const isFourTerms = q4 !== null && q4 !== undefined && q4 !== '';
+  const terms = isFourTerms ? [q1, q2, q3, q4] : [q1, q2, q3];
+  const quarters = terms.map(v => (v !== null && v !== undefined && v !== '' ? parseFloat(v) : null));
   const entered = quarters.filter(v => v !== null);
 
   if (entered.length === 0) return { finalGrade: null, remarks: 'Incomplete' };
@@ -11,8 +13,9 @@ function computeFinalAndRemarks(q1, q2, q3, q4) {
   const avg = entered.reduce((sum, v) => sum + v, 0) / entered.length;
   const finalGrade = Math.round(avg * 100) / 100;
 
+  const totalRequired = isFourTerms ? 4 : 3;
   let remarks;
-  if (entered.length < 4) {
+  if (entered.length < totalRequired) {
     remarks = 'Incomplete';
   } else {
     remarks = finalGrade >= 75 ? 'Passed' : 'Failed';
@@ -67,7 +70,7 @@ export const setupGradingPeriods = async (req, res) => {
       schoolYear = sy.year;
     }
 
-    const quarters = ['Q1', 'Q2', 'Q3', 'Q4'];
+    const quarters = ['Q1', 'Q2', 'Q3'];
     let created = 0;
 
     for (const quarter of quarters) {
@@ -249,9 +252,9 @@ export const saveGrade = async (req, res) => {
 
     if (isNaN(enrollmentSubjectId)) return res.status(400).json({ error: 'Invalid enrollment subject ID' });
 
-    const validQuarters = ['Q1', 'Q2', 'Q3', 'Q4'];
+    const validQuarters = ['Q1', 'Q2', 'Q3', 'Q4', '1st Tri', '2nd Tri', '3rd Tri'];
     if (!validQuarters.includes(quarter)) {
-      return res.status(400).json({ error: 'quarter must be Q1, Q2, Q3, or Q4' });
+      return res.status(400).json({ error: 'Invalid grading period' });
     }
 
     const gradeNum = parseFloat(grade);
@@ -286,8 +289,8 @@ export const saveGrade = async (req, res) => {
       return res.status(403).json({ error: `${quarter} grading period is closed. Contact admin to open it.` });
     }
 
-    // Save the grade for this quarter
-    const colMap = { Q1: 'q1', Q2: 'q2', Q3: 'q3', Q4: 'q4' };
+    // Save the grade for this quarter/trimester
+    const colMap = { Q1: 'q1', Q2: 'q2', Q3: 'q3', Q4: 'q4', '1st Tri': 'q1', '2nd Tri': 'q2', '3rd Tri': 'q3' };
     const col = colMap[quarter];
     const gradeValue = (grade === null || grade === '') ? null : gradeNum;
 

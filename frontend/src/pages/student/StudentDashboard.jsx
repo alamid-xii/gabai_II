@@ -9,11 +9,10 @@ const getToken = () => localStorage.getItem('token');
 export function StudentDashboard() {
   const { id } = useParams();
   const navigate = useNavigate();
-  
+
   const [loading, setLoading] = useState(true);
   const [enrollment, setEnrollment] = useState(null);
   const [enrolledSubjects, setEnrolledSubjects] = useState([]);
-  const [totalUnits, setTotalUnits] = useState(0);
   const [adviserName, setAdviserName] = useState(null);
   const [grades, setGrades] = useState([]);
   const [gradesSummary, setGradesSummary] = useState(null);
@@ -25,16 +24,16 @@ export function StudentDashboard() {
   const loadDashboard = async () => {
     try {
       setLoading(true);
-      
+
       // Get enrollment details
       const enrollRes = await fetch(`${API}/enrollments/${id}`, {
         headers: { 'Authorization': `Bearer ${getToken()}` }
       });
-      
+
       if (!enrollRes.ok) throw new Error('Failed to load enrollment');
       const enrollData = await enrollRes.json();
       setEnrollment(enrollData);
-      
+
       // adviserName comes directly from the enrollment response
       if (enrollData.adviserName) setAdviserName(enrollData.adviserName);
 
@@ -42,11 +41,10 @@ export function StudentDashboard() {
       const subjectsRes = await fetch(`${API}/enrollments/${id}/subjects`, {
         headers: { 'Authorization': `Bearer ${getToken()}` }
       });
-      
+
       if (subjectsRes.ok) {
         const subjectsData = await subjectsRes.json();
         setEnrolledSubjects(subjectsData.subjects || []);
-        setTotalUnits(subjectsData.totalUnits || 0);
       }
 
       // Get grades
@@ -59,7 +57,7 @@ export function StudentDashboard() {
           setGrades(gradesData.grades || []);
           setGradesSummary(gradesData.summary || null);
         }
-      } catch (_) {} // grades are optional — don't fail the whole dashboard
+      } catch (_) { } // grades are optional — don't fail the whole dashboard
     } catch (error) {
       console.error('Load dashboard error:', error);
       toast.error('Failed to load dashboard');
@@ -144,8 +142,8 @@ export function StudentDashboard() {
               <p className="text-lg font-semibold text-[#001840]">{enrollmentTypeLabel}</p>
             </div>
             <div>
-              <p className="text-sm text-gray-600 mb-1">Total Units</p>
-              <p className="text-lg font-semibold text-[#F5C400]">{totalUnits}</p>
+              <p className="text-sm text-gray-600 mb-1">Total Subjects</p>
+              <p className="text-lg font-semibold text-[#102A71]">{enrolledSubjects.length}</p>
             </div>
           </div>
 
@@ -205,7 +203,6 @@ export function StudentDashboard() {
                   <tr>
                     <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Code</th>
                     <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Description</th>
-                    <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">Units</th>
                     <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Section</th>
                     <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Instructor</th>
                     <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Schedule</th>
@@ -221,11 +218,6 @@ export function StudentDashboard() {
                       </td>
                       <td className="px-4 py-3">
                         <span className="text-gray-900">{subject.description}</span>
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <span className="inline-flex items-center justify-center w-8 h-8 bg-[#FFFDF0] rounded-full text-sm font-semibold text-[#102A71]">
-                          {subject.units}
-                        </span>
                       </td>
                       <td className="px-4 py-3">
                         {subject.section ? (
@@ -264,17 +256,6 @@ export function StudentDashboard() {
           )}
         </div>
 
-        {/* Info Box */}
-        <div className="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-start gap-3">
-          <AlertCircle className="w-5 h-5 text-blue-600 mt-0.5 shrink-0" />
-          <div>
-            <p className="font-semibold text-blue-900">Schedule Information</p>
-            <p className="text-sm text-blue-800 mt-1">
-              Section assignments and instructor information will be updated by the admin. Check back regularly for updates.
-            </p>
-          </div>
-        </div>
-
         {/* ── Grades Section ── */}
         {grades.length > 0 && (
           <div className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden mt-6">
@@ -293,30 +274,16 @@ export function StudentDashboard() {
               )}
             </div>
 
-            {/* Summary chips */}
-            {gradesSummary && (
-              <div className="flex gap-3 px-4 py-3 border-b border-gray-100 flex-wrap">
-                <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-100 text-emerald-700 text-xs font-semibold rounded-full">
-                  <CheckCircle className="w-3 h-3" /> Passed: {gradesSummary.passed}
-                </span>
-                <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-red-100 text-red-700 text-xs font-semibold rounded-full">
-                  <XCircle className="w-3 h-3" /> Failed: {gradesSummary.failed}
-                </span>
-                <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-gray-100 text-gray-600 text-xs font-semibold rounded-full">
-                  <Clock className="w-3 h-3" /> Incomplete: {gradesSummary.incomplete}
-                </span>
-              </div>
-            )}
+
 
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead className="bg-gray-50 border-b border-gray-200">
                   <tr>
                     <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Subject</th>
-                    <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">Q1</th>
-                    <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">Q2</th>
-                    <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">Q3</th>
-                    <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">Q4</th>
+                    <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">1st Tri</th>
+                    <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">2nd Tri</th>
+                    <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">3rd Tri</th>
                     <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">Final</th>
                     <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">Remarks</th>
                   </tr>
@@ -328,21 +295,19 @@ export function StudentDashboard() {
                         <p className="font-mono text-sm font-semibold text-[#102A71]">{g.subjectCode}</p>
                         <p className="text-xs text-gray-500 mt-0.5">{g.subjectDescription}</p>
                       </td>
-                      {['q1','q2','q3','q4'].map(q => (
+                      {['q1', 'q2', 'q3'].map(q => (
                         <td key={q} className="px-4 py-3 text-center">
-                          <span className={`text-sm font-semibold ${
-                            g[q] === null || g[q] === undefined ? 'text-gray-300' :
+                          <span className={`text-sm font-semibold ${g[q] === null || g[q] === undefined ? 'text-gray-300' :
                             parseFloat(g[q]) >= 75 ? 'text-emerald-600' : 'text-red-500'
-                          }`}>
+                            }`}>
                             {g[q] !== null && g[q] !== undefined ? g[q] : '—'}
                           </span>
                         </td>
                       ))}
                       <td className="px-4 py-3 text-center">
-                        <span className={`text-sm font-bold ${
-                          g.finalGrade === null || g.finalGrade === undefined ? 'text-gray-300' :
+                        <span className={`text-sm font-bold ${g.finalGrade === null || g.finalGrade === undefined ? 'text-gray-300' :
                           parseFloat(g.finalGrade) >= 75 ? 'text-emerald-700' : 'text-red-600'
-                        }`}>
+                          }`}>
                           {g.finalGrade !== null && g.finalGrade !== undefined ? g.finalGrade : '—'}
                         </span>
                       </td>

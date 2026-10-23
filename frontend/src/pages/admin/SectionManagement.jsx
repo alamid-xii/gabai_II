@@ -13,7 +13,7 @@ import { API } from '../../config/api';
 const tok = () => ({ Authorization: `Bearer ${localStorage.getItem('token')}`, 'Content-Type': 'application/json' });
 
 const COURSES = ['JHS', 'SHS'];
-const SEMESTERS = ['1st Semester', '2nd Semester', 'Summer'];
+const SEMESTERS = ['1st Trimester', '2nd Trimester', '3rd Trimester'];
 const SCHOOL_YEARS = ['2026-2027', '2025-2026', '2024-2025'];
 const PAGE_SIZE = 10;
 
@@ -449,7 +449,7 @@ function CourseBadge({ course }) {
 }
 
 const EMPTY_FORM = {
-  code: '', course: 'JHS', yearLevel: '7', semester: '1st Semester',
+  code: '', course: 'JHS', yearLevel: '7', semester: '1st Trimester',
   schoolYear: '2026-2027', instructor: '', schedule: '', room: '', capacity: '40',
   strand: '',
 };
@@ -461,7 +461,7 @@ function SectionFormModal({ section, onClose, onSaved }) {
     code: section.code || '',
     course: section.course || 'JHS',
     yearLevel: String(section.yearLevel || '7'),
-    semester: section.semester || '1st Semester',
+    semester: section.semester || '1st Trimester',
     schoolYear: section.schoolYear || '2026-2027',
     instructor: section.instructor || '',
     schedule: section.schedule || '',
