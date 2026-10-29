@@ -1,14 +1,12 @@
-import { useState, useRef, useEffect } from "react";
-import { Send, Bot, User, Sparkles, ThumbsUp, ThumbsDown, Loader2, Copy, Trash2, Check, AlertCircle } from "lucide-react";
+import { useState, useRef, useEffect, forwardRef, useImperativeHandle } from "react";
+import { Send, Bot, User, Sparkles, ThumbsUp, ThumbsDown, Loader2, Copy, Check, AlertCircle } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import { API } from "../config/api";
 
 const quickFAQs = [
-  "What are the admission requirements for Grade 7?",
+  "What are the enrollment requirements for Grade 7?",
   "What SHS strands are available at EMC?",
   "How do I apply for the Special Science Class?",
-  "What is the STEM strand?",
-  "What is the difference between JHS and SHS?",
   "How do I enroll online at EMC?",
   "Are there scholarships for SHS students?",
   "What documents do I need to enroll?",
@@ -22,13 +20,13 @@ const initialMessages = [
   {
     id: 1,
     from: "bot",
-    text: "Hello! I'm GabAI, your EMC Admission Assistant. I can help in English or Filipino!\n\nI can answer questions about:\n• JHS (Grades 7–10) and SHS (Grades 11–12) admission\n• Special Science Class (SSC)\n• SHS strands — STEM, ABM, HUMSS, TVL\n• Enrollment requirements and process\n• Tuition, scholarships, and campus information\n\nWhat would you like to know?",
+    text: "Hello! I'm GabAI, your EMC Admission Assistant. I can help in English or Filipino!\n\nI can answer questions about:\n• JHS (Grades 7–10) and SHS (Grades 11–12) enrollment\n• Special Science Class (SSC) admission\n• SHS strands — STEM, ABM, HUMSS\n• Enrollment requirements and process\n• Campus Information\n\nWhat would you like to know?",
     time: getTime(),
     isComplete: true
   },
 ];
 
-export function QAChat() {
+export const QAChat = forwardRef(function QAChat({ onClose, isOverlay = false }, ref) {
   const { user } = useAuth();
   const chatKey = user ? `chatHistory_${user.id}` : 'chatHistory_guest';
 
@@ -74,21 +72,21 @@ export function QAChat() {
   async function typewriterEffect(fullText, messageId) {
     const words = fullText.split(' ');
     let currentText = '';
-    
+
     for (let i = 0; i < words.length; i++) {
       currentText += (i > 0 ? ' ' : '') + words[i];
-      
-      setMessages(prev => prev.map(msg => 
-        msg.id === messageId 
+
+      setMessages(prev => prev.map(msg =>
+        msg.id === messageId
           ? { ...msg, text: currentText, isTyping: true }
           : msg
       ));
-      
+
       await new Promise(resolve => setTimeout(resolve, 50));
     }
-    
-    setMessages(prev => prev.map(msg => 
-      msg.id === messageId 
+
+    setMessages(prev => prev.map(msg =>
+      msg.id === messageId
         ? { ...msg, isTyping: false, isComplete: true }
         : msg
     ));
@@ -97,7 +95,8 @@ export function QAChat() {
   // Build conversation history for context
   function getConversationHistory() {
     return messages
-      .filter(m => m.from && m.text)
+      .filter(m => m.from && m.text && !m.isError)
+      .slice(-6)
       .map(m => ({
         role: m.from === 'user' ? 'user' : 'assistant',
         content: m.text
@@ -106,7 +105,8 @@ export function QAChat() {
 
   async function sendMessage(text) {
     if (!text.trim() || typing) return;
-    
+    if (text.length > 2000) { setError("Please keep messages under 2,000 characters."); return; }
+
     setError(null);
     const userMsg = { id: Date.now(), from: "user", text, time: getTime(), isComplete: true };
     setMessages((prev) => [...prev, userMsg]);
@@ -118,24 +118,21 @@ export function QAChat() {
       const response = await fetch(`${API}/chat/message`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          message: text, 
+        body: JSON.stringify({
+          message: text,
           sessionId,
           conversationHistory: getConversationHistory()
         }),
         credentials: "include"
       });
 
-      if (!response.ok) {
-        throw new Error(`Server error: ${response.status}`);
-      }
-
       const data = await response.json();
-      
+      if (!response.ok) throw new Error(data.response || "Chat is temporarily unavailable.");
+
       if (data.error) {
         throw new Error(data.response || "Failed to get response");
       }
-      
+
       const botMsgId = Date.now() + 1;
       const botMsg = {
         id: botMsgId,
@@ -147,20 +144,20 @@ export function QAChat() {
         isTyping: true,
         isComplete: false
       };
-      
+
       setMessages((prev) => [...prev, botMsg]);
-      setTyping(false);
-      
+
+
       await typewriterEffect(data.response, botMsgId);
-      
+
       if (data.suggestedQuestions && data.suggestedQuestions.length > 0) {
         setSuggestedQuestions(data.suggestedQuestions);
       }
-      
+
     } catch (error) {
       console.error("Chat error:", error);
       setError(error.message);
-      
+
       const errorMsgId = Date.now() + 1;
       const errorMsg = {
         id: errorMsgId,
@@ -171,15 +168,16 @@ export function QAChat() {
         isTyping: true,
         isComplete: false
       };
-      
+
       setMessages((prev) => [...prev, errorMsg]);
-      setTyping(false);
-      
+
+
       await typewriterEffect(
-        "I apologize, but I'm having trouble connecting right now. This could be due to:\n\n• Network connectivity issues\n• Server maintenance\n• High traffic\n\nPlease try again in a moment, or contact the Registrar's Office at (043) 123-4567 for immediate assistance.",
+        error.message || "Please try again shortly or contact the EMC Registrar through official school channels.",
         errorMsgId
       );
     } finally {
+      setTyping(false);
       inputRef.current?.focus();
     }
   }
@@ -189,14 +187,15 @@ export function QAChat() {
     if (!message || !message.chatLogId) return;
 
     try {
-      await fetch(`${API}/chat/feedback`, {
+      const result = await fetch(`${API}/chat/feedback`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ chatLogId: message.chatLogId, helpful }),
         credentials: "include"
       });
-      
-      setMessages(prev => prev.map(m => 
+
+      if (!result.ok) throw new Error("Could not save feedback");
+      setMessages(prev => prev.map(m =>
         m.id === messageId ? { ...m, feedbackGiven: true, feedbackType: helpful ? 'helpful' : 'not-helpful' } : m
       ));
     } catch (error) {
@@ -219,6 +218,10 @@ export function QAChat() {
     }
   }
 
+  useImperativeHandle(ref, () => ({
+    clearChat,
+  }));
+
   function handleKeyPress(e) {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -228,8 +231,6 @@ export function QAChat() {
 
   return (
     <div className="h-full min-h-0 bg-linear-to-br from-[#FFFDF0] via-[#FFF9E6] to-[#FFFDF0] flex flex-col">
-      
-
       {/* Error Banner */}
       {error && (
         <div className="bg-red-50 border-b border-red-200 px-4 sm:px-6 lg:px-8 py-3">
@@ -241,13 +242,13 @@ export function QAChat() {
       )}
 
       {/* Chat Container */}
-      <div className="flex-1 min-h-0 px-4 sm:px-6 lg:px-8 py-4 sm:py-6 flex flex-col overflow-hidden">
+      <div className="flex-1 min-h-0 px-3 sm:px-6 lg:px-8 py-3 sm:py-6 flex flex-col overflow-hidden">
         <div className="max-w-6xl mx-auto w-full flex flex-col h-full min-h-0">
-          
+
           {/* Messages */}
-          <div 
+          <div
             ref={chatContainerRef}
-            className="flex-1 min-h-0 overflow-y-auto space-y-6 mb-6 pr-2"
+            className="flex-1 min-h-0 overflow-y-auto space-y-4 sm:space-y-6 mb-3 sm:mb-6 pr-1"
             style={{ scrollBehavior: 'smooth' }}
           >
             {messages.map((msg) => (
@@ -257,31 +258,29 @@ export function QAChat() {
               >
                 <div className="shrink-0">
                   <div
-                    className={`w-10 h-10 rounded-full flex items-center justify-center shadow-lg ${
-                      msg.from === "bot"
-                        ? "bg-linear-to-br from-[#001840] to-[#102A71] text-[#F5C400]"
-                        : "bg-linear-to-br from-[#F5C400] to-[#FFDC5F] text-[#001840]"
-                    }`}
+                    className={`w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center shadow-lg ${msg.from === "bot"
+                      ? "bg-linear-to-br from-[#001840] to-[#102A71] text-[#F5C400]"
+                      : "bg-linear-to-br from-[#F5C400] to-[#FFDC5F] text-[#001840]"
+                      }`}
                   >
                     {msg.from === "bot" ? <Bot className="w-5 h-5" /> : <User className="w-5 h-5" />}
                   </div>
                 </div>
 
-                <div className={`flex-1 max-w-[85%] sm:max-w-[75%] ${msg.from === "user" ? "flex justify-end" : ""}`}>
+                <div className={`flex-1 min-w-0 max-w-[88%] sm:max-w-[75%] ${msg.from === "user" ? "flex justify-end" : ""}`}>
                   <div
-                    className={`inline-block px-5 py-4 rounded-2xl shadow-md ${
-                      msg.from === "bot"
-                        ? msg.isError 
-                          ? "bg-red-50 border border-red-200 text-red-900"
-                          : "bg-white border border-gray-200 text-gray-800"
-                        : "bg-linear-to-br from-[#001840] to-[#102A71] text-white"
-                    }`}
+                    className={`inline-block px-3 sm:px-5 py-3 sm:py-4 rounded-2xl shadow-md ${msg.from === "bot"
+                      ? msg.isError
+                        ? "bg-red-50 border border-red-200 text-red-900"
+                        : "bg-white border border-gray-200 text-gray-800"
+                      : "bg-linear-to-br from-[#001840] to-[#102A71] text-white"
+                      }`}
                   >
                     <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">
                       {msg.text}
                       {msg.isTyping && <span className="inline-block w-1 h-4 bg-current ml-1 animate-pulse"></span>}
                     </p>
-                    
+
                     {msg.isComplete && (
                       <div className="flex items-center justify-between gap-3 mt-3 pt-3 border-t border-gray-200/30">
                         <span className="text-xs opacity-60">{msg.time}</span>
@@ -331,7 +330,7 @@ export function QAChat() {
 
             {typing && (
               <div className="flex gap-3 animate-fadeIn">
-                <div className="w-10 h-10 rounded-full bg-linear-to-br from-[#001840] to-[#102A71] text-[#F5C400] flex items-center justify-center shadow-lg">
+                <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-linear-to-br from-[#001840] to-[#102A71] text-[#F5C400] flex items-center justify-center shadow-lg">
                   <Bot className="w-5 h-5" />
                 </div>
                 <div className="bg-white border border-gray-200 px-5 py-4 rounded-2xl shadow-md">
@@ -343,7 +342,7 @@ export function QAChat() {
                 </div>
               </div>
             )}
-            
+
             <div ref={messagesEndRef} />
           </div>
 
@@ -351,12 +350,12 @@ export function QAChat() {
           {suggestedQuestions.length > 0 && !typing && (
             <div className="mb-4 animate-fadeIn">
               <p className="text-xs font-semibold text-gray-600 mb-2">You might also want to know:</p>
-              <div className="flex flex-wrap gap-2">
+              <div className="flex gap-2 overflow-x-auto py-1 px-0.5 sm:flex-wrap sm:overflow-visible sm:p-0 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
                 {suggestedQuestions.map((q, idx) => (
                   <button
                     key={idx}
                     onClick={() => sendMessage(q)}
-                    className="text-xs px-3 py-2 bg-white hover:bg-[#FFFDF0] border border-gray-200 hover:border-[#F5C400] rounded-lg text-gray-700 transition-all shadow-sm hover:shadow-md"
+                    className="shrink-0 sm:shrink whitespace-nowrap sm:whitespace-normal text-xs px-3.5 py-2 bg-white hover:bg-[#FFFDF0] active:bg-[#FFF9E6] border border-gray-200 hover:border-[#F5C400] rounded-xl text-gray-700 transition-all shadow-sm hover:shadow-md"
                   >
                     {q}
                   </button>
@@ -368,21 +367,21 @@ export function QAChat() {
           {/* Quick FAQs */}
           {messages.length === 1 && (
             <div className="mb-3 animate-fadeIn">
-              <p className="text-xs font-semibold text-gray-700 mb-2 flex items-center gap-2">
+              <p className="text-xs font-semibold text-gray-700 mb-2 flex items-center gap-1.5">
                 <Sparkles className="w-4 h-4 text-[#F5C400]" />
                 Quick Questions:
               </p>
-              <div className="flex gap-2 overflow-x-auto pb-1 sm:grid sm:grid-cols-2 sm:overflow-visible">
+              <div className="flex gap-2 overflow-x-auto py-1 px-0.5 sm:grid sm:grid-cols-2 sm:gap-2 sm:overflow-visible sm:p-0 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
                 {quickFAQs.map((q) => (
                   <button
                     key={q}
                     onClick={() => sendMessage(q)}
                     disabled={typing}
-                    className="min-w-[220px] sm:min-w-0 text-left px-3 py-2 bg-white hover:bg-[#FFFDF0] border border-gray-200 hover:border-[#F5C400] rounded-lg text-xs text-gray-700 transition-all group shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="shrink-0 sm:shrink whitespace-nowrap sm:whitespace-normal text-left px-3.5 py-2.5 bg-white hover:bg-[#FFFDF0] active:bg-[#FFF9E6] border border-gray-200 hover:border-[#F5C400] rounded-xl text-xs text-gray-700 transition-all group shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    <span className="flex items-center justify-between">
-                      <span className="line-clamp-1">{q}</span>
-                      <Send className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity text-[#F5C400]" />
+                    <span className="flex items-center justify-between gap-2">
+                      <span className="truncate sm:line-clamp-1">{q}</span>
+                      <Send className="w-3.5 h-3.5 shrink-0 text-[#F5C400] opacity-60 group-hover:opacity-100 transition-opacity" />
                     </span>
                   </button>
                 ))}
@@ -391,15 +390,17 @@ export function QAChat() {
           )}
 
           {/* Input */}
-          <div className="bg-white border-2 border-gray-300 rounded-2xl p-3 shadow-xl">
+          <div className="bg-white border border-gray-300 rounded-2xl p-2 sm:p-3 shadow-lg shrink-0 mb-[env(safe-area-inset-bottom)]">
             <div className="flex gap-3">
               <textarea
+                maxLength={2000}
+                aria-label="Ask GabAI about EMC admissions"
                 ref={inputRef}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyPress}
-                placeholder="Ask me anything about admission..."
-                className="flex-1 px-4 py-3 bg-transparent text-gray-800 placeholder-gray-400 focus:outline-none text-sm resize-none"
+                placeholder="Ask about EMC admissions. Do not share passwords or personal records."
+                className="flex-1 min-w-0 px-2 sm:px-4 py-3 bg-transparent text-gray-800 placeholder-gray-400 focus:outline-none text-sm resize-none"
                 disabled={typing}
                 rows={1}
                 style={{ maxHeight: '120px' }}
@@ -421,4 +422,4 @@ export function QAChat() {
       </div>
     </div>
   );
-}
+});

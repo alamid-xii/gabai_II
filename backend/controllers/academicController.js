@@ -106,11 +106,14 @@ export const closeSchoolYear = async (req, res) => {
       return res.json({ message: 'No enrolled students to complete.', completed: 0 });
     }
 
-    // Mark enrolled/active students as completed and set lifeStatus to 'completed'
+    // Mark enrolled/active students as completed. Retained students keep their retained lifeStatus
     await sequelize.query(
       `UPDATE enrollment_records
        SET status = 'completed',
-           lifeStatus = 'completed',
+           lifeStatus = CASE 
+             WHEN lifeStatus = 'retained' THEN 'retained'
+             ELSE 'completed'
+           END,
            updatedAt = NOW()
        WHERE status IN ('enrolled', 'active', 'subjects_enrolled')
          AND (lifeStatus IS NULL OR lifeStatus NOT IN ('dropped', 'transferred_out'))`

@@ -5,6 +5,7 @@ import { OAuth2Client } from "google-auth-library";
 import { User, sequelize } from "../models/userModel.js";
 import { PendingRegistration } from "../models/pendingRegistrationModel.js";
 import { sendWelcomeEmail, sendOtpEmail } from "../services/emailService.js";
+import { newGoogleProfile, profileUpdates, serializeUser } from "../services/userProfile.js";
 
 try { await sequelize.authenticate(); } catch (err) { console.warn("DB unavailable at import (authController):", err.message); }
 
@@ -38,6 +39,14 @@ export const loginUser = async (req, res) => {
     const match = await bcrypt.compare(password, user.password);
     if (!match) return res.status(401).json({ message: "Invalid email or password" });
 
+    // Check account status (suspended / deactivated)
+    if (user.isActive === false || user.isActive === 0 || user.isActive === '0') {
+      return res.status(403).json({
+        message: "Your account has been suspended or deactivated. Please contact an administrator.",
+        isSuspended: true
+      });
+    }
+
     // Check email verification — only required for students
     if (user.role === 'student' && (!user.isVerified || user.isVerified === 0 || user.isVerified === '0')) {
       return res.status(403).json({
@@ -53,7 +62,7 @@ export const loginUser = async (req, res) => {
     res.json({
       message: "Login successful",
       token,
-      user: { id: user.id, name: user.name, email: user.email, role: user.role },
+      user: serializeUser(user),
     });
   } catch (error) {
     console.error("Login error:", error);
@@ -166,6 +175,7 @@ export const completeGoogleAuth = async (req, res) => {
       const randomPassword = await bcrypt.hash(crypto.randomBytes(32).toString("hex"), 10);
       const user = await User.create({
         name: profile.name || pending?.name || email.split("@")[0],
+        ...newGoogleProfile(profile),
         email,
         password: randomPassword,
         authProvider: 'google',
@@ -183,7 +193,7 @@ export const completeGoogleAuth = async (req, res) => {
     const user = result.user;
     const authResult = {
       token: jwt.sign({ id: user.id, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: "7d" }),
-      user: { id: user.id, name: user.name, email: user.email, role: user.role },
+      user: serializeUser(user),
     };
 
     await new Promise((resolve, reject) => {
@@ -357,13 +367,9 @@ export const logoutUser = (req, res) => {
 
 // GET /api/auth/me — validate the saved access token and return the current user
 export const getCurrentUser = (req, res) => {
+  if (req.session) req.session.userId = req.user.id;
   res.json({
-    user: {
-      id: req.user.id,
-      name: req.user.name,
-      email: req.user.email,
-      role: req.user.role,
-    },
+    user: serializeUser(req.user),
   });
 };
 
@@ -373,19 +379,11 @@ export const updateProfile = async (req, res) => {
     const userId = req.user?.id;
     if (!userId) return res.status(401).json({ error: "Unauthorized" });
 
-    const { name, currentPassword, newPassword } = req.body;
+    const { currentPassword, newPassword } = req.body;
     const user = await User.findByPk(userId);
     if (!user) return res.status(404).json({ error: "User not found" });
 
-    const updates = {};
-
-    // Update display name
-    if (name !== undefined) {
-      const trimmed = (name || "").trim();
-      if (!trimmed) return res.status(400).json({ error: "Name cannot be empty" });
-      if (trimmed.length > 100) return res.status(400).json({ error: "Name is too long" });
-      updates.name = trimmed;
-    }
+    const updates = profileUpdates(req.body, user);
 
     // Change password
     if (newPassword !== undefined) {
@@ -404,10 +402,10 @@ export const updateProfile = async (req, res) => {
 
     res.json({
       message: "Profile updated successfully",
-      user: { id: user.id, name: user.name, email: user.email, role: user.role },
+      user: serializeUser(user),
     });
   } catch (error) {
-    console.error("updateProfile error:", error);
-    res.status(500).json({ error: "Failed to update profile" });
+    if (!error.status) console.error("updateProfile error:", error);
+    res.status(error.status || 500).json({ error: error.status ? error.message : "Failed to update profile" });
   }
 };

@@ -123,7 +123,7 @@ export function AdminUsers({ users: initialUsers = [] }) {
     total: users.length,
     teachers: users.filter(u => u.role === 'teacher').length,
     students: users.filter(u => u.role === 'student' || u.role === 'user').length,
-    staff: users.filter(u => u.role === 'admin' || u.role === 'registrar').length,
+    admins: users.filter(u => u.role === 'admin').length,
   };
 
   return (
@@ -143,8 +143,8 @@ export function AdminUsers({ users: initialUsers = [] }) {
           <p className="text-xs opacity-80 mt-0.5">Students</p>
         </div>
         <div className="bg-purple-600 text-white rounded-xl p-4 shadow-xs">
-          <p className="text-2xl font-bold">{counts.staff}</p>
-          <p className="text-xs opacity-80 mt-0.5">Staff & Administrators</p>
+          <p className="text-2xl font-bold">{counts.admins}</p>
+          <p className="text-xs opacity-80 mt-0.5">Administrators</p>
         </div>
       </div>
 
@@ -196,7 +196,7 @@ export function AdminUsers({ users: initialUsers = [] }) {
           >
             <option value="all">All Statuses</option>
             <option value="active">Active</option>
-            <option value="inactive">Inactive</option>
+            <option value="inactive">Suspended</option>
           </select>
 
           {/* Clear Filters */}
@@ -292,7 +292,7 @@ export function AdminUsers({ users: initialUsers = [] }) {
                             u.isActive !== false ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-red-50 text-red-700 border border-red-200'
                           }`}>
                             <span className={`w-1.5 h-1.5 rounded-full ${u.isActive !== false ? 'bg-emerald-500' : 'bg-red-500'}`} />
-                            {u.isActive !== false ? 'Active' : 'Inactive'}
+                            {u.isActive !== false ? 'Active' : 'Suspended'}
                           </span>
                         </td>
 
@@ -473,8 +473,7 @@ function EditUserModal({ user, onClose, onUpdated }) {
     name: user.name || '',
     email: user.email || '',
     role: user.role || 'student',
-    department: user.department || '',
-    isActive: user.isActive !== false
+    department: user.department || ''
   });
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
@@ -522,7 +521,7 @@ function EditUserModal({ user, onClose, onUpdated }) {
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
           <div>
             <h3 className="text-lg font-semibold text-[#001840]">Edit User Details</h3>
-            <p className="text-xs text-gray-500 mt-0.5">Modify personal info, role, or status</p>
+            <p className="text-xs text-gray-500 mt-0.5">Modify personal info and account role</p>
           </div>
           <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors">
             <X className="w-4 h-4 text-gray-500" />
@@ -607,29 +606,6 @@ function EditUserModal({ user, onClose, onUpdated }) {
               />
             </div>
           )}
-
-          {/* Account Status Switch */}
-          <div className="flex items-center justify-between p-3 rounded-xl bg-gray-50 border border-gray-100">
-            <div>
-              <p className="text-xs font-semibold text-gray-800">Account Access</p>
-              <p className="text-xs text-gray-500">
-                {form.isActive ? 'Active — allowed to sign in' : 'Suspended — access blocked'}
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => set('isActive', !form.isActive)}
-              className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                form.isActive ? 'bg-emerald-500' : 'bg-gray-300'
-              }`}
-            >
-              <span
-                className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
-                  form.isActive ? 'translate-x-5' : 'translate-x-0'
-                }`}
-              />
-            </button>
-          </div>
 
           <div className="flex gap-2 pt-2">
             <button

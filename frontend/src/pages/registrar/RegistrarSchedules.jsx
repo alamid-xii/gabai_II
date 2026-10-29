@@ -4,22 +4,25 @@ import { toast } from "sonner";
 import {
   Calendar, Clock, RefreshCw, Trash2, CheckCircle2,
   AlertCircle, BookOpen, UserCheck, Layers, MapPin,
-  Filter, Download, ChevronDown, AlertTriangle, ShieldCheck, Info
+  Filter, Download, ChevronDown, AlertTriangle, ShieldCheck, Info,
+  Coffee, Utensils
 } from "lucide-react";
 import { API, tok } from "./RegistrarShared";
 
-// 30-minute intervals from 7:30 AM to 5:30 PM (21 slot marks, 20 intervals)
+// 15-minute intervals from 7:30 AM to 5:30 PM (41 slot marks, 40 intervals)
 const TIME_SLOTS = [
-  "7:30 AM", "8:00 AM", "8:30 AM", "9:00 AM", "9:30 AM",
-  "10:00 AM", "10:30 AM", "11:00 AM", "11:30 AM", "12:00 PM",
-  "12:30 PM", "1:00 PM", "1:30 PM", "2:00 PM", "2:30 PM",
-  "3:00 PM", "3:30 PM", "4:00 PM", "4:30 PM", "5:00 PM",
-  "5:30 PM"
+  "7:30 AM", "7:45 AM", "8:00 AM", "8:15 AM", "8:30 AM", "8:45 AM",
+  "9:00 AM", "9:15 AM", "9:30 AM", "9:45 AM", "10:00 AM", "10:15 AM",
+  "10:30 AM", "10:45 AM", "11:00 AM", "11:15 AM", "11:30 AM", "11:45 AM",
+  "12:00 PM", "12:15 PM", "12:30 PM", "12:45 PM", "1:00 PM", "1:15 PM",
+  "1:30 PM", "1:45 PM", "2:00 PM", "2:15 PM", "2:30 PM", "2:45 PM",
+  "3:00 PM", "3:15 PM", "3:30 PM", "3:45 PM", "4:00 PM", "4:15 PM",
+  "4:30 PM", "4:45 PM", "5:00 PM", "5:15 PM", "5:30 PM"
 ];
 
-// Start times: up to 5:00 PM
+// Start times: up to 5:15 PM
 const START_TIME_OPTIONS = TIME_SLOTS.slice(0, -1);
-// End times: from 8:00 AM
+// End times: from 7:45 AM to 5:30 PM
 const END_TIME_OPTIONS = TIME_SLOTS.slice(1);
 
 const DAYS_OF_WEEK = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
@@ -56,6 +59,8 @@ export function SchedulesTab() {
   const [saving, setSaving] = useState(false);
 
   // Form states (matching image with user customizations)
+  const [scheduleType, setScheduleType] = useState("academic"); // 'academic' | 'health_break' | 'lunch_break'
+  const [applyAllWeekdays, setApplyAllWeekdays] = useState(false);
   const [selectedSubjectId, setSelectedSubjectId] = useState("");
   const [selectedSectionId, setSelectedSectionId] = useState("");
   const [selectedTeacherId, setSelectedTeacherId] = useState("");
@@ -63,6 +68,25 @@ export function SchedulesTab() {
   const [startTime, setStartTime] = useState("7:30 AM");
   const [endTime, setEndTime] = useState("9:00 AM");
   const [room, setRoom] = useState("");
+
+  const handleTypeChange = (type) => {
+    setScheduleType(type);
+    if (type === "health_break") {
+      setSelectedSubjectId("HEALTH_BREAK");
+      setSelectedTeacherId("");
+      setStartTime("9:30 AM");
+      setEndTime("10:00 AM");
+    } else if (type === "lunch_break") {
+      setSelectedSubjectId("LUNCH_BREAK");
+      setSelectedTeacherId("");
+      setStartTime("12:00 PM");
+      setEndTime("1:00 PM");
+    } else {
+      setSelectedSubjectId("");
+      setStartTime("7:30 AM");
+      setEndTime("9:00 AM");
+    }
+  };
 
   // Grid filter states (defaults to Grade 7's first section)
   const [sectionFilter, setSectionFilter] = useState("");
@@ -182,14 +206,21 @@ export function SchedulesTab() {
       ) || sections[0];
       if (firstG7) {
         setSectionFilter(String(firstG7.id));
+        if (!selectedSectionId) {
+          setSelectedSectionId(String(firstG7.id));
+        }
       }
     }
-  }, [sections, sectionFilter]);
+  }, [sections, sectionFilter, selectedSectionId]);
 
-  // When a section is selected, auto-fill room if the section has one
+  // When a section is selected, auto-fill room and sync the weekly timetable on the left
   const handleSectionSelect = (secId) => {
     setSelectedSectionId(secId);
     if (!secId) return;
+
+    // Immediately reflect on the weekly timetable
+    setSectionFilter(String(secId));
+
     const matchedSec = sections.find(s => String(s.id) === String(secId));
     if (matchedSec) {
       if (matchedSec.room && !room) {
@@ -199,16 +230,49 @@ export function SchedulesTab() {
         setSelectedTeacherId(String(matchedSec.teacherId));
       }
     }
+    // Clear subject selection when section changes so user chooses appropriate subject
+    setSelectedSubjectId("");
   };
 
-  // Convert time string (e.g. "7:30 AM") to slot index
+  // Filter curriculum subjects matching the selected section's grade level and program
+  const filteredSubjects = useMemo(() => {
+    if (!selectedSectionId) return subjects;
+    const matchedSec = sections.find(s => String(s.id) === String(selectedSectionId));
+    if (!matchedSec) return subjects;
+
+    const matching = subjects.filter(sub => {
+      if (sub.programCode && matchedSec.course && sub.programCode !== matchedSec.course) return false;
+      if (sub.gradeLevel && matchedSec.yearLevel && Number(sub.gradeLevel) !== Number(matchedSec.yearLevel)) return false;
+      if (matchedSec.course === 'SHS' && matchedSec.strand && sub.strand && sub.strand !== matchedSec.strand) return false;
+      return true;
+    });
+
+    return matching.length > 0 ? matching : subjects;
+  }, [subjects, selectedSectionId, sections]);
+
+  // Convert time string (e.g. "7:30 AM" or "9:45 AM") to slot index (15-min slots)
   const timeToIndex = (tStr) => {
-    return TIME_SLOTS.indexOf(tStr);
+    if (!tStr) return -1;
+    const directIdx = TIME_SLOTS.indexOf(tStr);
+    if (directIdx !== -1) return directIdx;
+    const min = parseTimeToMinutes(tStr);
+    if (min === null) return -1;
+    const startMin = 7 * 60 + 30; // 7:30 AM = 450 min
+    const slotIdx = Math.round((min - startMin) / 15);
+    return slotIdx >= 0 && slotIdx < TIME_SLOTS.length ? slotIdx : -1;
   };
 
   // ── Existing schedule conflict detection for all loaded schedules ───────────
   const conflictedScheduleIds = useMemo(() => {
     const ids = new Set();
+    const isBreakSched = (item) =>
+      item.subjectCode === 'BREAK' ||
+      item.subjectCode === 'HEALTH-BREAK' ||
+      item.subjectCode === 'LUNCH-BREAK' ||
+      item.teacherName === 'No Teacher' ||
+      item.teacherName === '—' ||
+      (item.subjectName && (item.subjectName.toLowerCase().includes('break') || item.subjectName.toLowerCase().includes('recess')));
+
     for (let i = 0; i < schedules.length; i++) {
       for (let j = i + 1; j < schedules.length; j++) {
         const a = schedules[i];
@@ -224,11 +288,14 @@ export function SchedulesTab() {
         const hasOverlap = Math.max(aStart, bStart) < Math.min(aEnd, bEnd);
         if (!hasOverlap) continue;
 
-        // Teacher overlap conflict
-        const sameTeacher = (a.teacherId && b.teacherId && String(a.teacherId) === String(b.teacherId)) ||
-          (a.teacherName && b.teacherName && a.teacherName.trim().toLowerCase() === b.teacherName.trim().toLowerCase());
+        // Teacher overlap conflict (only applies if neither is a break)
+        const neitherIsBreak = !isBreakSched(a) && !isBreakSched(b);
+        const sameTeacher = neitherIsBreak && (
+          (a.teacherId && b.teacherId && String(a.teacherId) === String(b.teacherId)) ||
+          (a.teacherName && b.teacherName && a.teacherName.trim().toLowerCase() === b.teacherName.trim().toLowerCase())
+        );
 
-        // Section overlap conflict
+        // Section overlap conflict (two activities for the same section at the same time)
         const sameSection = (a.sectionId && b.sectionId && String(a.sectionId) === String(b.sectionId)) ||
           (a.sectionName && b.sectionName && a.sectionName.trim().toLowerCase() === b.sectionName.trim().toLowerCase());
 
@@ -260,13 +327,16 @@ export function SchedulesTab() {
 
   // ── Real-time Active Conflict Detection for the Current Form Input ───────────
   const activeConflict = useMemo(() => {
-    if (!selectedDay || !startTime || !endTime) return null;
+    if ((!selectedDay && !applyAllWeekdays) || !startTime || !endTime) return null;
 
     const newStart = parseTimeToMinutes(startTime);
     const newEnd = parseTimeToMinutes(endTime);
     if (newStart === null || newEnd === null || newStart >= newEnd) return null;
 
-    const matchedTeacher = teachers.find(t => String(t.id) === String(selectedTeacherId));
+    const isBreak = scheduleType !== 'academic';
+    const targetDays = applyAllWeekdays ? DAYS_OF_WEEK : [selectedDay];
+
+    const matchedTeacher = !isBreak ? teachers.find(t => String(t.id) === String(selectedTeacherId)) : null;
     const matchedSec = sections.find(s => String(s.id) === String(selectedSectionId));
 
     const targetTeacherName = matchedTeacher?.name?.trim()?.toLowerCase();
@@ -275,77 +345,83 @@ export function SchedulesTab() {
       : null;
     const targetRoom = room ? room.trim().toLowerCase() : null;
 
-    for (const s of schedules) {
-      if (s.dayOfWeek !== selectedDay) continue;
+    for (const day of targetDays) {
+      for (const s of schedules) {
+        if (s.dayOfWeek !== day) continue;
 
-      const existStart = parseTimeToMinutes(s.startTime);
-      const existEnd = parseTimeToMinutes(s.endTime);
-      if (existStart === null || existEnd === null) continue;
+        const existStart = parseTimeToMinutes(s.startTime);
+        const existEnd = parseTimeToMinutes(s.endTime);
+        if (existStart === null || existEnd === null) continue;
 
-      // Check overlap: max(newStart, existStart) < min(newEnd, existEnd)
-      const hasOverlap = Math.max(newStart, existStart) < Math.min(newEnd, existEnd);
-      if (!hasOverlap) continue;
+        // Check overlap: max(newStart, existStart) < min(newEnd, existEnd)
+        const hasOverlap = Math.max(newStart, existStart) < Math.min(newEnd, existEnd);
+        if (!hasOverlap) continue;
 
-      // 1. Teacher Conflict: Every teacher is assigned to at most one class or activity at any given time
-      if (matchedTeacher) {
-        const isSameTeacherId = s.teacherId && String(s.teacherId) === String(selectedTeacherId);
-        const isSameTeacherName = s.teacherName && s.teacherName.trim().toLowerCase() === targetTeacherName;
-        if (isSameTeacherId || isSameTeacherName) {
+        // 1. Teacher Conflict (only for classes with teachers)
+        if (!isBreak && matchedTeacher && s.teacherName && s.teacherName !== 'No Teacher' && s.teacherName !== '—') {
+          const isSameTeacherId = s.teacherId && String(s.teacherId) === String(selectedTeacherId);
+          const isSameTeacherName = s.teacherName && s.teacherName.trim().toLowerCase() === targetTeacherName;
+          if (isSameTeacherId || isSameTeacherName) {
+            return {
+              type: "teacher",
+              title: "Teacher Time Slot Conflict",
+              description: `${s.teacherName} is already assigned to teach ${s.subjectName} (${s.sectionName}) on ${day} from ${s.startTime} to ${s.endTime}.`,
+              conflictSchedule: s
+            };
+          }
+        }
+
+        // 2. Section Conflict: Section cannot have two classes or breaks at the same time
+        if (matchedSec) {
+          const isSameSecId = s.sectionId && String(s.sectionId) === String(selectedSectionId);
+          const isSameSecName = targetSectionName && s.sectionName && s.sectionName.trim().toLowerCase().includes(matchedSec.code.toLowerCase());
+          if (isSameSecId || isSameSecName) {
+            const teacherNote = s.teacherName && s.teacherName !== 'No Teacher' && s.teacherName !== '—' ? ` with ${s.teacherName}` : '';
+            return {
+              type: "section",
+              title: "Grade & Section Conflict",
+              description: `${s.sectionName} is already scheduled for ${s.subjectName}${teacherNote} on ${day} from ${s.startTime} to ${s.endTime}.`,
+              conflictSchedule: s
+            };
+          }
+        }
+
+        // 3. Room Conflict: Room cannot be occupied by multiple activities simultaneously
+        if (targetRoom && s.room && s.room.trim().toLowerCase() === targetRoom) {
           return {
-            type: "teacher",
-            title: "Teacher Time Slot Conflict",
-            description: `${s.teacherName} is already assigned to teach ${s.subjectName} (${s.sectionName}) on ${selectedDay} from ${s.startTime} to ${s.endTime}.`,
+            type: "room",
+            title: "Room Booking Conflict",
+            description: `Room "${s.room}" is already reserved for ${s.sectionName} (${s.subjectName}) on ${day} from ${s.startTime} to ${s.endTime}.`,
             conflictSchedule: s
           };
         }
-      }
-
-      // 2. Section Conflict: No class section can have two subjects at the same time
-      if (matchedSec) {
-        const isSameSecId = s.sectionId && String(s.sectionId) === String(selectedSectionId);
-        const isSameSecName = targetSectionName && s.sectionName && s.sectionName.trim().toLowerCase().includes(matchedSec.code.toLowerCase());
-        if (isSameSecId || isSameSecName) {
-          return {
-            type: "section",
-            title: "Grade & Section Conflict",
-            description: `${s.sectionName} is already scheduled for ${s.subjectName} with ${s.teacherName} on ${selectedDay} from ${s.startTime} to ${s.endTime}.`,
-            conflictSchedule: s
-          };
-        }
-      }
-
-      // 3. Room Conflict: Room cannot be occupied by multiple classes simultaneously
-      if (targetRoom && s.room && s.room.trim().toLowerCase() === targetRoom) {
-        return {
-          type: "room",
-          title: "Room Booking Conflict",
-          description: `Room "${s.room}" is already reserved for ${s.sectionName} (${s.subjectName}) on ${selectedDay} from ${s.startTime} to ${s.endTime}.`,
-          conflictSchedule: s
-        };
       }
     }
 
     return null;
-  }, [selectedDay, startTime, endTime, selectedTeacherId, selectedSectionId, room, schedules, teachers, sections]);
+  }, [selectedDay, applyAllWeekdays, startTime, endTime, selectedTeacherId, selectedSectionId, room, schedules, teachers, sections, scheduleType]);
 
   // Handle schedule creation
   const handleScheduleSubmit = async (e) => {
     e.preventDefault();
 
-    if (!selectedSubjectId) {
-      toast.error("Please select a subject");
-      return;
-    }
     if (!selectedSectionId) {
       toast.error("Please select a grade and section");
       return;
     }
-    if (!selectedTeacherId) {
+
+    const isBreak = scheduleType !== 'academic';
+
+    if (!isBreak && !selectedSubjectId) {
+      toast.error("Please select a subject");
+      return;
+    }
+    if (!isBreak && !selectedTeacherId) {
       toast.error("Please select a teacher");
       return;
     }
-    if (!selectedDay) {
-      toast.error("Please select a day of the week");
+    if (!applyAllWeekdays && !selectedDay) {
+      toast.error("Please select a day of the week or check 'All Weekdays'");
       return;
     }
 
@@ -363,33 +439,37 @@ export function SchedulesTab() {
       return;
     }
 
-    const matchedSubj = subjects.find(s => String(s.id) === String(selectedSubjectId));
+    const matchedSubj = !isBreak ? subjects.find(s => String(s.id) === String(selectedSubjectId)) : null;
     const matchedSec = sections.find(s => String(s.id) === String(selectedSectionId));
-    const matchedTeacher = teachers.find(t => String(t.id) === String(selectedTeacherId));
+    const matchedTeacher = !isBreak ? teachers.find(t => String(t.id) === String(selectedTeacherId)) : null;
 
-    const subjName = matchedSubj ? (matchedSubj.description || matchedSubj.code) : "Subject";
+    const subjName = isBreak
+      ? (scheduleType === 'health_break' ? 'Health Break' : 'Lunch Break')
+      : (matchedSubj ? (matchedSubj.description || matchedSubj.code) : "Subject");
     const secName = matchedSec
       ? `Grade ${matchedSec.yearLevel} - ${matchedSec.code}`
       : "Section";
-    const teacherName = matchedTeacher ? matchedTeacher.name : "Teacher";
+    const teacherName = isBreak ? "No Teacher" : (matchedTeacher ? matchedTeacher.name : "Teacher");
 
     setSaving(true);
     try {
       const payload = {
-        subjectId: matchedSubj?.id,
-        subjectCode: matchedSubj?.code,
+        subjectId: matchedSubj?.id || null,
+        subjectCode: isBreak ? (scheduleType === 'health_break' ? 'HEALTH-BREAK' : 'LUNCH-BREAK') : (matchedSubj?.code || null),
         subjectName: subjName,
         sectionId: matchedSec?.id,
         sectionName: secName,
         gradeLevel: matchedSec ? `Grade ${matchedSec.yearLevel}` : null,
-        teacherId: matchedTeacher?.id,
+        teacherId: matchedTeacher?.id || null,
         teacherName: teacherName,
-        dayOfWeek: selectedDay,
+        dayOfWeek: applyAllWeekdays ? 'All Weekdays' : selectedDay,
+        days: applyAllWeekdays ? DAYS_OF_WEEK : [selectedDay],
         startTime,
         endTime,
         room: room || matchedSec?.room || null,
         schoolYear: matchedSec?.schoolYear || null,
         semester: matchedSec?.semester || null,
+        isBreak: isBreak,
       };
 
       const res = await fetch(`${API}/academic/schedules`, {
@@ -399,23 +479,26 @@ export function SchedulesTab() {
       });
 
       const resData = await res.json();
-      if (!res.ok) throw new Error(resData.error || "Failed to schedule class");
+      if (!res.ok) throw new Error(resData.error || "Failed to schedule");
 
-      toast.success(`Scheduled ${subjName} for ${secName} on ${selectedDay}!`);
+      toast.success(resData.message || `Scheduled ${subjName} for ${secName}!`);
+      
       // Add to local state immediately
-      if (resData.schedule) {
+      if (Array.isArray(resData.schedules)) {
+        setSchedules(prev => [...prev, ...resData.schedules]);
+      } else if (resData.schedule) {
         setSchedules(prev => [...prev, resData.schedule]);
       } else {
         loadAllData();
       }
 
-      // Clear all input fields
-      setSelectedSubjectId("");
-      setSelectedSectionId("");
-      setSelectedTeacherId("");
+      // Clear input fields
+      if (!isBreak) {
+        setSelectedSubjectId("");
+        setSelectedTeacherId("");
+      }
       setSelectedDay("");
-      setStartTime("7:30 AM");
-      setEndTime("9:00 AM");
+      setApplyAllWeekdays(false);
       setRoom("");
     } catch (err) {
       toast.error(err.message || "Failed to save schedule");
@@ -462,17 +545,7 @@ export function SchedulesTab() {
       {headerContainer &&
         createPortal(
           <div className="flex items-center gap-2 flex-wrap">
-            {conflictedScheduleIds.size === 0 ? (
-              <span className="text-xs bg-emerald-50 text-emerald-700 font-semibold px-2.5 py-1 rounded-full border border-emerald-200 flex items-center gap-1.5 shadow-2xs">
-                <ShieldCheck size={13} className="text-emerald-600" />
-                100% Conflict-Free
-              </span>
-            ) : (
-              <span className="text-xs bg-amber-50 text-amber-700 font-semibold px-2.5 py-1 rounded-full border border-amber-200 flex items-center gap-1.5 animate-pulse shadow-2xs">
-                <AlertTriangle size={13} className="text-amber-600" />
-                {conflictedScheduleIds.size} Overlap Conflict(s)
-              </span>
-            )}
+
             <span className="text-xs bg-[#EEF2FF] text-[#102A71] font-semibold px-2.5 py-1 rounded-full border border-[#102A71]/15">
               {schedules.length} Scheduled Classes
             </span>
@@ -493,32 +566,12 @@ export function SchedulesTab() {
           headerContainer
         )}
 
-      {/* Main Two-Column Layout (Form on Left, Grid on Right) */}
+      {/* Main Two-Column Layout (Form on Left, Timetable on Right) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        {/* ── LEFT PANEL: Scheduling Form (matching user reference) ─────── */}
+        {/* ── LEFT PANEL: Scheduling Form (lg:col-span-4) ─────── */}
         <div className="lg:col-span-4 bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-5 sticky top-20">
           <form onSubmit={handleScheduleSubmit} className="space-y-4">
-            {/* 1. Subject (instead of subject code) */}
-            <div>
-              <label className="block text-sm font-semibold text-gray-800 mb-1.5">
-                Subject
-              </label>
-              <select
-                value={selectedSubjectId}
-                onChange={(e) => setSelectedSubjectId(e.target.value)}
-                required
-                className="w-full border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#001840]/20 focus:border-[#001840] bg-white font-medium text-gray-800 shadow-xs"
-              >
-                <option value="">Select Subject</option>
-                {subjects.map((sub) => (
-                  <option key={sub.id} value={sub.id}>
-                    {sub.description || sub.code} {sub.code ? `(${sub.code})` : ""}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* 2. Grade and Section (instead of year & section) */}
+            {/* 1. Grade and Section (above Subject) */}
             <div>
               <label className="block text-sm font-semibold text-gray-800 mb-1.5">
                 Grade and Section
@@ -538,76 +591,196 @@ export function SchedulesTab() {
               </select>
             </div>
 
-            {/* 3. Teacher (instead of professor) */}
+            {/* Schedule Category Selector */}
             <div>
-              <label className="block text-sm font-semibold text-gray-800 mb-1.5">
-                Teacher
+              <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2">
+                Schedule Type
               </label>
-              <select
-                value={selectedTeacherId}
-                onChange={(e) => setSelectedTeacherId(e.target.value)}
-                required
-                className="w-full border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#001840]/20 focus:border-[#001840] bg-white font-medium text-gray-800 shadow-xs"
-              >
-                <option value="">Select Teacher</option>
-                {teachers.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name}
-                  </option>
-                ))}
-              </select>
+              <div className="grid grid-cols-3 gap-1.5 p-1 bg-gray-100 rounded-xl border border-gray-200/80">
+                <button
+                  type="button"
+                  onClick={() => handleTypeChange("academic")}
+                  className={`py-2 px-1.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                    scheduleType === "academic"
+                      ? "bg-white text-[#001840] shadow-xs border border-gray-200/60"
+                      : "text-gray-600 hover:text-gray-900"
+                  }`}
+                >
+                  <BookOpen size={13} />
+                  <span>Subject</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleTypeChange("health_break")}
+                  className={`py-2 px-1.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                    scheduleType === "health_break"
+                      ? "bg-amber-100 text-amber-900 shadow-xs border border-amber-300"
+                      : "text-gray-600 hover:text-gray-900"
+                  }`}
+                >
+                  <Coffee size={13} className="text-amber-700" />
+                  <span>Health Break</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleTypeChange("lunch_break")}
+                  className={`py-2 px-1.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                    scheduleType === "lunch_break"
+                      ? "bg-orange-100 text-orange-950 shadow-xs border border-orange-300"
+                      : "text-gray-600 hover:text-gray-900"
+                  }`}
+                >
+                  <Utensils size={13} className="text-orange-700" />
+                  <span>Lunch Break</span>
+                </button>
+              </div>
+            </div>
 
-              {/* Teacher Daily Commitment & Load Insight */}
-              {selectedTeacherId && (
-                <div className="mt-2 p-2.5 rounded-xl bg-gray-50 border border-gray-100 text-xs space-y-1">
-                  <div className="flex items-center justify-between text-gray-700 font-semibold">
-                    <span className="flex items-center gap-1 text-[11px] text-gray-700">
-                      <Clock size={12} className="text-[#001840]" />
-                      <span>{selectedDay} Schedule:</span>
-                    </span>
-                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-white border border-gray-200 text-gray-600 font-medium">
-                      {teacherDaySchedules.length} class{teacherDaySchedules.length !== 1 ? 'es' : ''}
-                    </span>
-                  </div>
-                  {teacherDaySchedules.length === 0 ? (
-                    <p className="text-[11px] text-emerald-600 font-medium flex items-center gap-1">
-                      <CheckCircle2 size={12} /> Completely open on {selectedDay}
-                    </p>
-                  ) : (
-                    <div className="space-y-1 pt-0.5 max-h-24 overflow-y-auto">
-                      {teacherDaySchedules.map((s) => (
-                        <div key={s.id} className="text-[11px] flex items-center justify-between bg-white px-2 py-1 rounded-md border border-gray-100 text-gray-700">
-                          <span className="font-semibold text-gray-900">{s.startTime}–{s.endTime}</span>
-                          <span className="text-gray-500 truncate max-w-[140px] text-[10px]">{s.subjectName}</span>
+            {/* Academic Mode: Subject & Teacher Selection */}
+            {scheduleType === "academic" ? (
+              <>
+                {/* 2. Subject (filtered for selected section) */}
+                <div>
+                  <label className="block text-sm font-semibold text-gray-800 mb-1.5">
+                    Subject
+                  </label>
+                  <select
+                    value={selectedSubjectId}
+                    onChange={(e) => setSelectedSubjectId(e.target.value)}
+                    required
+                    className="w-full border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#001840]/20 focus:border-[#001840] bg-white font-medium text-gray-800 shadow-xs"
+                  >
+                    <option value="">Select Subject</option>
+                    {filteredSubjects.map((sub) => (
+                      <option key={sub.id} value={sub.id}>
+                        {sub.description || sub.code} {sub.code ? `(${sub.code})` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* 3. Teacher */}
+                <div>
+                  <label className="block text-sm font-semibold text-gray-800 mb-1.5">
+                    Teacher
+                  </label>
+                  <select
+                    value={selectedTeacherId}
+                    onChange={(e) => setSelectedTeacherId(e.target.value)}
+                    required
+                    className="w-full border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#001840]/20 focus:border-[#001840] bg-white font-medium text-gray-800 shadow-xs"
+                  >
+                    <option value="">Select Teacher</option>
+                    {teachers.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name}
+                      </option>
+                    ))}
+                  </select>
+
+                  {/* Teacher Daily Commitment & Load Insight */}
+                  {selectedTeacherId && (
+                    <div className="mt-2 p-2.5 rounded-xl bg-gray-50 border border-gray-100 text-xs space-y-1">
+                      <div className="flex items-center justify-between text-gray-700 font-semibold">
+                        <span className="flex items-center gap-1 text-[11px] text-gray-700">
+                          <Clock size={12} className="text-[#001840]" />
+                          <span>{selectedDay || "Selected Day"} Schedule:</span>
+                        </span>
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-white border border-gray-200 text-gray-600 font-medium">
+                          {teacherDaySchedules.length} class{teacherDaySchedules.length !== 1 ? 'es' : ''}
+                        </span>
+                      </div>
+                      {teacherDaySchedules.length === 0 ? (
+                        <p className="text-[11px] text-emerald-600 font-medium flex items-center gap-1">
+                          <CheckCircle2 size={12} /> Completely open on {selectedDay || "this day"}
+                        </p>
+                      ) : (
+                        <div className="space-y-1 pt-0.5 max-h-24 overflow-y-auto">
+                          {teacherDaySchedules.map((s) => (
+                            <div key={s.id} className="text-[11px] flex items-center justify-between bg-white px-2 py-1 rounded-md border border-gray-100 text-gray-700">
+                              <span className="font-semibold text-gray-900">{s.startTime}–{s.endTime}</span>
+                              <span className="text-gray-500 truncate max-w-[140px] text-[10px]">{s.subjectName}</span>
+                            </div>
+                          ))}
                         </div>
-                      ))}
+                      )}
                     </div>
                   )}
+                </div>
+              </>
+            ) : (
+              /* Break Mode: Info banner showing no teacher needed */
+              <div className={`p-3.5 rounded-xl border space-y-2 ${
+                scheduleType === "lunch_break"
+                  ? "bg-orange-50/70 border-orange-200"
+                  : "bg-amber-50/70 border-amber-200"
+              }`}>
+                <div className="flex items-center gap-2.5">
+                  {scheduleType === "lunch_break" ? (
+                    <div className="w-8 h-8 rounded-lg bg-orange-100 text-orange-700 flex items-center justify-center font-bold shrink-0">
+                      <Utensils size={16} />
+                    </div>
+                  ) : (
+                    <div className="w-8 h-8 rounded-lg bg-amber-100 text-amber-800 flex items-center justify-center font-bold shrink-0">
+                      <Coffee size={16} />
+                    </div>
+                  )}
+                  <div>
+                    <h4 className="text-xs font-bold text-gray-900">
+                      {scheduleType === "lunch_break" ? "Lunch Break (Midday Meal)" : "Health Break (Recess / Wellness)"}
+                    </h4>
+                    <p className="text-[11px] text-gray-600">
+                      No teacher required • Reserved break period for students
+                    </p>
+                  </div>
+                </div>
+                <div className="pt-1 border-t border-gray-200/50 flex items-center gap-1.5 text-[11px] text-gray-500 font-medium">
+                  <ShieldCheck size={13} className="text-emerald-600 shrink-0" />
+                  <span>No teacher conflict checks will apply to this time slot.</span>
+                </div>
+              </div>
+            )}
+
+            {/* 4. Day of Week (Monday to Friday or All Weekdays) */}
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-sm font-semibold text-gray-800">
+                  Day of Week
+                </label>
+                <label className="flex items-center gap-1.5 text-xs text-[#001840] font-semibold cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={applyAllWeekdays}
+                    onChange={(e) => setApplyAllWeekdays(e.target.checked)}
+                    className="rounded text-[#001840] focus:ring-0 cursor-pointer"
+                  />
+                  <span>All Weekdays (Mon–Fri)</span>
+                </label>
+              </div>
+
+              {!applyAllWeekdays ? (
+                <select
+                  value={selectedDay}
+                  onChange={(e) => setSelectedDay(e.target.value)}
+                  required={!applyAllWeekdays}
+                  className="w-full border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#001840]/20 focus:border-[#001840] bg-white font-medium text-gray-800 shadow-xs"
+                >
+                  <option value="">Select Day</option>
+                  {DAYS_OF_WEEK.map((day) => (
+                    <option key={day} value={day}>
+                      {day}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <div className="p-2.5 bg-blue-50/70 border border-blue-200 rounded-xl text-xs text-blue-900 font-semibold flex items-center gap-1.5">
+                  <CheckCircle2 size={14} className="text-blue-700 shrink-0" />
+                  <span>Will be scheduled for Monday through Friday</span>
                 </div>
               )}
             </div>
 
-            {/* 4. Day of Week (Monday to Friday) */}
-            <div>
-              <label className="block text-sm font-semibold text-gray-800 mb-1.5">
-                Day of Week
-              </label>
-              <select
-                value={selectedDay}
-                onChange={(e) => setSelectedDay(e.target.value)}
-                required
-                className="w-full border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#001840]/20 focus:border-[#001840] bg-white font-medium text-gray-800 shadow-xs"
-              >
-                <option value="">Select Day</option>
-                {DAYS_OF_WEEK.map((day) => (
-                  <option key={day} value={day}>
-                    {day}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* 5. Start Time & End Time (7:30 to 5:30) */}
+            {/* 5. Start Time & End Time */}
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-sm font-semibold text-gray-800 mb-1.5">
@@ -653,7 +826,7 @@ export function SchedulesTab() {
                 <MapPin size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                 <input
                   type="text"
-                  placeholder="e.g. Room 101, Science Lab 2"
+                  placeholder={scheduleType === "academic" ? "e.g. Room 101, Science Lab 2" : "e.g. Canteen, School Grounds"}
                   value={room}
                   onChange={(e) => setRoom(e.target.value)}
                   className="w-full pl-8 pr-3 py-2 text-xs border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#001840]/20 bg-white"
@@ -673,13 +846,13 @@ export function SchedulesTab() {
                 </p>
                 <div className="text-[11px] text-red-600 bg-white/70 p-2 rounded-lg border border-red-100 flex items-center gap-1.5">
                   <Info size={13} className="shrink-0" />
-                  <span>Teachers can only be assigned to at most one class at any given time.</span>
+                  <span>Please choose a different time slot or remove the overlapping schedule item.</span>
                 </div>
               </div>
-            ) : selectedTeacherId && selectedSectionId ? (
+            ) : selectedSectionId && (scheduleType !== "academic" || selectedTeacherId) ? (
               <div className="p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl text-xs flex items-center gap-2 text-emerald-800">
-                <ShieldCheck size={16} className="text-emerald-600 shrink-0" />
-                <span className="font-medium">100% Conflict-Free: Both teacher & section are clear for this time slot.</span>
+                <CheckCircle2 size={13} className="text-emerald-600 shrink-0" />
+                <span>Time slot is clear and ready to schedule.</span>
               </div>
             ) : null}
 
@@ -699,7 +872,13 @@ export function SchedulesTab() {
                 <button
                   type="submit"
                   disabled={saving}
-                  className="w-full py-3 bg-[#16a34a] hover:bg-[#15803d] text-white font-bold rounded-xl text-sm transition-all shadow-md hover:shadow-lg disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
+                  className={`w-full py-3 text-white font-bold rounded-xl text-sm transition-all shadow-md hover:shadow-lg disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer ${
+                    scheduleType === "health_break"
+                      ? "bg-[#d97706] hover:bg-[#b45309]"
+                      : scheduleType === "lunch_break"
+                        ? "bg-[#ea580c] hover:bg-[#c2410c]"
+                        : "bg-[#16a34a] hover:bg-[#15803d]"
+                  }`}
                 >
                   {saving ? (
                     <>
@@ -708,8 +887,22 @@ export function SchedulesTab() {
                     </>
                   ) : (
                     <>
-                      <CheckCircle2 size={16} />
-                      Schedule Class
+                      {scheduleType === "health_break" ? (
+                        <>
+                          <Coffee size={16} />
+                          Schedule Health Break
+                        </>
+                      ) : scheduleType === "lunch_break" ? (
+                        <>
+                          <Utensils size={16} />
+                          Schedule Lunch Break
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle2 size={16} />
+                          Schedule Class
+                        </>
+                      )}
                     </>
                   )}
                 </button>
@@ -718,7 +911,7 @@ export function SchedulesTab() {
           </form>
         </div>
 
-        {/* ── RIGHT PANEL: Timetable Grid (matching user reference) ───── */}
+        {/* ── RIGHT PANEL: Timetable Grid (lg:col-span-8) ───── */}
         <div className="lg:col-span-8 bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden flex flex-col">
           {/* Top Filter & Toolbar for the grid */}
           <div className="p-4 border-b border-gray-100 bg-gray-50/60 flex items-center justify-between gap-3 flex-wrap">
@@ -735,11 +928,10 @@ export function SchedulesTab() {
                 <button
                   type="button"
                   onClick={() => setConflictOnlyFilter(prev => !prev)}
-                  className={`text-xs px-2.5 py-1.5 rounded-lg border font-semibold flex items-center gap-1 transition-all cursor-pointer ${
-                    conflictOnlyFilter
-                      ? 'bg-red-500 text-white border-red-600 shadow-xs'
-                      : 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100'
-                  }`}
+                  className={`text-xs px-2.5 py-1.5 rounded-lg border font-semibold flex items-center gap-1 transition-all cursor-pointer ${conflictOnlyFilter
+                    ? 'bg-red-500 text-white border-red-600 shadow-xs'
+                    : 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100'
+                    }`}
                   title={conflictOnlyFilter ? "Click to view all scheduled classes" : "Filter grid to only show overlapping classes"}
                 >
                   <AlertTriangle size={12} />
@@ -751,7 +943,13 @@ export function SchedulesTab() {
               <div className="relative">
                 <select
                   value={sectionFilter}
-                  onChange={(e) => setSectionFilter(e.target.value)}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setSectionFilter(val);
+                    if (val && val !== "all") {
+                      handleSectionSelect(val);
+                    }
+                  }}
                   className="text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white font-medium focus:outline-none focus:ring-1 focus:ring-[#001840]"
                 >
                   <option value="all">All Sections ({sections.length})</option>
@@ -806,42 +1004,56 @@ export function SchedulesTab() {
                 ))}
               </div>
 
-              {/* Main Grid Area: 20 rows of 40px height */}
+              {/* Main Grid Area: 40 rows of 34px height for 15-min intervals */}
               <div
                 className="relative grid grid-cols-6 border-l border-r border-b border-gray-200 bg-white"
                 style={{
-                  gridTemplateRows: `repeat(${TIME_SLOTS.length - 1}, 42px)`
+                  gridTemplateRows: `repeat(${TIME_SLOTS.length - 1}, 34px)`
                 }}
               >
                 {/* Time Labels (Column 1) */}
-                {TIME_SLOTS.slice(0, -1).map((slot, rIdx) => (
-                  <div
-                    key={`time-${rIdx}`}
-                    style={{
-                      gridColumn: 1,
-                      gridRow: rIdx + 1
-                    }}
-                    className="border-b border-r border-gray-200 text-[11px] font-semibold text-gray-700 flex items-center justify-center bg-gray-50/60 select-none"
-                  >
-                    {slot}
-                  </div>
-                ))}
+                {TIME_SLOTS.slice(0, -1).map((slot, rIdx) => {
+                  const isHour = slot.endsWith(":00 AM") || slot.endsWith(":00 PM");
+                  const isHalfHour = slot.endsWith(":30 AM") || slot.endsWith(":30 PM");
+                  const isMajor = isHour || isHalfHour;
+                  return (
+                    <div
+                      key={`time-${rIdx}`}
+                      style={{
+                        gridColumn: 1,
+                        gridRow: rIdx + 1
+                      }}
+                      className={`border-r flex items-center justify-center select-none ${
+                        isMajor
+                          ? "border-b border-gray-200 bg-gray-100/90 font-bold text-gray-800 text-[11px]"
+                          : "border-b border-gray-100 bg-gray-50/50 font-medium text-gray-400 text-[9.5px]"
+                      }`}
+                    >
+                      {slot}
+                    </div>
+                  );
+                })}
 
                 {/* Empty cell backgrounds for each day column */}
                 {DAYS_OF_WEEK.map((day, dIdx) =>
-                  TIME_SLOTS.slice(0, -1).map((_, rIdx) => (
-                    <div
-                      key={`cell-${dIdx}-${rIdx}`}
-                      style={{
-                        gridColumn: dIdx + 2,
-                        gridRow: rIdx + 1
-                      }}
-                      className="border-b border-r border-gray-100/90 hover:bg-gray-50/40 transition-colors"
-                    />
-                  ))
+                  TIME_SLOTS.slice(0, -1).map((slot, rIdx) => {
+                    const isMajor = slot.endsWith(":00 AM") || slot.endsWith(":00 PM") || slot.endsWith(":30 AM") || slot.endsWith(":30 PM");
+                    return (
+                      <div
+                        key={`cell-${dIdx}-${rIdx}`}
+                        style={{
+                          gridColumn: dIdx + 2,
+                          gridRow: rIdx + 1
+                        }}
+                        className={`border-r border-gray-100/90 hover:bg-gray-50/40 transition-colors ${
+                          isMajor ? "border-b border-gray-200/90" : "border-b border-dashed border-gray-100"
+                        }`}
+                      />
+                    );
+                  })
                 )}
 
-                {/* Scheduled Class Cards (Exact Mint Green cards matching user image, with conflict alerts if overlapping) */}
+                {/* Scheduled Class Cards (Adaptive layout based on duration) */}
                 {displaySchedules.map((item) => {
                   const dayIdx = DAYS_OF_WEEK.indexOf(item.dayOfWeek);
                   if (dayIdx === -1) return null;
@@ -850,12 +1062,24 @@ export function SchedulesTab() {
                   const endIdx = timeToIndex(item.endTime);
                   if (startIdx === -1 || endIdx === -1 || startIdx >= endIdx) return null;
 
+                  const span = endIdx - startIdx;
                   // CSS Grid 1-based indexing
                   const colStart = dayIdx + 2;
                   const rowStart = startIdx + 1;
-                  const rowEnd = endIdx + 1;
+                // Determine if this schedule item is a break (health/lunch) for sizing
+                const isBreakItem = item.subjectCode === 'BREAK' ||
+                  item.subjectCode === 'HEALTH-BREAK' ||
+                  item.subjectCode === 'LUNCH-BREAK' ||
+                  item.teacherName === 'No Teacher' ||
+                  item.teacherName === '—' ||
+                  (item.subjectName && (item.subjectName.toLowerCase().includes('break') || item.subjectName.toLowerCase().includes('recess')));
+                const minSpan = isBreakItem ? Math.max(span, 2) : span;
+                const rowEnd = rowStart + minSpan;
+                const hasConflict = conflictedScheduleIds.has(item.id);
 
-                  const hasConflict = conflictedScheduleIds.has(item.id);
+
+
+                  const isLunch = item.subjectCode === 'LUNCH-BREAK' || (item.subjectName && item.subjectName.toLowerCase().includes('lunch'));
 
                   return (
                     <div
@@ -865,54 +1089,113 @@ export function SchedulesTab() {
                         gridRow: `${rowStart} / ${rowEnd}`,
                         zIndex: hasConflict ? 15 : 10
                       }}
-                      className="p-1"
+                      className="p-0.5"
                     >
                       <div
-                        className={`h-full w-full rounded-lg p-2 text-center flex flex-col justify-center items-center shadow-xs transition-all relative group overflow-hidden ${
+                        className={`h-full w-full rounded-lg text-center flex flex-col justify-center items-center shadow-xs transition-all relative group overflow-hidden ${
+                          span === 1 ? "p-1 px-2" : "p-2"
+                        } ${
                           hasConflict
                             ? 'bg-red-50 hover:bg-red-100 border-2 border-red-400 text-red-950 shadow-sm'
-                            : 'bg-[#dcfce7] hover:bg-[#bbf7d0] border border-[#86efac]'
+                            : isBreakItem
+                              ? isLunch
+                                ? 'bg-[#ffedd5] hover:bg-[#fed7aa] border border-[#f97316]/50 text-orange-950'
+                                : 'bg-[#fef3c7] hover:bg-[#fde68a] border border-[#f59e0b]/50 text-amber-950'
+                              : 'bg-[#dcfce7] hover:bg-[#bbf7d0] border border-[#86efac]'
                         }`}
                       >
-                        {/* Conflict Warning Chip if overlapping */}
-                        {hasConflict && (
+                        {/* Conflict Warning Chip if overlapping (only when span >= 2) */}
+                        {hasConflict && span >= 2 && (
                           <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 mb-0.5 rounded text-[9px] font-bold bg-red-600 text-white shadow-xs">
                             <AlertTriangle size={9} /> Conflict Overlap
                           </span>
                         )}
 
-                        {/* Subject in bold */}
-                        <p className={`font-bold text-xs leading-tight truncate w-full px-1 ${hasConflict ? 'text-red-900 font-extrabold' : 'text-gray-900'}`}>
-                          {item.subjectName}
-                        </p>
+                        {/* ── CARD CONTENT: Adaptive by Duration (span) ────────────────── */}
+                        {span === 1 ? (
+                          /* 15-Minute Slot: Single horizontal row, fully legible */
+                          <div className="w-full h-full flex items-center justify-between gap-1.5 px-1 min-w-0">
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              {isBreakItem && (
+                                isLunch ? <Utensils size={13} className="text-orange-700 shrink-0" /> : <Coffee size={13} className="text-amber-700 shrink-0" />
+                              )}
+                              {hasConflict && <AlertTriangle size={11} className="text-red-600 shrink-0" />}
+                              <span className={`font-bold text-xs truncate ${
+                                hasConflict ? 'text-red-950 font-black' : isBreakItem ? (isLunch ? 'text-orange-950 font-black' : 'text-amber-950 font-black') : 'text-gray-900'
+                              }`}>
+                                {item.subjectName}
+                              </span>
+                            </div>
+                            <span className={`text-[10px] font-bold shrink-0 ${
+                              hasConflict ? 'text-red-800' : isBreakItem ? (isLunch ? 'text-orange-900' : 'text-amber-900') : 'text-emerald-800'
+                            }`}>
+                              {item.startTime}–{item.endTime}
+                            </span>
+                          </div>
+                        ) : isBreakItem ? (
+                          /* Break Slot (30+ Minutes): Dedicated clean layout without redundant 'No Teacher' text */
+                          <div className="flex flex-col items-center justify-center gap-0.5 w-full px-1">
+                            <div className="flex items-center justify-center gap-1.5">
+                              {isLunch ? <Utensils size={14} className="text-orange-700 shrink-0" /> : <Coffee size={14} className="text-amber-700 shrink-0" />}
+                              <p className={`font-black text-xs leading-tight truncate ${isLunch ? 'text-orange-950' : 'text-amber-950'}`}>
+                                {item.subjectName}
+                              </p>
+                            </div>
+                            <p className={`text-[10.5px] font-bold leading-tight mt-0.5 ${isLunch ? 'text-orange-900' : 'text-amber-900'}`}>
+                              {item.startTime} – {item.endTime}
+                            </p>
+                            {span >= 3 && (
+                              <p className={`text-[10px] font-medium leading-tight truncate mt-0.5 ${isLunch ? 'text-orange-800' : 'text-amber-800'}`}>
+                                {item.sectionName}
+                              </p>
+                            )}
+                            {item.room && (
+                              <span className="text-[9px] px-1.5 py-0.2 rounded font-mono bg-white/70 text-gray-700 mt-0.5">
+                                {item.room}
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          /* Academic Class (30+ Minutes) */
+                          <>
+                            {/* Subject in bold */}
+                            <div className="flex items-center justify-center gap-1 w-full px-1">
+                              <p className={`font-bold text-xs leading-tight truncate ${hasConflict ? 'text-red-900 font-extrabold' : 'text-gray-900'}`}>
+                                {item.subjectName}
+                              </p>
+                            </div>
 
-                        {/* Grade and Section */}
-                        <p className={`text-[11px] font-medium leading-tight truncate w-full mt-0.5 px-1 ${hasConflict ? 'text-red-800' : 'text-gray-800'}`}>
-                          {item.sectionName}
-                        </p>
+                            {/* Grade and Section */}
+                            <p className={`text-[11px] font-medium leading-tight truncate w-full mt-0.5 px-1 ${hasConflict ? 'text-red-800' : 'text-gray-800'}`}>
+                              {item.sectionName}
+                            </p>
 
-                        {/* Teacher */}
-                        <p className={`text-[11px] leading-tight truncate w-full px-1 ${hasConflict ? 'text-red-700 font-bold' : 'text-gray-700'}`}>
-                          {item.teacherName}
-                        </p>
+                            {/* Teacher Name */}
+                            {span >= 3 && item.teacherName && (
+                              <p className={`text-[11px] leading-tight truncate w-full px-1 ${hasConflict ? 'text-red-700 font-bold' : 'text-gray-700'}`}>
+                                {item.teacherName}
+                              </p>
+                            )}
 
-                        {/* Time range */}
-                        <p className={`text-[10px] font-semibold mt-0.5 ${hasConflict ? 'text-red-700' : 'text-gray-600'}`}>
-                          {item.startTime}–{item.endTime}
-                        </p>
+                            {/* Time range */}
+                            <p className={`text-[10px] font-semibold mt-0.5 ${hasConflict ? 'text-red-700' : 'text-gray-600'}`}>
+                              {item.startTime}–{item.endTime}
+                            </p>
 
-                        {/* Room if present */}
-                        {item.room && (
-                          <span className={`text-[9px] px-1.5 py-0.2 rounded font-mono mt-0.5 ${hasConflict ? 'bg-white/80 text-red-800 border border-red-200' : 'bg-white/70 text-gray-700'}`}>
-                            {item.room}
-                          </span>
+                            {/* Room if present */}
+                            {span >= 3 && item.room && (
+                              <span className={`text-[9px] px-1.5 py-0.2 rounded font-mono mt-0.5 ${hasConflict ? 'bg-white/80 text-red-800 border border-red-200' : 'bg-white/70 text-gray-700'}`}>
+                                {item.room}
+                              </span>
+                            )}
+                          </>
                         )}
 
                         {/* Delete Button on hover */}
                         <button
                           onClick={(e) => handleDeleteSchedule(item.id, e)}
-                          className="absolute top-1 right-1 p-1 bg-red-100 text-red-600 rounded-md opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-200 cursor-pointer shadow-xs"
-                          title="Remove class to clear schedule slot"
+                          className="absolute top-1 right-1 p-1 bg-red-100 text-red-600 rounded-md opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-200 cursor-pointer shadow-xs z-20"
+                          title="Remove from schedule"
                         >
                           <Trash2 size={12} />
                         </button>

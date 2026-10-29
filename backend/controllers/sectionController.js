@@ -16,11 +16,16 @@ export const getAllSections = async (req, res) => {
       SELECT s.id, s.code, s.course, s.yearLevel, s.strand, s.semester,
              s.schoolYear, s.instructor, s.schedule, s.room,
              s.capacity, s.teacherId, s.createdAt, s.updatedAt,
-             COUNT(er.id) as currentEnrollment
+             COUNT(DISTINCT CASE
+               WHEN er.userId IS NOT NULL AND er.userId <> 0 THEN CONCAT('user:', er.userId)
+               ELSE CONCAT('record:', er.id)
+             END) as currentEnrollment
       FROM sections s
       LEFT JOIN enrollment_records er
         ON er.sectionId = s.id
-        AND er.status IN ('enrolled', 'active', 'completed')
+        AND er.academicYear = s.schoolYear
+        AND er.status IN ('enrolled', 'active')
+        AND COALESCE(er.lifeStatus, 'enrolled') NOT IN ('dropped', 'transferred_out', 'retained', 'completed')
       WHERE s.isActive = 1
       GROUP BY s.id
       ORDER BY s.code ASC

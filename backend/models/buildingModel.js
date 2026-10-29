@@ -18,5 +18,11 @@ export const Building = sequelize.define("Building", {
   coordinates: { type: DataTypes.TEXT, allowNull: true }, // JSON {x, y, lat, lng}
   imageUrl: { type: DataTypes.STRING, allowNull: true },
   floorPlan: { type: DataTypes.TEXT, allowNull: true }, // JSON for floor plan data
+  panoramaLabels: { type: DataTypes.JSON, allowNull: true, defaultValue: [] },
+  voiceoverScript: { type: DataTypes.TEXT, allowNull: true },
+  voiceoverAudioUrl: { type: DataTypes.STRING, allowNull: true },
+  voiceoverAudioScript: { type: DataTypes.TEXT, allowNull: true },
+  voiceoverSignature: { type: DataTypes.STRING(64), allowNull: true },
+  voiceoverPublished: { type: DataTypes.BOOLEAN, defaultValue: false },
   isActive: { type: DataTypes.BOOLEAN, defaultValue: true }
 });

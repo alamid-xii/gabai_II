@@ -114,9 +114,9 @@ export function AdminEnrollmentsView() {
           <p className="text-2xl font-bold">{counts.enrolled}</p>
           <p className="text-xs opacity-80 mt-0.5">Enrolled</p>
         </div>
-        <div className="bg-blue-600 text-white rounded-xl p-4 shadow-xs">
+        <div className="bg-amber-500 text-white rounded-xl p-4 shadow-xs">
           <p className="text-2xl font-bold">{counts.submitted}</p>
-          <p className="text-xs opacity-80 mt-0.5">Submitted</p>
+          <p className="text-xs opacity-80 mt-0.5">Pending</p>
         </div>
         <div className="bg-red-600 text-white rounded-xl p-4 shadow-xs">
           <p className="text-2xl font-bold">{counts.rejected}</p>
@@ -182,7 +182,7 @@ export function AdminEnrollmentsView() {
           }`}
         >
           <option value="all">All Statuses</option>
-          <option value="submitted">Submitted</option>
+          <option value="submitted">Pending</option>
           <option value="pending_exam">Pending Exam</option>
           <option value="enrolled">Enrolled</option>
           <option value="returned">Returned</option>

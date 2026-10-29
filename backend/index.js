@@ -1,3 +1,10 @@
+import { documentPublicDirectory } from "./services/documentStorage.js";
+import { protectDocumentUploads } from "./middleware/privateDocuments.js";
+import { initializeAdmission } from "./services/admissionPolicy.js";
+import { initializeSchoolProfile } from "./services/schoolProfile.js";
+import { initializeEnrollmentGuide } from "./services/enrollmentGuide.js";
+import { ensurePanoramaLabelColumn } from "./services/panoramaLabels.js";
+import { ensureVoiceoverColumns } from "./services/buildingVoiceover.js";
 /*
     MIT License
     
@@ -38,6 +45,8 @@ import { sequelize } from "./models/db.js";
 import "./models/enrollmentDocumentModel.js"; // ensure table is synced
 import "./models/gradingPeriodModel.js";       // ensure grading_periods table is synced
 import "./models/classScheduleModel.js";      // ensure class_schedules table is synced
+import "./models/systemLogModel.js";          // ensure system_logs table is synced
+import { auditLoggerMiddleware, backfillSystemLogs } from "./services/systemLogger.js";
 
 // Load environment variables
 dotenv.config();
@@ -47,6 +56,7 @@ const __dirname = dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+if (process.env.TRUST_PROXY) app.set("trust proxy", Number(process.env.TRUST_PROXY) || process.env.TRUST_PROXY);
 
 // CORS configuration
 const allowedOrigins = [
@@ -62,20 +72,23 @@ app.use(cors({
     if (allowedOrigins.length === 0 || allowedOrigins.includes(origin) || allowedOrigins.includes('*')) {
       return callback(null, true);
     }
-    return callback(null, true);
+    return callback(null, false);
   },
   credentials: true
 }));
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use(express.static(path.join(process.cwd(), "public")));
+
 
 app.use(session({
-  secret: "xianfire-secret-key",
+  secret: process.env.SESSION_SECRET || process.env.JWT_SECRET || "development-session-secret",
   resave: false,
-  saveUninitialized: false
+  saveUninitialized: false,
+  cookie: { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", maxAge: 7 * 24 * 60 * 60 * 1000 }
 }));
+app.use(protectDocumentUploads(documentPublicDirectory));
+app.use(express.static(path.join(__dirname, "public")));
 app.use(flash());
 
 app.engine("xian", async (filePath, options, callback) => {
@@ -129,6 +142,7 @@ fs.readdir(partialsDir, (err, files) => {
     });
 });
 
+app.use( auditLoggerMiddleware );
 app.use("/", router);
 
 // Sync only new tables, don't alter existing ones (SQLite doesn't support ALTER well)
@@ -151,6 +165,11 @@ async function addMissingColumns() {
       `ALTER TABLE users ADD COLUMN verificationExpires DATETIME`,
       `ALTER TABLE users ADD COLUMN authProvider VARCHAR(20) NOT NULL DEFAULT 'password'`,
       `ALTER TABLE users ADD COLUMN googleId VARCHAR(255) NULL`,
+      `ALTER TABLE users ADD COLUMN firstName VARCHAR(100) NULL`,
+      `ALTER TABLE users ADD COLUMN middleName VARCHAR(100) NULL`,
+      `ALTER TABLE users ADD COLUMN lastName VARCHAR(100) NULL`,
+      `ALTER TABLE users ADD COLUMN mobileNumber VARCHAR(20) NULL`,
+      `ALTER TABLE users ADD COLUMN profileCompleted BOOLEAN NOT NULL DEFAULT 1`,
       `CREATE UNIQUE INDEX users_googleId_unique ON users (googleId)`,
       `ALTER TABLE enrollment_records MODIFY COLUMN enrollmentType ENUM('new', 'old', 'transferee', 'returnee') NULL`,
       `ALTER TABLE sections ADD COLUMN teacherId INTEGER`,
@@ -181,6 +200,12 @@ async function addMissingColumns() {
 }
 await syncPromise;
 await addMissingColumns();
+await ensureVoiceoverColumns(sequelize);
+await ensurePanoramaLabelColumn(sequelize);
+await initializeEnrollmentGuide();
+await initializeSchoolProfile();
+await initializeAdmission(sequelize);
+await backfillSystemLogs();
 
 export default app;
 

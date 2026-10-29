@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo, useCallback } from "react";
 import { createPortal } from "react-dom";
+import { useSearchParams } from "react-router";
 import { toast } from "sonner";
 import {
   BookOpen, ChevronRight, ChevronDown, RefreshCw, Search,
@@ -10,15 +11,18 @@ import { API, tok, LifeStatusBadge, RegistrarPagination } from "./RegistrarShare
 
 // ── Sections Tab ──────────────────────────────────────────────────────────────
 export function SectionsTab() {
+  const [queryParams, setQueryParams] = useSearchParams();
+  const linkedYear = queryParams.get('academicYear') || '';
+  const linkedLevel = queryParams.get('schoolLevel') || '';
   const [sections, setSections] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeSection, setActiveSection] = useState(null);
   const [search, setSearch] = useState('');
-  const [levelFilter, setLevelFilter] = useState('');
+  const [levelFilter, setLevelFilter] = useState(() => linkedLevel === 'shs' ? 'SHS' : linkedLevel.startsWith('jhs_') ? 'JHS' : '');
   const [gradeFilter, setGradeFilter] = useState('');
-  const [programFilter, setProgramFilter] = useState('');
+  const [programFilter, setProgramFilter] = useState(() => linkedLevel === 'jhs_ssc' ? 'SSC' : linkedLevel === 'jhs_regular' ? 'Regular' : '');
   const [capacityFilter, setCapacityFilter] = useState('all');
-  const [schoolYearFilter, setSchoolYearFilter] = useState('');
+  const [schoolYearFilter, setSchoolYearFilter] = useState(linkedYear);
   const [schoolYears, setSchoolYears] = useState([]);
   const [activeYear, setActiveYear] = useState('');
   const [page, setPage] = useState(1);
@@ -135,6 +139,7 @@ export function SectionsTab() {
   };
 
   const handleResetFilters = () => {
+    setQueryParams({}, { replace: true });
     setSearch('');
     setLevelFilter('');
     setGradeFilter('');

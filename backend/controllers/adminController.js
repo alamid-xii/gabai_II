@@ -33,6 +33,10 @@ export const requireAdmin = async (req, res, next) => {
         if (!user || user.role !== 'admin') {
           return res.status(403).json({ error: "Forbidden: Admin access required" });
         }
+
+        if (user.isActive === false || user.isActive === 0 || user.isActive === '0') {
+          return res.status(403).json({ error: "Your account has been suspended or deactivated.", isSuspended: true });
+        }
         
         req.user = user;
         return next();
@@ -49,6 +53,10 @@ export const requireAdmin = async (req, res, next) => {
     const user = await User.findByPk(req.session.userId);
     if (!user || user.role !== 'admin') {
       return res.status(403).json({ error: "Forbidden: Admin access required" });
+    }
+
+    if (user.isActive === false || user.isActive === 0 || user.isActive === '0') {
+      return res.status(403).json({ error: "Your account has been suspended or deactivated.", isSuspended: true });
     }
     
     req.user = user;
@@ -216,7 +224,8 @@ export const toggleUserStatus = async (req, res) => {
     const user = await User.findByPk(id);
     if (!user) return res.status(404).json({ error: "User not found" });
 
-    user.isActive = !user.isActive;
+    const currentActive = user.isActive === true || user.isActive === 1 || user.isActive === '1';
+    user.isActive = !currentActive;
     await user.save();
 
     res.json({
@@ -291,7 +300,7 @@ export const deleteUser = async (req, res) => {
       if (e.sectionId) {
         await sequelize.query(
           `UPDATE sections 
-           SET currentEnrollment = MAX(0, currentEnrollment - 1), 
+           SET currentEnrollment = GREATEST(0, CAST(currentEnrollment AS SIGNED) - 1), 
                updatedAt = NOW()
            WHERE id = ?`,
           { replacements: [e.sectionId] }

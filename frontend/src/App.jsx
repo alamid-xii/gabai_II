@@ -4,10 +4,14 @@ import { ProtectedRoute } from "./components/ProtectedRoute";
 import { ScrollToTop } from "./components/ScrollToTop";
 import { Root } from "./Root";
 import { Home } from "./pages/Home";
+import { About } from "./pages/About";
 import { QAChat } from "./pages/QAChat";
 import { ARNavigation } from "./pages/ARNavigation";
 import { EnrollmentGuide } from "./pages/EnrollmentGuide";
 import { Login } from "./pages/Login";
+import { PasswordRecovery } from "./pages/PasswordRecovery";
+import { CompleteProfile } from "./pages/CompleteProfile";
+import { StudentProfile } from "./pages/student/StudentProfile";
 import { SignUp } from "./pages/SignUp";
 import { AdminDashboard } from "./pages/admin/AdminDashboard";
 import { AdminProfile } from "./pages/admin/AdminProfile";
@@ -38,7 +42,9 @@ export default function App() {
         <Routes>
           {/* Pages with Navbar + Footer layout */}
           <Route element={<Root />}>
+            <Route path="profile" element={<ProtectedRoute><StudentProfile /></ProtectedRoute>} />
             <Route index element={<Home />} />
+            <Route path="about" element={<About />} />
             <Route path="qa" element={<QAChat />} />
             <Route path="ar-navigation" element={<ARNavigation />} />
             <Route path="enrollment-guide" element={<EnrollmentGuide />} />
@@ -91,6 +97,14 @@ export default function App() {
               }
             />
             <Route
+              path="student-dashboard"
+              element={
+                <ProtectedRoute>
+                  <StudentDashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route
               path="student-dashboard/:id"
               element={
                 <ProtectedRoute>
@@ -102,6 +116,9 @@ export default function App() {
 
           {/* Standalone pages without layout */}
           <Route path="/login" element={<Login />} />
+          <Route path="/complete-profile" element={<ProtectedRoute allowIncompleteProfile><CompleteProfile /></ProtectedRoute>} />
+          <Route path="/forgot-password" element={<PasswordRecovery />} />
+          <Route path="/reset-password" element={<PasswordRecovery reset />} />
           <Route path="/verify-email" element={<VerifyEmailPage />} />
           <Route path="/signup" element={<SignUp />} />
           <Route
@@ -202,6 +219,14 @@ export default function App() {
             element={
               <ProtectedRoute requireAdmin>
                 <AdminDashboard initialTab="sections" />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/logs"
+            element={
+              <ProtectedRoute requireAdmin>
+                <AdminDashboard initialTab="logs" />
               </ProtectedRoute>
             }
           />

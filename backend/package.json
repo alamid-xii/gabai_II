@@ -10,8 +10,11 @@
     "migrate": "node migrate.js",
     "seed:users": "node seed-users.js",
     "seed:students": "node seed-students.js",
+    "db:refresh": "node scripts/refresh-database.js",
     "create:model": "node create.js model",
-    "create:controller": "node create.js controller"
+    "create:controller": "node create.js controller",
+    "test": "node --test controllers/*.test.js services/*.test.js",
+    "test:flow": "node scripts/check-enrollment-flow.js"
   },
   "dependencies": {
     "archiver": "^7.0.1",

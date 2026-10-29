@@ -1,99 +1,129 @@
-import { useState } from "react";
-import { Link, useLocation } from "react-router";
-import { MessageCircle, X, Sparkles, ArrowRight } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { useLocation } from "react-router";
+import { MessageCircle, X, Trash2 } from "lucide-react";
+import { QAChat } from "../pages/QAChat";
 
 export function FloatingChat() {
   const [open, setOpen] = useState(false);
   const location = useLocation();
+  const chatRef = useRef(null);
 
-  // Hide on the Q&A page itself
-  if (location.pathname === "/qa") return null;
+  // Hide floating button on the standalone /qa route
+  const isStandaloneChat = location.pathname === "/qa";
+
+  // Lock background scroll when full-screen chat is open
+  useEffect(() => {
+    if (open) {
+      const originalOverflow = document.body.style.overflow;
+      document.body.style.overflow = "hidden";
+      return () => {
+        document.body.style.overflow = originalOverflow;
+      };
+    }
+  }, [open]);
+
+  // Support closing with Escape key
+  useEffect(() => {
+    function handleKeyDown(event) {
+      if (event.key === "Escape" && open) {
+        setOpen(false);
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [open]);
+
+  if (isStandaloneChat) return null;
 
   return (
-    <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end gap-3">
-      {/* Popup Card */}
+    <>
+      {/* ── Full-Screen Chatbot Modal Overlay ── */}
       {open && (
-        <div className="bg-white rounded-2xl shadow-2xl border border-gray-100 w-72 overflow-hidden animate-fade-in">
-          {/* Card Header */}
-          <div className="bg-linear-to-r from-[#001840] to-[#102A71] px-5 py-4 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="bg-[#F5C400] w-8 h-8 rounded-full flex items-center justify-center">
-                <Sparkles className="w-4 h-4 text-[#001840]" />
-              </div>
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="GabAI Admissions Assistant"
+          className="fixed inset-0 z-50 bg-[#FFFDF0] flex flex-col animate-fadeIn"
+        >
+          {/* Full-Screen Header Bar */}
+          <header className="bg-linear-to-r from-[#001840] via-[#102A71] to-[#001840] text-white px-4 py-3 sm:px-6 sm:py-3.5 flex items-center justify-between shadow-lg shrink-0">
+            <div className="flex items-center gap-3">
+              <img
+                src="/GabAi_Logo.png"
+                alt="GabAI Logo"
+                className="w-10 h-10 rounded-xl object-contain shadow-md shrink-0 bg-[#F5C400]"
+              />
               <div>
-                <p className="text-white font-semibold text-sm">GabAI Assistant</p>
-                <div className="flex items-center gap-1.5">
-                  <span className="w-1.5 h-1.5 bg-[#FFDC5F] rounded-full animate-pulse" />
-                  <span className="text-[#FFDC5F] text-xs">Online · Ready to help</span>
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-base sm:text-lg tracking-wide text-white">
+                    GabAI Assistant
+                  </span>
+                  <span className="inline-flex items-center gap-1 text-[11px] text-[#FFDC5F] bg-white/10 px-2.5 py-0.5 rounded-full font-medium">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    Online
+                  </span>
                 </div>
-              </div>
-            </div>
-            <button
-              onClick={() => setOpen(false)}
-              className="text-white/60 hover:text-white transition-colors"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-
-          {/* Card Body */}
-          <div className="p-5">
-            <div className="flex gap-3 mb-4">
-              <div className="w-8 h-8 bg-[#102A71] rounded-full flex items-center justify-center shrink-0">
-                <Sparkles className="w-4 h-4 text-[#FFDC5F]" />
-              </div>
-              <div className="bg-[#FFDC5F]/30 border border-[#FFDC5F]/40 rounded-2xl rounded-tl-none px-4 py-3 text-sm text-[#001840] leading-relaxed">
-                Hi! I'm GabAI — your EMC Admission Assistant. Ask me anything about JHS, SHS strands, enrollment, or requirements!
+                <p className="text-[11px] text-[#FFDC5F]/80 leading-tight">
+                  Eastern Mindoro College Admissions AI
+                </p>
               </div>
             </div>
 
-            {/* Quick prompts */}
-            <div className="space-y-2 mb-4">
-              {[
-                "What SHS strands are available?",
-                "How do I apply for Grade 7 SSC?",
-                "What are the admission requirements?",
-              ].map((q) => (
-                <Link
-                  key={q}
-                  to={`/qa`}
-                  state={{ question: q }}
-                  className="flex items-center justify-between w-full text-left text-sm text-[#102A71] bg-[#FFFDF0] hover:bg-[#FFDC5F]/30 border border-[#FFDC5F]/40 hover:border-[#FFDC5F] px-3 py-2 rounded-xl transition-colors duration-150 group"
-                >
-                  <span>{q}</span>
-                  <ArrowRight className="w-3 h-3 text-[#F5C400] shrink-0 group-hover:translate-x-0.5 transition-transform" />
-                </Link>
-              ))}
-            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => chatRef.current?.clearChat()}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-[#FFDC5F] hover:text-white text-xs sm:text-sm font-semibold transition-colors"
+                aria-label="Clear chat history"
+                title="Clear chat history"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span className="hidden sm:inline">Clear Chat</span>
+              </button>
 
-            <Link
-              to="/qa"
-              className="flex items-center justify-center gap-2 bg-[#F5C400] hover:bg-[#FFDC5F] text-[#001840] font-semibold text-sm px-4 py-3 rounded-xl transition-colors duration-150 w-full"
-            >
-              Open Full Chat
-              <ArrowRight className="w-4 h-4" />
-            </Link>
+              <button
+                type="button"
+                onClick={() => setOpen(false)}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs sm:text-sm font-semibold transition-colors"
+                aria-label="Close chatbot"
+                title="Close chatbot (Esc)"
+              >
+                <X className="w-5 h-5" />
+                <span className="hidden sm:inline">Close</span>
+              </button>
+            </div>
+          </header>
+
+          {/* Full Screen QAChat Interface */}
+          <div className="flex-1 min-h-0 overflow-hidden">
+            <QAChat ref={chatRef} onClose={() => setOpen(false)} isOverlay={true} />
           </div>
         </div>
       )}
 
-      {/* FAB Button */}
-      <button
-        onClick={() => setOpen(!open)}
-        className="relative bg-[#102A71] hover:bg-[#001840] text-white w-14 h-14 rounded-full shadow-2xl flex items-center justify-center transition-all duration-200 hover:scale-110 active:scale-95"
-        aria-label="Open chat assistant"
-      >
-        {open ? (
-          <X className="w-6 h-6" />
-        ) : (
-          <MessageCircle className="w-6 h-6" />
-        )}
+      {/* ── Floating Action Button (FAB) ── */}
+      {!open && (
+        <div className="fixed bottom-[max(1rem,env(safe-area-inset-bottom))] right-4 sm:bottom-6 sm:right-6 z-40 flex flex-col items-end gap-2">
+          {/* Tooltip bubble (desktop) */}
+          <div className="hidden sm:flex items-center gap-2 bg-[#001840] text-white text-xs font-semibold px-3 py-1.5 rounded-full shadow-lg border border-[#F5C400]/30 animate-bounce">
+            <span className="w-2 h-2 rounded-full bg-[#F5C400] animate-pulse" />
+            <span>Ask GabAI</span>
+          </div>
 
-        {/* Yellow pulse badge */}
-        {!open && (
-          <span className="absolute -top-1 -right-1 w-4 h-4 bg-[#F5C400] rounded-full border-2 border-white animate-pulse" />
-        )}
-      </button>
-    </div>
+          <button
+            type="button"
+            onClick={() => setOpen(true)}
+            className="group relative bg-linear-to-br from-[#102A71] to-[#001840] hover:from-[#001840] hover:to-[#102A71] text-white w-14 h-14 sm:w-16 sm:h-16 rounded-full shadow-2xl flex items-center justify-center transition-all duration-300 hover:scale-110 active:scale-95 border-2 border-[#F5C400]"
+            aria-label="Open GabAI Admissions Chatbot"
+            title="Open GabAI Admissions Chatbot"
+          >
+            <MessageCircle className="w-7 h-7 text-[#FFDC5F] group-hover:scale-110 transition-transform" />
+
+            {/* Pulsing indicator */}
+            <span className="absolute -top-1 -right-1 w-4 h-4 bg-[#F5C400] rounded-full border-2 border-white animate-pulse" />
+          </button>
+        </div>
+      )}
+    </>
   );
 }

@@ -29,6 +29,12 @@ import { sequelize } from "./db.js";
 
 export const User = sequelize.define("User", {
   name: { type: DataTypes.STRING, allowNull: false },
+  firstName: { type: DataTypes.STRING(100), allowNull: true },
+  middleName: { type: DataTypes.STRING(100), allowNull: true },
+  lastName: { type: DataTypes.STRING(100), allowNull: true },
+  mobileNumber: { type: DataTypes.STRING(20), allowNull: true },
+  // Existing accounts keep working; new Google signups explicitly start incomplete.
+  profileCompleted: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
   email: { type: DataTypes.STRING, allowNull: false, unique: true },
   password: { type: DataTypes.STRING, allowNull: false },
   authProvider: {

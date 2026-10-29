@@ -1,22 +1,39 @@
 import { useState, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
+import { useSearchParams } from "react-router";
 import { toast } from "sonner";
 import {
   ClipboardList, RefreshCw, Search,
-  Download, X, FileText
+  Download, X, FileText, BookOpen
 } from "lucide-react";
 import {
   API, tok, STATUS_CFG, StatusBadge, LifeStatusBadge,
-  EnrollmentDetail, RegistrarPagination
+  EnrollmentDetail, RegistrarPagination, AssignSectionModal
 } from "./RegistrarShared";
 
 export function EnrollmentsTab({ onActionSuccess }) {
+  const [queryParams, setQueryParams] = useSearchParams();
   const [enrollments, setEnrollments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
-  const [levelFilter, setLevelFilter] = useState('');
-  const [yearFilter, setYearFilter] = useState(''); // '' = active year (default)
+  const [assigningEnrollment, setAssigningEnrollment] = useState(null);
+  const statusFilter = queryParams.get('status') || '';
+  const levelFilter = queryParams.get('schoolLevel') || '';
+  const yearFilter = queryParams.get('academicYear') || ''; // '' = active year
+  const typeFilter = queryParams.get('enrollmentType') || '';
+  const applicationId = queryParams.get('application') || '';
+  function setFilter(key, value) {
+    setQueryParams(previous => {
+      const next = new URLSearchParams(previous);
+      if (value && value !== 'all') next.set(key, value);
+      else if (key === 'academicYear' && value === 'all') next.set(key, value);
+      else next.delete(key);
+      return next;
+    }, { replace: true });
+  }
+  const setStatusFilter = value => setFilter('status', value);
+  const setLevelFilter = value => setFilter('schoolLevel', value);
+  const setYearFilter = value => setFilter('academicYear', value);
   const [schoolYears, setSchoolYears] = useState([]);
   const [activeYear, setActiveYear] = useState('');
   const [reviewingEnrollment, setReviewingEnrollment] = useState(null);
@@ -24,6 +41,30 @@ export function EnrollmentsTab({ onActionSuccess }) {
   const [pageSize, setPageSize] = useState(10);
   const [exporting, setExporting] = useState(false);
   const [headerContainer, setHeaderContainer] = useState(null);
+  const visibleEnrollment = applicationId && reviewingEnrollment && String(reviewingEnrollment.id) === applicationId ? reviewingEnrollment : null;
+
+  function closeReview() {
+    setReviewingEnrollment(null);
+    setFilter('application', '');
+  }
+
+  // A dashboard link must open its record even when the list has another filter.
+  useEffect(() => {
+    if (!applicationId) return;
+    if (!/^\d+$/.test(applicationId)) {
+      toast.error('Invalid application link');
+      return;
+    }
+    const controller = new AbortController();
+    fetch(`${API}/enrollments/${applicationId}`, { headers: tok(), signal: controller.signal })
+      .then(async response => {
+        if (!response.ok) throw new Error('Unable to open this application');
+        const data = await response.json();
+        setReviewingEnrollment(data.enrollment || data);
+      })
+      .catch(error => { if (error.name !== 'AbortError') toast.error(error.message); });
+    return () => controller.abort();
+  }, [applicationId]);
 
   useEffect(() => {
     setHeaderContainer(document.getElementById('registrar-header-slot'));
@@ -32,13 +73,20 @@ export function EnrollmentsTab({ onActionSuccess }) {
   // Close modal on Escape key
   useEffect(() => {
     function handleKeyDown(e) {
-      if (e.key === 'Escape') setReviewingEnrollment(null);
+      if (e.key === 'Escape') {
+        setReviewingEnrollment(null);
+        setQueryParams(previous => {
+          const next = new URLSearchParams(previous);
+          next.delete('application');
+          return next;
+        }, { replace: true });
+      }
     }
     if (reviewingEnrollment) {
       window.addEventListener('keydown', handleKeyDown);
       return () => window.removeEventListener('keydown', handleKeyDown);
     }
-  }, [reviewingEnrollment]);
+  }, [reviewingEnrollment, setQueryParams]);
 
   // Load school years for the dropdown
   useEffect(() => {
@@ -59,7 +107,8 @@ export function EnrollmentsTab({ onActionSuccess }) {
     try {
       const params = new URLSearchParams();
       if (statusFilter) params.set('status', statusFilter);
-      if (levelFilter) params.set('educationLevel', levelFilter);
+      if (levelFilter) params.set('schoolLevel', levelFilter);
+      if (typeFilter) params.set('enrollmentType', typeFilter);
       if (search) params.set('search', search);
       if (yearFilter) params.set('academicYear', yearFilter);
       const res = await fetch(`${API}/registrar/enrollments?${params}`, { headers: tok() });
@@ -72,7 +121,7 @@ export function EnrollmentsTab({ onActionSuccess }) {
     } finally {
       setLoading(false);
     }
-  }, [statusFilter, levelFilter, search, yearFilter]);
+  }, [statusFilter, levelFilter, search, yearFilter, typeFilter]);
 
   useEffect(() => {
     const t = setTimeout(fetchEnrollments, 300);
@@ -86,13 +135,12 @@ export function EnrollmentsTab({ onActionSuccess }) {
 
   const handleResetFilters = () => {
     setSearch('');
-    setStatusFilter('');
-    setLevelFilter('');
-    setYearFilter('');
+    setQueryParams({}, { replace: true });
+    setReviewingEnrollment(null);
     setPage(1);
   };
 
-  const hasActiveFilters = Boolean(search || statusFilter || levelFilter || yearFilter);
+  const hasActiveFilters = Boolean(search || statusFilter || levelFilter || yearFilter || typeFilter);
 
   async function exportToExcel() {
     if (enrollments.length === 0) {
@@ -259,13 +307,17 @@ export function EnrollmentsTab({ onActionSuccess }) {
               }`}
             >
               <option value="">All Statuses</option>
-              {['submitted', 'pending_exam', 'verified', 'returned', 'approved', 'enrolled'].map(k => (
-                STATUS_CFG[k] ? <option key={k} value={k}>{STATUS_CFG[k].label}</option> : null
+              <option value="needs_review">Needs review</option>
+              <option value="enrolled_active">Enrolled / active</option>
+              <option value="awaiting_section">Awaiting section</option>
+              {['submitted', 'pending_exam', 'verified', 'returned', 'approved', 'subjects_enrolled', 'enrolled', 'active', 'completed', 'rejected'].map(k => (
+                <option key={k} value={k}>{STATUS_CFG[k]?.label || 'Subjects enrolled'}</option>
               ))}
             </select>
 
             {/* Level */}
             <select
+              aria-label="School level and class"
               value={levelFilter}
               onChange={e => { setLevelFilter(e.target.value); setPage(1); }}
               className={`px-2.5 sm:px-3 py-2 border rounded-lg text-xs sm:text-sm focus:outline-none transition-colors shrink-0 ${
@@ -273,8 +325,17 @@ export function EnrollmentsTab({ onActionSuccess }) {
               }`}
             >
               <option value="">All Levels</option>
-              <option value="JHS">JHS</option>
-              <option value="SHS">SHS</option>
+              <option value="jhs_regular">JHS Regular</option>
+              <option value="jhs_ssc">JHS SSC</option>
+              <option value="shs">SHS</option>
+            </select>
+
+            <select aria-label="Enrollment type" value={typeFilter} onChange={e => { setFilter('enrollmentType', e.target.value); setPage(1); }} className="px-2.5 sm:px-3 py-2 border border-gray-200 rounded-lg text-xs sm:text-sm focus:outline-none bg-white text-gray-700">
+              <option value="">All enrollment types</option>
+              <option value="new">New</option>
+              <option value="old">Continuing</option>
+              <option value="returnee">Returnee</option>
+              <option value="transferee">Transferee</option>
             </select>
 
             {/* Refresh */}
@@ -351,7 +412,7 @@ export function EnrollmentsTab({ onActionSuccess }) {
                     return (
                       <tr
                         key={enrollment.id}
-                        onClick={() => setReviewingEnrollment(enrollment)}
+                        onClick={() => setFilter('application', String(enrollment.id))}
                         className="hover:bg-gray-50/60 cursor-pointer transition-colors"
                       >
                         {/* Student Name & Identifiers */}
@@ -372,13 +433,13 @@ export function EnrollmentsTab({ onActionSuccess }) {
                           </p>
                         </td>
 
-                        {/* Level / Grade / Strand */}
+                        {/* Level / Grade / Strand / Section */}
                         <td className="px-5 py-3.5 text-gray-600 whitespace-nowrap">
                           <div className="flex items-center gap-1.5 flex-wrap">
                             <span className="font-medium text-gray-800">{enrollment.educationLevel}</span>
                             {enrollment.gradeLevel && <span>· {enrollment.gradeLevel}</span>}
                             {enrollment.educationLevel === 'JHS' ? (
-                              enrollment.course === 'SSC' || enrollment.strand === 'SSC' ? (
+                              enrollment.sscClass === 'SSC' || (!enrollment.sscClass && Number(enrollment.sscApplied) === 1 && enrollment.sscResult !== 'failed') ? (
                                 <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-purple-50 text-purple-700 border border-purple-200">
                                   SSC
                                 </span>
@@ -392,6 +453,17 @@ export function EnrollmentsTab({ onActionSuccess }) {
                                 {enrollment.course || enrollment.strand}
                               </span>
                             ) : null}
+
+                            {/* Section Badge */}
+                            {enrollment.sectionName ? (
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                Sec: {enrollment.sectionName}
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-50 text-amber-700 border border-amber-200">
+                                No Section
+                              </span>
+                            )}
                           </div>
                         </td>
 
@@ -423,17 +495,31 @@ export function EnrollmentsTab({ onActionSuccess }) {
 
                         {/* Actions */}
                         <td className="px-5 py-3.5 text-right whitespace-nowrap">
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setReviewingEnrollment(enrollment);
-                            }}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#001840] text-white hover:bg-[#102A71] transition-all shadow-xs"
-                          >
-                            <FileText size={13} />
-                            <span>Review</span>
-                          </button>
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setAssigningEnrollment(enrollment);
+                              }}
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-[#102A71]/10 text-[#102A71] hover:bg-[#102A71] hover:text-white transition-all shadow-xs"
+                              title={enrollment.sectionName ? 'Change Section' : 'Assign Section'}
+                            >
+                              <BookOpen size={12} />
+                              <span>{enrollment.sectionName ? 'Section' : 'Assign'}</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setFilter('application', String(enrollment.id));
+                              }}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#001840] text-white hover:bg-[#102A71] transition-all shadow-xs"
+                            >
+                              <FileText size={13} />
+                              <span>Review</span>
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     );
@@ -456,12 +542,12 @@ export function EnrollmentsTab({ onActionSuccess }) {
       </div>
 
       {/* Review Modal */}
-      {reviewingEnrollment && (
+      {visibleEnrollment && (
         <div className="fixed inset-0 z-40 flex items-center justify-center p-3 sm:p-6 overflow-y-auto">
           {/* Backdrop */}
           <div
             className="fixed inset-0 bg-black/50 backdrop-blur-xs transition-opacity"
-            onClick={() => setReviewingEnrollment(null)}
+            onClick={closeReview}
           />
 
           {/* Modal Container */}
@@ -469,9 +555,9 @@ export function EnrollmentsTab({ onActionSuccess }) {
             {/* Modal Body */}
             <div className="overflow-y-auto flex-1">
               <EnrollmentDetail
-                enrollmentId={reviewingEnrollment.id}
-                enrollment={reviewingEnrollment}
-                onClose={() => setReviewingEnrollment(null)}
+                enrollmentId={visibleEnrollment.id}
+                enrollment={visibleEnrollment}
+                onClose={closeReview}
                 onActionSuccess={() => {
                   fetchEnrollments();
                   if (typeof onActionSuccess === 'function') onActionSuccess();
@@ -480,6 +566,19 @@ export function EnrollmentsTab({ onActionSuccess }) {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Quick Assign Section Modal */}
+      {assigningEnrollment && (
+        <AssignSectionModal
+          enrollment={assigningEnrollment}
+          onClose={() => setAssigningEnrollment(null)}
+          onSuccess={() => {
+            setAssigningEnrollment(null);
+            fetchEnrollments();
+            if (typeof onActionSuccess === 'function') onActionSuccess();
+          }}
+        />
       )}
     </div>
   );

@@ -1,5 +1,6 @@
-﻿import jwt from 'jsonwebtoken';
+import jwt from 'jsonwebtoken';
 import { sequelize } from '../models/db.js';
+import { needsProfileCompletion } from '../services/userProfile.js';
 
 // Authenticate JWT token
 export const authenticateToken = async (req, res, next) => {
@@ -21,15 +22,26 @@ export const authenticateToken = async (req, res, next) => {
       
       // Fetch user from database
       const [[user]] = await sequelize.query(
-        'SELECT id, email, name, role FROM users WHERE id = ?',
+        'SELECT id, email, name, role, isActive, authProvider, firstName, middleName, lastName, mobileNumber, profileCompleted FROM users WHERE id = ?',
         { replacements: [userId] }
       );
       
       if (!user) {
         return res.status(404).json({ error: 'User not found' });
       }
+
+      if (user.isActive === false || user.isActive === 0 || user.isActive === '0') {
+        return res.status(403).json({
+          error: 'Your account has been suspended or deactivated. Please contact an administrator.',
+          isSuspended: true
+        });
+      }
       
       req.user = user;
+      const path = (req.originalUrl || req.url || '').split('?')[0];
+      if (needsProfileCompletion(user) && !['/api/auth/me', '/api/auth/profile', '/api/auth/logout'].includes(path)) {
+        return res.status(403).json({ error: 'Complete your profile before continuing.', needsProfileCompletion: true });
+      }
       next();
     });
   } catch (error) {
@@ -101,11 +113,11 @@ export const optionalAuth = async (req, res, next) => {
       const userId = decoded.userId || decoded.id;
       
       const [[user]] = await sequelize.query(
-        'SELECT id, email, name, role FROM users WHERE id = ?',
+        'SELECT id, email, name, role, isActive, authProvider, firstName, middleName, lastName, mobileNumber, profileCompleted FROM users WHERE id = ?',
         { replacements: [userId] }
       );
       
-      if (user) {
+      if (user && user.isActive !== false && user.isActive !== 0 && user.isActive !== '0') {
         req.user = user;
       }
       

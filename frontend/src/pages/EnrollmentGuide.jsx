@@ -1,3 +1,4 @@
+import { useSchoolProfile } from "../hooks/useSchoolProfile";
 import { useState, useEffect } from "react";
 import {
   CheckCircle2,
@@ -22,128 +23,35 @@ import {
   Printer,
 } from "lucide-react";
 
-const steps = [
-  {
-    id: 1,
-    icon: FileText,
-    title: "Gather Required Documents",
-    description:
-      "Collect all required documents before visiting the campus. Incomplete submissions will delay enrollment.",
-    requirements: [
-      "Original Form 138 / SF9 with school seal",
-      "Certificate of Good Moral Character",
-      "PSA Birth Certificate (original + 2 photocopies)",
-      "4 pieces 2x2 ID photos (white background)",
-      "Medical Certificate from licensed physician",
-      "Barangay Clearance",
-    ],
-    downloadLabel: "Download Document Checklist",
-    color: "from-[#001840] to-[#102A71]",
-    estimatedTime: "1-2 weeks",
-    tips: "Start gathering documents early. PSA Birth Certificate may take 3-5 days to process."
-  },
-  {
-    id: 2,
-    icon: ClipboardList,
-    title: "Fill Out Admission Form",
-    description:
-      "Accomplish the official EMC Admission Form accurately. Forms are available at the Registrar's Office or online.",
-    requirements: [
-      "Download or pick up admission form at Registrar's Office",
-      "Fill in personal and academic information",
-      "Attach 2x2 ID photo on the form",
-      "Have parent / guardian sign the form",
-      "Do not leave any field blank",
-    ],
-    downloadLabel: "Download Admission Form",
-    color: "from-[#102A71] to-[#1a3a8f]",
-    estimatedTime: "30 minutes",
-    tips: "Use black ink only. Write legibly. Double-check all information before submission."
-  },
-  {
-    id: 3,
-    icon: UserCheck,
-    title: "Submit Documents & Interview",
-    description:
-      "Bring all requirements to the Registrar's Office. Undergo brief admission interview and document validation.",
-    requirements: [
-      "Visit Registrar's Office (Admin Building, Ground Floor)",
-      "Submit all required documents",
-      "Undergo document verification process",
-      "Complete admission interview with guidance counselor",
-      "Receive your student reference number",
-    ],
-    downloadLabel: "Download Interview Guide",
-    color: "from-[#001840] to-[#102A71]",
-    estimatedTime: "1-2 hours",
-    tips: "Arrive early (8:00 AM) to avoid long queues. Dress appropriately for the interview."
-  },
-  {
-    id: 4,
-    icon: BookOpen,
-    title: "Entrance Examination",
-    description:
-      "Take the Eastern Mindoro College Entrance Exam (EMCEE). Results are released within 3–5 working days.",
-    requirements: [
-      "Bring admission slip and 2 valid IDs",
-      "Arrive 30 minutes before the exam",
-      "Exam covers English, Math, Science, and General Knowledge",
-      "No electronic devices allowed inside the room",
-      "Claim results at the Guidance Office after 3–5 days",
-    ],
-    downloadLabel: "Download Exam Tips & Coverage",
-    color: "from-[#102A71] to-[#1a3a8f]",
-    estimatedTime: "2-3 hours",
-    tips: "Get enough sleep the night before. Bring pencils, eraser, and sharpener. No calculators allowed."
-  },
-  {
-    id: 5,
-    icon: CreditCard,
-    title: "Pay Enrollment Fees",
-    description:
-      "Proceed to the Cashier's Office to settle tuition and miscellaneous fees. Keep all official receipts.",
-    requirements: [
-      "Bring Enrollment Assessment Form from Registrar",
-      "Pay at the EMC Cashier's Office (Admin Building, GF)",
-      "Online payment available via GCash / Maya / Bank Transfer",
-      "Request Official Receipt (OR) for all payments",
-      "Free tuition available for qualified students (UniFAST)",
-    ],
-    downloadLabel: "Download Fee Schedule",
-    color: "from-[#001840] to-[#102A71]",
-    estimatedTime: "30 minutes - 1 hour",
-    tips: "Payment plans available. Ask about scholarship opportunities. Keep all receipts safe."
-  },
-  {
-    id: 6,
-    icon: Camera,
-    title: "Get Your Student ID",
-    description:
-      "Present your Official Receipt to the Guidance Office for ID photo capture and student ID processing.",
-    requirements: [
-      "Bring Official Receipt of payment",
-      "Visit Guidance Office (Admin Building, 2nd Floor)",
-      "Have photo taken on-site (wear appropriate attire)",
-      "ID released within 5–7 working days",
-      "Wear student ID at all times while on campus",
-    ],
-    downloadLabel: "Download ID Guidelines",
-    color: "from-[#102A71] to-[#1a3a8f]",
-    estimatedTime: "15-30 minutes",
-    tips: "Wear collared shirt for ID photo. Smile! You'll use this ID for 4 years."
-  },
-];
+import { API, BACKEND_URL } from '../config/api';
+const ICONS = { FileText, ClipboardList, CreditCard, UserCheck, BookOpen, Camera };
 
 export function EnrollmentGuide() {
-  const [completed, setCompleted] = useState(() => {
-    const saved = localStorage.getItem('enrollmentProgress');
-    return saved ? new Set(JSON.parse(saved)) : new Set();
-  });
+  const { profile } = useSchoolProfile();
+  const [guide, setGuide] = useState(null);
+  const [completed, setCompleted] = useState(new Set());
   const [expanded, setExpanded] = useState(1);
+  const [loadError, setLoadError] = useState('');
+  const [reload, setReload] = useState(0);
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch(`${API}/enrollment-guide`, { signal: controller.signal }).then(async response => {
+      if (!response.ok) throw Error('The enrollment guide is temporarily unavailable.');
+      const data = await response.json();
+      if (controller.signal.aborted) return;
+      setGuide(data); setExpanded(data.content.steps[0]?.id || null);
+      try { const saved = JSON.parse(localStorage.getItem(`enrollmentProgress_${data.revision}`) || '[]'); setCompleted(new Set(Array.isArray(saved) ? saved : [])); } catch { setCompleted(new Set()); }
+    }).catch(error => { if (!controller.signal.aborted) setLoadError(error.message); });
+    return () => controller.abort();
+  }, [reload]);
+  const steps = guide?.content.steps || [];
+  const info = { ...guide?.content, ...(profile ? { phone: profile.phone, email: profile.email, registrarLocation: profile.registrarLocation, registrarHours: profile.registrarHours } : {}) };
+
+
 
   useEffect(() => {
-    localStorage.setItem('enrollmentProgress', JSON.stringify([...completed]));
-  }, [completed]);
+    if (guide) { try { localStorage.setItem(`enrollmentProgress_${guide.revision}`, JSON.stringify([...completed])); } catch { /* Progress storage is optional. */ } }
+  }, [completed, guide]);
 
   function toggle(id) {
     setExpanded((prev) => (prev === id ? null : id));
@@ -160,7 +68,7 @@ export function EnrollmentGuide() {
   function resetProgress() {
     if (confirm("Are you sure you want to reset your enrollment progress?")) {
       setCompleted(new Set());
-      localStorage.removeItem('enrollmentProgress');
+      localStorage.removeItem(`enrollmentProgress_${guide.revision}`);
     }
   }
 
@@ -171,8 +79,8 @@ export function EnrollmentGuide() {
   function shareGuide() {
     if (navigator.share) {
       navigator.share({
-        title: 'EMC Enrollment Guide',
-        text: 'Check out the enrollment guide for Eastern Mindoro College',
+        title: `${profile?.schoolName || 'School'} Enrollment Guide`,
+        text: `Check out the enrollment guide for ${profile?.schoolName || 'the school'}`,
         url: window.location.href
       });
     } else {
@@ -181,7 +89,14 @@ export function EnrollmentGuide() {
     }
   }
 
-  const progress = Math.round((completed.size / steps.length) * 100);
+  const completedCount = steps.filter(step => completed.has(step.id)).length;
+  const progress = steps.length ? Math.round((completedCount / steps.length) * 100) : 0;
+  if (!guide) return <div className="p-8 text-center bg-[#FFFDF0] min-h-screen"><p role="status">{loadError || 'Loading enrollment guide...'}</p>{loadError && <button onClick={() => { setLoadError(''); setReload(value => value + 1); }} className="mt-4 underline">Try again</button>}</div>;
+  function downloadStep(step) {
+    if (step.downloadUrl) { window.open(step.downloadUrl.startsWith('/uploads/') ? `${BACKEND_URL}${step.downloadUrl}` : step.downloadUrl, '_blank', 'noopener,noreferrer'); return; }
+    const blob = new Blob([`${step.title}\n\n${step.description}\n\n${step.requirements.join('\n')}\n\n${step.tips}`], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob); const link = document.createElement('a'); link.href = url; link.download = `enrollment-step-${step.id}.txt`; link.click(); URL.revokeObjectURL(url);
+  }
   const nextStep = steps.find(s => !completed.has(s.id));
 
   return (
@@ -205,11 +120,11 @@ export function EnrollmentGuide() {
           <div className="flex flex-wrap gap-4 mt-4">
             <div className="flex items-center gap-2">
               <CheckCircle2 className="w-5 h-5 text-green-600" />
-              <span className="text-sm font-medium text-gray-700">{completed.size} completed</span>
+              <span className="text-sm font-medium text-gray-700">{completedCount} completed</span>
             </div>
             <div className="flex items-center gap-2">
               <Circle className="w-5 h-5 text-gray-400" />
-              <span className="text-sm font-medium text-gray-700">{steps.length - completed.size} remaining</span>
+              <span className="text-sm font-medium text-gray-700">{steps.length - completedCount} remaining</span>
             </div>
             {nextStep && (
               <div className="flex items-center gap-2">
@@ -221,7 +136,7 @@ export function EnrollmentGuide() {
 
           {/* Step indicators */}
           <div className="flex gap-2 mt-5 flex-wrap">
-            {steps.map((s) => (
+            {steps.map((s, index) => (
               <button
                 key={s.id}
                 onClick={() => setExpanded(s.id)}
@@ -234,7 +149,7 @@ export function EnrollmentGuide() {
                 }`}
                 title={s.title}
               >
-                {completed.has(s.id) ? <CheckCircle2 className="w-5 h-5" /> : s.id}
+                {completed.has(s.id) ? <CheckCircle2 className="w-5 h-5" /> : index + 1}
               </button>
             ))}
           </div>
@@ -247,8 +162,8 @@ export function EnrollmentGuide() {
               <Calendar className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
               <div>
                 <h3 className="font-semibold text-blue-900 mb-1">Enrollment Period</h3>
-                <p className="text-sm text-blue-800">June 2 – June 20, 2025</p>
-                <p className="text-xs text-blue-700 mt-1">New students & transferees</p>
+                <p className="text-sm text-blue-800">{info.enrollmentPeriod || 'Schedule to be announced'}</p>
+                <p className="text-xs text-blue-700 mt-1">{info.enrollmentAudience}</p>
               </div>
             </div>
           </div>
@@ -258,8 +173,8 @@ export function EnrollmentGuide() {
               <MapPin className="w-5 h-5 text-green-600 shrink-0 mt-0.5" />
               <div>
                 <h3 className="font-semibold text-green-900 mb-1">Registrar's Office</h3>
-                <p className="text-sm text-green-800">Admin Building, Ground Floor</p>
-                <p className="text-xs text-green-700 mt-1">Mon-Fri: 8:00 AM – 5:00 PM</p>
+                <p className="text-sm text-green-800">{info.registrarLocation}</p>
+                <p className="text-xs text-green-700 mt-1">{info.registrarHours}</p>
               </div>
             </div>
           </div>
@@ -269,8 +184,8 @@ export function EnrollmentGuide() {
               <Phone className="w-5 h-5 text-purple-600 shrink-0 mt-0.5" />
               <div>
                 <h3 className="font-semibold text-purple-900 mb-1">Contact Us</h3>
-                <p className="text-sm text-purple-800">(043) 123-4567</p>
-                <p className="text-xs text-purple-700 mt-1">registrar@emc.edu.ph</p>
+                <p className="text-sm text-purple-800">{info.phone || 'Contact the Registrar on campus'}</p>
+                <p className="text-xs text-purple-700 mt-1">{info.email || 'Email to be announced'}</p>
               </div>
             </div>
           </div>
@@ -280,8 +195,8 @@ export function EnrollmentGuide() {
               <AlertCircle className="w-5 h-5 text-orange-600 shrink-0 mt-0.5" />
               <div>
                 <h3 className="font-semibold text-orange-900 mb-1">Important</h3>
-                <p className="text-sm text-orange-800">Complete all steps before deadline</p>
-                <p className="text-xs text-orange-700 mt-1">Late enrollment subject to fees</p>
+                <p className="text-sm text-orange-800">{info.importantNotice}</p>
+                <p className="text-xs text-orange-700 mt-1">{info.importantDetail}</p>
               </div>
             </div>
           </div>
@@ -289,8 +204,8 @@ export function EnrollmentGuide() {
 
         {/* Step Cards */}
         <div className="space-y-4">
-          {steps.map((step) => {
-            const Icon = step.icon;
+          {steps.map((step, index) => {
+            const Icon = ICONS[step.icon] || FileText;
             const isOpen = expanded === step.id;
             const done = completed.has(step.id);
 
@@ -312,12 +227,12 @@ export function EnrollmentGuide() {
                       done ? "bg-green-500 text-white shadow-lg" : "bg-[#102A71] text-[#FFDC5F]"
                     }`}
                   >
-                    {done ? <CheckCircle2 className="w-6 h-6" /> : `0${step.id}`}
+                    {done ? <CheckCircle2 className="w-6 h-6" /> : String(index + 1).padStart(2, '0')}
                   </div>
 
                   {/* Icon */}
                   <div
-                    className={`hidden sm:flex w-12 h-12 rounded-xl items-center justify-center shrink-0 bg-linear-to-br ${step.color} shadow-md`}
+                    className={`hidden sm:flex w-12 h-12 rounded-xl items-center justify-center shrink-0 bg-linear-to-br ${"from-[#001840] to-[#102A71]"} shadow-md`}
                   >
                     <Icon className="w-6 h-6 text-[#FFDC5F]" />
                   </div>
@@ -376,7 +291,7 @@ export function EnrollmentGuide() {
 
                     {/* Actions */}
                     <div className="flex flex-col sm:flex-row gap-3">
-                      <button className="flex items-center justify-center gap-2 bg-[#F5C400] hover:bg-[#FFDC5F] text-[#001840] px-5 py-3 rounded-xl text-sm font-bold transition-all shadow-md hover:shadow-lg">
+                      <button onClick={() => downloadStep(step)} className="flex items-center justify-center gap-2 bg-[#F5C400] hover:bg-[#FFDC5F] text-[#001840] px-5 py-3 rounded-xl text-sm font-bold transition-all shadow-md hover:shadow-lg">
                         <Download className="w-4 h-4" />
                         {step.downloadLabel}
                       </button>
@@ -410,17 +325,17 @@ export function EnrollmentGuide() {
         </div>
 
         {/* All done banner */}
-        {completed.size === steps.length && (
+        {steps.length > 0 && completedCount === steps.length && (
           <div className="mt-8 bg-linear-to-r from-green-500 to-green-600 rounded-2xl p-8 text-center shadow-2xl animate-fadeIn">
             <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg">
               <CheckCircle2 className="w-12 h-12 text-green-600" />
             </div>
-            <h3 className="text-3xl font-bold text-white mb-3">Enrollment Complete! 🎉</h3>
+            <h3 className="text-3xl font-bold text-white mb-3">{info.completionTitle}</h3>
             <p className="text-white text-lg mb-4">
-              Congratulations! You've successfully completed all enrollment steps at Eastern Mindoro College.
+              {info.completionMessage}
             </p>
             <p className="text-white/90 text-sm">
-              Welcome to the EMC family! See you on campus.
+              {info.completionDetail}
             </p>
           </div>
         )}
@@ -433,14 +348,14 @@ export function EnrollmentGuide() {
               <Phone className="w-5 h-5 text-[#102A71] shrink-0 mt-0.5" />
               <div>
                 <p className="text-sm font-semibold text-gray-900">Call Us</p>
-                <p className="text-sm text-gray-600">(043) 123-4567</p>
+                <p className="text-sm text-gray-600">{info.phone || 'Contact the Registrar on campus'}</p>
               </div>
             </div>
             <div className="flex items-start gap-3">
               <Mail className="w-5 h-5 text-[#102A71] shrink-0 mt-0.5" />
               <div>
                 <p className="text-sm font-semibold text-gray-900">Email Us</p>
-                <p className="text-sm text-gray-600">registrar@emc.edu.ph</p>
+                <p className="text-sm text-gray-600">{info.email || 'Email to be announced'}</p>
               </div>
             </div>
           </div>

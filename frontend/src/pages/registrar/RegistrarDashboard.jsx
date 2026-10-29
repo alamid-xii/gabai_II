@@ -9,15 +9,9 @@ import { SectionsTab } from "./RegistrarSections";
 import { SSCBulkTab } from "./RegistrarScheduling";
 import { SchedulesTab } from "./RegistrarSchedules";
 import { StudentsTab } from "./RegistrarStudents";
-import { API } from "../../config/api";
-
-const tok = () => ({
-  Authorization: `Bearer ${localStorage.getItem("token")}`,
-  "Content-Type": "application/json",
-});
 
 const TAB_LABELS = {
-  overview: "Overview",
+  overview: "Registrar Dashboard",
   enrollments: "Enrollments",
   students: "Students",
   ssc: "SSC Scheduling",
@@ -31,15 +25,8 @@ export function RegistrarDashboard({ initialTab = "overview" }) {
   const navigate = useNavigate();
   const tabFromPath = location.pathname.match(/^\/registrar\/(overview|enrollments|students|scheduling|schedules|sections)/)?.[1];
   const resolvedTab = tabFromPath === "scheduling" ? "ssc" : tabFromPath || initialTab;
-  const [activeTab, setActiveTab] = useState(resolvedTab);
-  const [stats, setStats] = useState(null);
-  const [recentEnrollments, setRecentEnrollments] = useState([]);
-  const [dataLoading, setDataLoading] = useState(true);
+  const activeTab = resolvedTab;
   const [refreshKey, setRefreshKey] = useState(0);
-
-  useEffect(() => {
-    setActiveTab(resolvedTab);
-  }, [resolvedTab]);
 
   useEffect(() => {
     if (authLoading) return;
@@ -49,31 +36,6 @@ export function RegistrarDashboard({ initialTab = "overview" }) {
     }
     if (user?.role !== "registrar") navigate("/");
   }, [authLoading, isLoggedIn, user, navigate]);
-
-  useEffect(() => {
-    if (authLoading || !isLoggedIn || user?.role !== "registrar") return;
-    setDataLoading(true);
-    Promise.all([
-      fetch(`${API}/registrar/stats`, { headers: tok() }),
-      fetch(`${API}/registrar/enrollments`, { headers: tok() }),
-    ])
-      .then(async ([statsResponse, enrollmentsResponse]) => {
-        if (statsResponse.status === 401 || statsResponse.status === 403) {
-          navigate("/login");
-          return;
-        }
-        if (statsResponse.ok) {
-          const data = await statsResponse.json();
-          setStats(data.summary || data.stats || data);
-        }
-        if (enrollmentsResponse.ok) {
-          const data = await enrollmentsResponse.json();
-          setRecentEnrollments(Array.isArray(data) ? data : data.enrollments || []);
-        }
-      })
-      .catch(console.error)
-      .finally(() => setDataLoading(false));
-  }, [authLoading, isLoggedIn, user, navigate, refreshKey]);
 
   if (authLoading) {
     return (
@@ -89,7 +51,6 @@ export function RegistrarDashboard({ initialTab = "overview" }) {
   if (!isLoggedIn || user?.role !== "registrar") return null;
 
   function handleTabChange(tab) {
-    setActiveTab(tab);
     if (tab === "overview") {
       navigate("/registrar");
       return;
@@ -102,14 +63,14 @@ export function RegistrarDashboard({ initialTab = "overview" }) {
     <div className="min-h-screen bg-gray-50 lg:pl-65">
       <Navbar variant="registrar" activeTab={activeTab} onTabChange={handleTabChange} />
       <div className="flex-1 flex flex-col min-h-screen">
-        <header className="bg-white border-b border-gray-100 px-6 py-3.5 flex items-center justify-between gap-4 sticky top-0 z-20 shadow-sm mt-16 lg:mt-0 min-h-[64px]">
-          <div className="shrink-0">
-            <h1 className="text-2xl font-bold text-[#001840]">{TAB_LABELS[activeTab]}</h1>
+        <header className="bg-white border-b border-gray-100 px-4 sm:px-6 py-3.5 flex flex-wrap items-center justify-between gap-3 sticky top-0 z-20 shadow-sm mt-16 lg:mt-0 min-h-[64px]">
+          <div>
+            <h1 className="text-xl sm:text-2xl font-bold text-[#001840]">{TAB_LABELS[activeTab]}</h1>
           </div>
           <div id="registrar-header-slot" className="flex-1 flex items-center justify-end gap-2 flex-wrap ml-auto">
             {activeTab === "overview" && (
               <>
-                <p className="text-xs text-gray-400 mt-0.5">
+                <p className="hidden sm:block text-xs text-gray-400 mt-0.5">
                   {new Date().toLocaleDateString("en-PH", {
                     weekday: "long",
                     year: "numeric",
@@ -117,7 +78,7 @@ export function RegistrarDashboard({ initialTab = "overview" }) {
                     day: "numeric",
                   })}
                 </p>
-                <button onClick={() => setRefreshKey((key) => key + 1)} className="p-2 rounded-lg hover:bg-gray-100 transition-colors" title="Refresh">
+                <button onClick={() => setRefreshKey((key) => key + 1)} className="p-2 rounded-lg hover:bg-gray-100 transition-colors" title="Refresh dashboard" aria-label="Refresh dashboard">
                   <RefreshCw size={15} className="text-gray-500" />
                 </button>
                 <div className="w-8 h-8 bg-[#001840] rounded-full flex items-center justify-center">
@@ -128,12 +89,8 @@ export function RegistrarDashboard({ initialTab = "overview" }) {
           </div>
         </header>
 
-        <main className="flex-1 p-6">
-          {activeTab === "overview" && (dataLoading ? (
-            <div className="flex items-center justify-center py-20 gap-2 text-gray-400 text-sm"><RefreshCw size={15} className="animate-spin" /> Loading dashboard...</div>
-          ) : (
-            <OverviewTab stats={stats} recentEnrollments={recentEnrollments} onRefresh={() => setRefreshKey((key) => key + 1)} />
-          ))}
+        <main className="flex-1 p-4 sm:p-6">
+          {activeTab === "overview" && <OverviewTab refreshKey={refreshKey} />}
           {activeTab === "enrollments" && <EnrollmentsTab onActionSuccess={() => setRefreshKey((key) => key + 1)} />}
           {activeTab === "students" && <StudentsTab />}
           {activeTab === "ssc" && <SSCBulkTab />}

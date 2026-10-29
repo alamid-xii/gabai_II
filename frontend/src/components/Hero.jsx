@@ -1,3 +1,4 @@
+import { SchoolName } from "./SchoolName";
 import { ArrowRight, MapPin } from "lucide-react";
 import { Link } from "react-router";
 
@@ -36,7 +37,7 @@ export function Hero() {
       {/* Content */}
       <div className="relative z-10 max-w-7xl mx-auto px-10 sm:px-6 lg:px-8 py-24 lg:py-32 -translate-y-8 lg:-translate-y-12">
         <div className="max-w-2xl lg:max-w-3xl space-y-8">
-          
+
 
           {/* Headline */}
           <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold leading-tight drop-shadow-lg">
@@ -49,7 +50,7 @@ export function Hero() {
           <p className="text-lg sm:text-xl text-[#FFDC5F] leading-relaxed max-w-xl">
             A smart admission and campus guide powered by Natural Language
             Processing and Campus Virtual Tour (360 images) to simplify enrollment and campus
-            navigation at Eastern Mindoro College.
+            navigation at <SchoolName />.
           </p>
 
           {/* CTA Buttons */}
@@ -70,21 +71,7 @@ export function Hero() {
             </Link>
           </div>
 
-          {/* Stats */}
-          <div className="grid grid-cols-3 gap-6 pt-8 border-t border-white/20 max-w-sm">
-            <div>
-              <div className="text-3xl font-bold text-[#F5C400]">24/7</div>
-              <div className="text-sm text-[#FFDC5F] mt-1">Available</div>
-            </div>
-            <div>
-              <div className="text-3xl font-bold text-[#F5C400]">360°</div>
-              <div className="text-sm text-[#FFDC5F] mt-1">Virtual Tour</div>
-            </div>
-            <div>
-              <div className="text-3xl font-bold text-[#F5C400]">RAG</div>
-              <div className="text-sm text-[#FFDC5F] mt-1">Chatbot</div>
-            </div>
-          </div>
+
         </div>
       </div>
 

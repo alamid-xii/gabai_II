@@ -35,6 +35,9 @@ export const EnrollmentRecord = sequelize.define("EnrollmentRecord", {
     allowNull: false
   },
   
+  admissionPolicy: { type: DataTypes.JSON, allowNull: true },
+  admissionRevision: { type: DataTypes.INTEGER, allowNull: true },
+
   // Foreign Key
   userId: {
     type: DataTypes.INTEGER,
@@ -67,8 +70,7 @@ export const EnrollmentRecord = sequelize.define("EnrollmentRecord", {
   },
   lrn: {
     type: DataTypes.STRING(20),
-    allowNull: true,  // Learner Reference Number
-    unique: true      // Each LRN must belong to only one enrollment record
+    allowNull: true,  // Learner Reference Number (unique per student/school year)
   },
   parentsAddress: {
     type: DataTypes.TEXT,

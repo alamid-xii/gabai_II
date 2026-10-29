@@ -3,7 +3,7 @@ import { useNavigate, useParams, useLocation } from 'react-router';
 import { toast } from 'sonner';
 import { getEnrollmentById, downloadEnrollmentPDF, deleteEnrollment } from '../../services/enrollmentApi';
 import { HSEnrollmentForm } from './HSEnrollmentForm';
-import { 
+import {
   FileText, Download, Edit, Trash2,
   CheckCircle, Clock, XCircle, AlertCircle, BarChart3, BookOpen
 } from 'lucide-react';
@@ -16,18 +16,18 @@ export function EnrollmentDetail() {
   const [loading, setLoading] = useState(true);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  
+
   // Check if user came from admin panel — only trust router state, not referrer
   const isFromAdmin = location.state?.fromAdmin === true;
-  
+
   // Also check user role as a fallback
   const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
   const isAdminUser = currentUser.role === 'admin' || currentUser.role === 'registrar';
-  
+
   useEffect(() => {
     loadEnrollment();
   }, [id]);
-  
+
   const loadEnrollment = async () => {
     try {
       setLoading(true);
@@ -40,7 +40,7 @@ export function EnrollmentDetail() {
       setLoading(false);
     }
   };
-  
+
   const handleDownloadPDF = async () => {
     try {
       await downloadEnrollmentPDF(id);
@@ -49,7 +49,7 @@ export function EnrollmentDetail() {
       toast.error(error.message || 'Failed to download PDF');
     }
   };
-  
+
   const handleDelete = async () => {
     try {
       setDeleting(true);
@@ -63,7 +63,7 @@ export function EnrollmentDetail() {
       setShowDeleteConfirm(false);
     }
   };
-  
+
   const handleBackToList = () => {
     if (isFromAdmin || isAdminUser) {
       navigate('/admin', { state: { tab: 'enrollments' } });
@@ -79,7 +79,7 @@ export function EnrollmentDetail() {
   const handleSelectSubjects = () => {
     navigate(`/subject-selection/${id}`);
   };
-  
+
   const getStatusConfig = (status) => {
     const configs = {
       draft: {
@@ -88,9 +88,9 @@ export function EnrollmentDetail() {
         label: 'Draft'
       },
       submitted: {
-        icon: AlertCircle,
-        color: 'bg-blue-100 text-blue-700 border-blue-300',
-        label: 'Submitted'
+        icon: Clock,
+        color: 'bg-amber-100 text-amber-800 border-amber-300',
+        label: 'Pending'
       },
       pending_exam: {
         icon: Clock,
@@ -107,6 +107,11 @@ export function EnrollmentDetail() {
         color: 'bg-emerald-100 text-emerald-700 border-emerald-300',
         label: 'Enrolled'
       },
+      completed: {
+        icon: CheckCircle,
+        color: 'bg-blue-100 text-blue-700 border-blue-300',
+        label: 'Completed'
+      },
       rejected: {
         icon: XCircle,
         color: 'bg-red-100 text-red-700 border-red-300',
@@ -115,7 +120,7 @@ export function EnrollmentDetail() {
     };
     return configs[status] || configs.draft;
   };
-  
+
   const calculateProgress = () => {
     if (!enrollment) return 0;
     const fields = [
@@ -134,23 +139,7 @@ export function EnrollmentDetail() {
   const getNextAction = () => {
     if (!enrollment) return null;
     const status = enrollment.status;
-    
-    if (status === 'approved') {
-      return {
-        label: 'View Dashboard',
-        action: handleGoToDashboard,
-        icon: BarChart3,
-        color: 'bg-green-600 hover:bg-green-700'
-      };
-    }
-    if (status === 'enrolled' || status === 'subjects_enrolled') {
-      return {
-        label: 'View Dashboard',
-        action: handleGoToDashboard,
-        icon: BarChart3,
-        color: 'bg-green-600 hover:bg-green-700'
-      };
-    }
+
     if (status === 'submitted' || status === 'pending_exam') {
       return {
         label: 'Waiting for Approval',
@@ -162,10 +151,10 @@ export function EnrollmentDetail() {
     }
     return null;
   };
-  
+
   if (loading) {
     return (
-      <div className="min-h-screen bg-linear-to-br from-[#FFFDF0] via-[#FFF9E6] to-[#FFFDF0] flex items-center justify-center">
+      <div className="min-h-[calc(100svh-4rem)] lg:min-h-[calc(100svh-5rem)] bg-linear-to-br from-[#FFFDF0] via-[#FFF9E6] to-[#FFFDF0] flex items-center justify-center">
         <div className="text-center">
           <div className="w-16 h-16 border-4 border-[#F5C400] border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
           <p className="text-gray-600">Loading enrollment...</p>
@@ -173,14 +162,14 @@ export function EnrollmentDetail() {
       </div>
     );
   }
-  
+
   if (!enrollment) {
     return null;
   }
-  
+
   // Determine which form to show based on education level
   const isHS = enrollment.educationLevel === 'JHS' || enrollment.educationLevel === 'SHS';
-  
+
   // If admin/registrar is viewing — show clean read-only summary, NOT the editable form
   if (isFromAdmin || isAdminUser) {
     const statusConfig = getStatusConfig(enrollment.status || 'draft');
@@ -201,7 +190,7 @@ export function EnrollmentDetail() {
     ) : null;
 
     return (
-      <div className="min-h-screen bg-linear-to-br from-[#FFFDF0] via-[#FFF9E6] to-[#FFFDF0] py-8">
+      <div className="min-h-[calc(100svh-4rem)] lg:min-h-[calc(100svh-5rem)] bg-linear-to-br from-[#FFFDF0] via-[#FFF9E6] to-[#FFFDF0] py-4 sm:py-8">
         <div className="max-w-4xl mx-auto px-4">
           {/* Action Bar */}
           <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-4 mb-6 flex flex-wrap items-center gap-3">
@@ -299,27 +288,27 @@ export function EnrollmentDetail() {
       </div>
     );
   }
-  
+
   const statusConfig = getStatusConfig(enrollment.status || 'draft');
   const StatusIcon = statusConfig.icon;
   const progress = calculateProgress();
   const nextAction = getNextAction();
-  
+
   return (
-    <div className="min-h-screen bg-linear-to-br from-[#FFFDF0] via-[#FFF9E6] to-[#FFFDF0] py-8">
+    <div className="min-h-[calc(100svh-4rem)] lg:min-h-[calc(100svh-5rem)] bg-linear-to-br from-[#FFFDF0] via-[#FFF9E6] to-[#FFFDF0] py-4 sm:py-8">
       {/* Action Bar - No Print */}
       <div className="max-w-6xl mx-auto mb-6 px-4 no-print">
         <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-4">
           <div className="flex flex-wrap items-center gap-3">
-            <button 
+            <button
               onClick={handleBackToList}
               className="px-4 py-2 border-2 border-gray-300 text-gray-700 bg-white rounded-lg hover:bg-gray-50 transition-all font-medium"
             >
               ← Back to List
             </button>
-            
+
             {!isFromAdmin && !isAdminUser && (
-              <button 
+              <button
                 onClick={() => {
                   navigate(`/hs-enrollment-form/${id}`, { state: { educationLevel: enrollment.educationLevel } });
                 }}
@@ -329,19 +318,19 @@ export function EnrollmentDetail() {
                 Edit
               </button>
             )}
-            
-            <button 
+
+            <button
               onClick={handleDownloadPDF}
               className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-all font-medium flex items-center gap-2"
             >
               <Download className="w-4 h-4" />
               Download PDF
             </button>
-            
+
             {!isFromAdmin && !isAdminUser && (
               <>
                 {nextAction && (
-                  <button 
+                  <button
                     onClick={nextAction.action}
                     disabled={nextAction.disabled}
                     className={`px-4 py-2 text-white rounded-lg transition-all font-medium flex items-center gap-2 ${nextAction.color} ${nextAction.disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
@@ -350,10 +339,10 @@ export function EnrollmentDetail() {
                     {nextAction.label}
                   </button>
                 )}
-                
-                {/* Only allow delete for statuses where it makes sense */}
-                {['draft', 'submitted', 'returned', 'rejected'].includes(enrollment.status) && (
-                  <button 
+
+                {/* Only allow delete before the enrollment is submitted (draft only) */}
+                {enrollment.status === 'draft' && (
+                  <button
                     onClick={() => setShowDeleteConfirm(true)}
                     className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-all font-medium flex items-center gap-2 ml-auto"
                   >
@@ -366,7 +355,7 @@ export function EnrollmentDetail() {
           </div>
         </div>
       </div>
-      
+
       {/* Main Content */}
       <div className="max-w-6xl mx-auto px-4">
         {/* Status Card - No Print */}
@@ -377,50 +366,52 @@ export function EnrollmentDetail() {
                 <StatusIcon className="w-5 h-5" />
                 <span className="font-semibold">{statusConfig.label}</span>
               </div>
-              
+
               <div>
                 <p className="text-sm text-gray-600">Enrollment ID</p>
                 <p className="font-semibold text-[#102A71]">#{enrollment.id}</p>
               </div>
-              
+
               <div>
                 <p className="text-sm text-gray-600">Level</p>
                 <p className="font-semibold">{enrollment.educationLevel}</p>
               </div>
-              
+
               <div>
                 <p className="text-sm text-gray-600">Created</p>
                 <p className="font-semibold">{new Date(enrollment.createdAt).toLocaleDateString()}</p>
               </div>
             </div>
-            
-            {/* Progress Indicator */}
-            <div className="w-full sm:w-auto">
-              <div className="flex items-center gap-3">
-                <div className="flex-1 sm:w-48">
-                  <div className="flex justify-between text-sm mb-1">
-                    <span className="text-gray-600">Completion</span>
-                    <span className="font-semibold text-[#102A71]">{progress}%</span>
-                  </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2">
-                    <div 
-                      className="bg-linear-to-r from-[#F5C400] to-[#FFDC5F] h-2 rounded-full transition-all duration-500"
-                      style={{ width: `${progress}%` }}
-                    ></div>
+
+            {/* Progress Indicator — hide when already enrolled */}
+            {!['enrolled', 'completed'].includes(enrollment.status) && (
+              <div className="w-full sm:w-auto">
+                <div className="flex items-center gap-3">
+                  <div className="flex-1 sm:w-48">
+                    <div className="flex justify-between text-sm mb-1">
+                      <span className="text-gray-600">Completion</span>
+                      <span className="font-semibold text-[#102A71]">{progress}%</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2">
+                      <div
+                        className="bg-linear-to-r from-[#F5C400] to-[#FFDC5F] h-2 rounded-full transition-all duration-500"
+                        style={{ width: `${progress}%` }}
+                      ></div>
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
+            )}
           </div>
         </div>
-        
+
         {/* Enrollment Details */}
         <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-8">
           <div className="flex items-center gap-3 mb-6">
             <FileText className="w-6 h-6 text-[#102A71]" />
             <h1 className="text-2xl font-bold text-[#001840]">Enrollment Details</h1>
           </div>
-          
+
           {/* Student Information */}
           <div className="mb-8">
             <h2 className="text-lg font-semibold text-[#102A71] mb-4 pb-2 border-b-2 border-[#F5C400]">
@@ -437,7 +428,7 @@ export function EnrollmentDetail() {
               <InfoField label="Mobile Number" value={enrollment.mobileNumber} />
             </div>
           </div>
-          
+
           {/* Enrollment Period */}
           <div className="mb-8">
             <h2 className="text-lg font-semibold text-[#102A71] mb-4 pb-2 border-b-2 border-[#F5C400]">
@@ -449,7 +440,7 @@ export function EnrollmentDetail() {
               <InfoField label="Date Enrolled" value={enrollment.dateEnrolled} />
             </div>
           </div>
-          
+
           {/* Education Level Information */}
           <div className="mb-8">
             <h2 className="text-lg font-semibold text-[#102A71] mb-4 pb-2 border-b-2 border-[#F5C400]">
@@ -469,34 +460,34 @@ export function EnrollmentDetail() {
                 Special Science Class (SSC) Status
               </h2>
               <div className="grid md:grid-cols-2 gap-4">
-                <InfoField 
-                  label="SSC Applied" 
-                  value={enrollment.sscApplied ? 'Yes' : 'No'} 
+                <InfoField
+                  label="SSC Applied"
+                  value={enrollment.sscApplied ? 'Yes' : 'No'}
                 />
                 {enrollment.sscApplied && (
                   <>
-                    <InfoField 
-                      label="SSC Qualified" 
-                      value={enrollment.sscQualified ? 'Yes' : 'No'} 
+                    <InfoField
+                      label="SSC Qualified"
+                      value={enrollment.sscQualified ? 'Yes' : 'No'}
                     />
-                    <InfoField 
-                      label="SSC Class" 
-                      value={enrollment.sscClass || '—'} 
+                    <InfoField
+                      label="SSC Class"
+                      value={enrollment.sscClass || '—'}
                     />
-                    <InfoField 
-                      label="SSC Result" 
-                      value={enrollment.sscResult || '—'} 
+                    <InfoField
+                      label="SSC Result"
+                      value={enrollment.sscResult || '—'}
                     />
                     {enrollment.sscExamDate && (
-                      <InfoField 
-                        label="Exam Date" 
-                        value={new Date(enrollment.sscExamDate).toLocaleDateString()} 
+                      <InfoField
+                        label="Exam Date"
+                        value={new Date(enrollment.sscExamDate).toLocaleDateString()}
                       />
                     )}
                     {enrollment.sscExamScore && (
-                      <InfoField 
-                        label="Exam Score" 
-                        value={`${enrollment.sscExamScore}/100`} 
+                      <InfoField
+                        label="Exam Score"
+                        value={`${enrollment.sscExamScore}/100`}
                       />
                     )}
                   </>
@@ -504,7 +495,7 @@ export function EnrollmentDetail() {
               </div>
             </div>
           )}
-          
+
           {/* Subjects */}
           {enrollment.subjects && enrollment.subjects.length > 0 && (
             <div className="mb-8">
@@ -537,7 +528,7 @@ export function EnrollmentDetail() {
               </div>
             </div>
           )}
-          
+
           {/* Footer */}
           <div className="mt-8 pt-6 border-t border-gray-200 text-center">
             <p className="text-sm text-gray-600">
@@ -548,7 +539,7 @@ export function EnrollmentDetail() {
           </div>
         </div>
       </div>
-      
+
       {/* Delete Confirmation Modal */}
       {showDeleteConfirm && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 no-print">

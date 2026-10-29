@@ -10,13 +10,15 @@ import { API } from '../../config/api';
 
 const getToken = () => localStorage.getItem('token');
 
-// 30-minute intervals from 7:30 AM to 5:30 PM (21 slot marks, 20 intervals)
+// 15-minute intervals from 7:30 AM to 5:30 PM (41 slot marks, 40 intervals)
 const TIME_SLOTS = [
-  "7:30 AM", "8:00 AM", "8:30 AM", "9:00 AM", "9:30 AM",
-  "10:00 AM", "10:30 AM", "11:00 AM", "11:30 AM", "12:00 PM",
-  "12:30 PM", "1:00 PM", "1:30 PM", "2:00 PM", "2:30 PM",
-  "3:00 PM", "3:30 PM", "4:00 PM", "4:30 PM", "5:00 PM",
-  "5:30 PM"
+  "7:30 AM", "7:45 AM", "8:00 AM", "8:15 AM", "8:30 AM", "8:45 AM",
+  "9:00 AM", "9:15 AM", "9:30 AM", "9:45 AM", "10:00 AM", "10:15 AM",
+  "10:30 AM", "10:45 AM", "11:00 AM", "11:15 AM", "11:30 AM", "11:45 AM",
+  "12:00 PM", "12:15 PM", "12:30 PM", "12:45 PM", "1:00 PM", "1:15 PM",
+  "1:30 PM", "1:45 PM", "2:00 PM", "2:15 PM", "2:30 PM", "2:45 PM",
+  "3:00 PM", "3:15 PM", "3:30 PM", "3:45 PM", "4:00 PM", "4:15 PM",
+  "4:30 PM", "4:45 PM", "5:00 PM", "5:15 PM", "5:30 PM"
 ];
 
 const DAYS_OF_WEEK = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
@@ -28,7 +30,7 @@ const DAY_HEADERS = [
   { full: "Friday", short: "Fri" }
 ];
 
-// Helper to convert time string to index in TIME_SLOTS
+// Helper to convert time string to index in TIME_SLOTS (15-min intervals)
 const timeToIndex = (timeStr) => {
   if (!timeStr) return -1;
   const clean = timeStr.trim().toUpperCase();
@@ -45,8 +47,8 @@ const timeToIndex = (timeStr) => {
   if (meridiem === 'AM' && hours === 12) hours = 0;
 
   const totalMin = hours * 60 + minutes;
-  const startMin = 7 * 60 + 30; // 7:30 AM
-  const slotIdx = Math.round((totalMin - startMin) / 30);
+  const startMin = 7 * 60 + 30; // 7:30 AM = 450 min
+  const slotIdx = Math.round((totalMin - startMin) / 15);
   return (slotIdx >= 0 && slotIdx < TIME_SLOTS.length) ? slotIdx : -1;
 };
 
@@ -54,7 +56,7 @@ export function MySchedule() {
   const [loading, setLoading] = useState(true);
   const [scheduleData, setScheduleData] = useState(null);
   const [selectedEnrollmentId, setSelectedEnrollmentId] = useState('');
-  const [viewMode, setViewMode] = useState('grid'); // 'grid' | 'list'
+  const [viewMode, setViewMode] = useState(() => window.matchMedia('(max-width: 639px)').matches ? 'list' : 'grid'); // Phone defaults to the readable agenda.
   const [selectedDayTab, setSelectedDayTab] = useState('Monday');
 
   // Preview schedules of another section if student has no section assigned yet
@@ -224,7 +226,7 @@ export function MySchedule() {
   }
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] py-6 px-4 sm:px-6 lg:px-8 print:p-0 print:m-0 print:bg-white print:min-h-0">
+    <div className="min-h-[calc(100svh-4rem)] bg-[#F8FAFC] py-4 sm:py-6 px-4 sm:px-6 lg:px-8 print:p-0 print:m-0 print:bg-white print:min-h-0">
       {/* ── Print Specific Styles ────────────────────────────────────────── */}
       <style>{`
         @media print {
@@ -291,7 +293,7 @@ export function MySchedule() {
 
       <div className="max-w-7xl mx-auto space-y-6 print:max-w-none print:m-0 print:space-y-0">
         {/* ── Top Header & Actions (Hidden on Print) ─────────────────────── */}
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 flex flex-col md:flex-row md:items-center justify-between gap-4 print:hidden">
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 sm:p-6 flex flex-col md:flex-row md:items-center justify-between gap-4 print:hidden">
           <div>
             <div className="flex items-center gap-2 mb-1">
               <span className="inline-flex items-center gap-1 text-xs font-bold uppercase tracking-wider text-[#102A71] bg-[#EEF2FF] px-2.5 py-0.5 rounded-full">
@@ -304,7 +306,7 @@ export function MySchedule() {
               )}
             </div>
             <h1 className="text-2xl font-black text-[#001840] tracking-tight">
-              My Class Schedule
+              Class Schedule
             </h1>
             <p className="text-xs text-gray-500 mt-0.5">
               Weekly timetable and classroom assignments for your enrolled section.
@@ -362,7 +364,7 @@ export function MySchedule() {
               title="Download Weekly Schedule as PDF"
             >
               <Download size={14} className="text-[#102A71]" />
-              <span className="hidden sm:inline">Download Schedule</span>
+              <span className="inline">Download Schedule</span>
             </button>
 
             {/* Refresh Button */}
@@ -494,7 +496,7 @@ export function MySchedule() {
                 to="/my-enrollments"
                 className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-[#001840] bg-[#FFFDF0] hover:bg-[#FFF9E6] border border-[#001840]/20 rounded-xl transition-colors"
               >
-                <BookOpen size={14} /> View My Enrollments
+                <BookOpen size={14} /> View Enrollments
               </Link>
             </div>
           </div>
@@ -548,37 +550,48 @@ export function MySchedule() {
                   <div
                     className="relative grid grid-cols-6 border-l border-r border-b border-gray-200 bg-white print:border print:border-gray-300 print-grid-body"
                     style={{
-                      gridTemplateRows: `repeat(${TIME_SLOTS.length - 1}, 42px)`
+                      gridTemplateRows: `repeat(${TIME_SLOTS.length - 1}, 34px)`
                     }}
                   >
                     {/* Time Labels (Column 1) */}
-                    {TIME_SLOTS.slice(0, -1).map((slot, rIdx) => (
-                      <div
-                        key={`time-${rIdx}`}
-                        style={{
-                          gridColumn: 1,
-                          gridRow: rIdx + 1
-                        }}
-                        className="border-b border-r border-gray-200 text-[11px] print:text-[9px] font-semibold text-gray-700 flex items-center justify-center bg-gray-50/60 print:bg-gray-50 select-none"
-                      >
-                        {slot}
-                      </div>
-                    ))}
+                    {TIME_SLOTS.slice(0, -1).map((slot, rIdx) => {
+                      const isHour = slot.endsWith(":00 AM") || slot.endsWith(":00 PM");
+                      const isHalfHour = slot.endsWith(":30 AM") || slot.endsWith(":30 PM");
+                      const isMajor = isHour || isHalfHour;
+                      return (
+                        <div
+                          key={`time-${rIdx}`}
+                          style={{
+                            gridColumn: 1,
+                            gridRow: rIdx + 1
+                          }}
+                          className={`border-r flex items-center justify-center select-none ${isMajor
+                            ? "border-b border-gray-200 bg-gray-100/90 font-bold text-gray-800 text-[11px] print:text-[8.5px] print:bg-gray-100"
+                            : "border-b border-gray-100 bg-gray-50/50 font-medium text-gray-400 text-[9.5px] print:text-[7.5px] print:bg-white"
+                            }`}
+                        >
+                          {slot}
+                        </div>
+                      );
+                    })}
 
                     {/* Empty cell backgrounds */}
                     {DAYS_OF_WEEK.map((day, dIdx) => {
                       const isToday = day === currentDayName;
-                      return TIME_SLOTS.slice(0, -1).map((_, rIdx) => (
-                        <div
-                          key={`cell-${dIdx}-${rIdx}`}
-                          style={{
-                            gridColumn: dIdx + 2,
-                            gridRow: rIdx + 1
-                          }}
-                          className={`border-b border-r border-gray-100/90 print:border-gray-200 transition-colors ${isToday ? 'bg-blue-50/15 print:bg-white' : 'hover:bg-gray-50/40 print:bg-white'
-                            }`}
-                        />
-                      ));
+                      return TIME_SLOTS.slice(0, -1).map((slot, rIdx) => {
+                        const isMajor = slot.endsWith(":00 AM") || slot.endsWith(":00 PM") || slot.endsWith(":30 AM") || slot.endsWith(":30 PM");
+                        return (
+                          <div
+                            key={`cell-${dIdx}-${rIdx}`}
+                            style={{
+                              gridColumn: dIdx + 2,
+                              gridRow: rIdx + 1
+                            }}
+                            className={`border-r border-gray-100/90 print:border-gray-200 transition-colors ${isMajor ? "border-b border-gray-200/90" : "border-b border-dashed border-gray-100"
+                              } ${isToday ? 'bg-blue-50/15 print:bg-white' : 'hover:bg-gray-50/40 print:bg-white'}`}
+                          />
+                        );
+                      });
                     })}
 
                     {/* Scheduled Class Cards (Mint Green Design) */}
@@ -590,9 +603,18 @@ export function MySchedule() {
                       const endIdx = timeToIndex(item.endTime);
                       if (startIdx === -1 || endIdx === -1 || startIdx >= endIdx) return null;
 
+                      const span = endIdx - startIdx;
                       const colStart = dayIdx + 2;
                       const rowStart = startIdx + 1;
                       const rowEnd = endIdx + 1;
+
+                      const isBreakItem = item.subjectCode === 'BREAK' ||
+                        item.subjectCode === 'HEALTH-BREAK' ||
+                        item.subjectCode === 'LUNCH-BREAK' ||
+                        item.teacherName === 'No Teacher' ||
+                        item.teacherName === '—' ||
+                        (item.subjectName && (item.subjectName.toLowerCase().includes('break') || item.subjectName.toLowerCase().includes('recess')));
+                      const isLunch = item.subjectCode === 'LUNCH-BREAK' || (item.subjectName && item.subjectName.toLowerCase().includes('lunch'));
 
                       return (
                         <div
@@ -602,29 +624,64 @@ export function MySchedule() {
                             gridRow: `${rowStart} / ${rowEnd}`,
                             zIndex: 10
                           }}
-                          className="p-1 print:p-0.5"
+                          className="p-0.5 print:p-0.5"
                         >
-                          <div className="h-full w-full rounded-lg p-2 print:p-1 text-center flex flex-col justify-center items-center shadow-xs transition-all relative overflow-hidden bg-[#dcfce7] hover:bg-[#bbf7d0] border border-[#86efac] print:rounded print:border-[#86efac] print:bg-[#dcfce7]">
-                            {/* Subject Name */}
-                            <p className="font-bold text-xs print:text-[10px] leading-tight truncate w-full px-1 text-gray-900">
-                              {item.subjectName}
-                            </p>
-
-                            {/* Time range */}
-                            <p className="text-[10px] print:text-[8.5px] font-semibold text-emerald-800 leading-tight truncate w-full mt-0.5 px-0.5">
-                              {item.startTime} – {item.endTime}
-                            </p>
-
-                            {/* Teacher Name */}
-                            <p className="text-[10px] print:text-[8.5px] text-gray-700 leading-tight truncate w-full mt-0.5 px-0.5">
-                              {item.teacherName}
-                            </p>
-
-                            {/* Room (if available) */}
-                            {item.room && (
-                              <p className="text-[9px] print:text-[8px] font-medium text-emerald-900 bg-white/70 px-1.5 py-0.2 rounded-full mt-0.5 max-w-[95%] truncate">
-                                Room: {item.room}
-                              </p>
+                          <div className={`h-full w-full rounded-lg text-center flex flex-col justify-center items-center shadow-xs transition-all relative overflow-hidden ${span === 1 ? "p-1 px-2" : "p-2 print:p-1"
+                            } ${isBreakItem
+                              ? isLunch
+                                ? 'bg-[#ffedd5] hover:bg-[#fed7aa] border border-[#f97316]/50 print:bg-[#ffedd5]'
+                                : 'bg-[#fef3c7] hover:bg-[#fde68a] border border-[#f59e0b]/50 print:bg-[#fef3c7]'
+                              : 'bg-[#dcfce7] hover:bg-[#bbf7d0] border border-[#86efac] print:rounded print:border-[#86efac] print:bg-[#dcfce7]'
+                            }`}>
+                            {span === 1 ? (
+                              /* 15-min compact row */
+                              <div className="w-full h-full flex items-center justify-between gap-1.5 px-1 min-w-0">
+                                <span className={`font-bold text-xs print:text-[9.5px] truncate ${isBreakItem ? (isLunch ? 'text-orange-950 font-black' : 'text-amber-950 font-black') : 'text-gray-900'
+                                  }`}>
+                                  {item.subjectName}
+                                </span>
+                                <span className={`text-[10px] print:text-[8px] font-bold shrink-0 ${isBreakItem ? (isLunch ? 'text-orange-900' : 'text-amber-900') : 'text-emerald-800'
+                                  }`}>
+                                  {item.startTime}–{item.endTime}
+                                </span>
+                              </div>
+                            ) : isBreakItem ? (
+                              /* Break Card 30+ mins */
+                              <div className="flex flex-col items-center justify-center gap-0.5 w-full px-1">
+                                <p className={`font-black text-xs print:text-[10px] leading-tight truncate w-full ${isLunch ? 'text-orange-950' : 'text-amber-950'
+                                  }`}>
+                                  {item.subjectName}
+                                </p>
+                                <p className={`text-[10.5px] print:text-[8.5px] font-bold leading-tight mt-0.5 ${isLunch ? 'text-orange-900' : 'text-amber-900'
+                                  }`}>
+                                  {item.startTime} – {item.endTime}
+                                </p>
+                                {item.room && (
+                                  <p className="text-[9px] print:text-[8px] font-medium text-gray-700 bg-white/70 px-1.5 py-0.2 rounded-full mt-0.5 max-w-[95%] truncate">
+                                    Room: {item.room}
+                                  </p>
+                                )}
+                              </div>
+                            ) : (
+                              /* Academic class 30+ mins */
+                              <>
+                                <p className="font-bold text-xs print:text-[10px] leading-tight truncate w-full px-1 text-gray-900">
+                                  {item.subjectName}
+                                </p>
+                                <p className="text-[10px] print:text-[8.5px] font-semibold leading-tight truncate w-full mt-0.5 px-0.5 text-emerald-800">
+                                  {item.startTime} – {item.endTime}
+                                </p>
+                                {item.teacherName && (
+                                  <p className="text-[10px] print:text-[8.5px] text-gray-700 leading-tight truncate w-full mt-0.5 px-0.5">
+                                    {item.teacherName}
+                                  </p>
+                                )}
+                                {span >= 3 && item.room && (
+                                  <p className="text-[9px] print:text-[8px] font-medium text-gray-700 bg-white/70 px-1.5 py-0.2 rounded-full mt-0.5 max-w-[95%] truncate">
+                                    Room: {item.room}
+                                  </p>
+                                )}
+                              </>
                             )}
                           </div>
                         </div>
@@ -708,10 +765,17 @@ export function MySchedule() {
                               </span>
                             )}
                           </div>
-                          <p className="text-xs text-gray-600 flex items-center gap-1.5">
-                            <User size={13} className="text-gray-400" />
-                            <span>Teacher: <strong className="text-gray-800 font-semibold">{item.teacherName}</strong></span>
-                          </p>
+                          {item.teacherName && item.teacherName !== 'No Teacher' && item.teacherName !== '—' ? (
+                            <p className="text-xs text-gray-600 flex items-center gap-1.5">
+                              <User size={13} className="text-gray-400" />
+                              <span>Teacher: <strong className="text-gray-800 font-semibold">{item.teacherName}</strong></span>
+                            </p>
+                          ) : (
+                            <p className="text-xs text-amber-700 flex items-center gap-1.5 font-medium">
+                              <span className="w-2 h-2 rounded-full bg-amber-500 inline-block"></span>
+                              <span>Wellness Break • No Teacher Assigned</span>
+                            </p>
+                          )}
                         </div>
                       </div>
 
@@ -749,7 +813,48 @@ export function MySchedule() {
                 </span>
               </div>
 
-              <div className="overflow-x-auto">
+              {/* Mobile Card View (block md:hidden) */}
+              <div className="block md:hidden divide-y divide-gray-100">
+                {displaySchedules.map((item) => (
+                  <div key={item.id} className="py-3.5 space-y-2.5">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <h4 className="font-bold text-sm text-gray-900 leading-snug">
+                          {item.subjectName}
+                        </h4>
+                        {item.subjectCode && (
+                          <span className="font-mono text-[11px] font-semibold text-[#102A71] bg-[#EEF2FF] border border-[#102A71]/20 px-2 py-0.5 rounded mt-1 inline-block">
+                            {item.subjectCode}
+                          </span>
+                        )}
+                      </div>
+                      <span className="px-2.5 py-1 bg-amber-50 text-amber-800 border border-amber-200/70 rounded-lg text-xs font-bold shrink-0">
+                        {item.dayOfWeek}
+                      </span>
+                    </div>
+
+                    <div className="pt-2 border-t border-gray-100 flex flex-col gap-1.5 text-xs text-gray-600">
+                      <div className="flex items-center gap-1.5 font-semibold text-[#102A71]">
+                        <Clock size={13} className="text-[#102A71] shrink-0" />
+                        <span>{item.startTime} – {item.endTime}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <User size={13} className="text-gray-400 shrink-0" />
+                        <span className="text-gray-500">Instructor:</span>
+                        <span className="font-medium text-gray-800 truncate">{item.teacherName}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <MapPin size={13} className="text-gray-400 shrink-0" />
+                        <span className="text-gray-500">Room:</span>
+                        <span className="font-medium text-gray-800 truncate">{item.room || 'TBA'}</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Desktop Table View (hidden md:block) */}
+              <div className="hidden md:block overflow-x-auto">
                 <table className="w-full text-left text-xs">
                   <thead>
                     <tr className="border-b border-gray-200 text-gray-500 font-bold uppercase tracking-wider text-[10px]">
@@ -792,7 +897,7 @@ export function MySchedule() {
       {/* ── Download Confirmation Modal ───────────────────────────────── */}
       {showDownloadModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
-          <div className="bg-white rounded-3xl border border-gray-100 shadow-2xl max-w-md w-full p-6 sm:p-7 space-y-5 animate-in zoom-in-95 duration-200 relative overflow-hidden">
+          <div className="bg-white rounded-3xl border border-gray-100 shadow-2xl max-w-md w-full p-6 sm:p-7 space-y-5 animate-in zoom-in-95 duration-200 relative max-h-[calc(100dvh-2rem)] overflow-y-auto">
             {/* Top decorative accent */}
             <div className="absolute top-0 left-0 right-0 h-1.5 bg-linear-to-r from-[#001840] via-[#102A71] to-[#F5C400]" />
 

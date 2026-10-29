@@ -1,7 +1,7 @@
 import { Navigate } from "react-router";
 import { useAuth } from "../contexts/AuthContext";
 
-export function ProtectedRoute({ children, requireAdmin = false }) {
+export function ProtectedRoute({ children, requireAdmin = false, allowIncompleteProfile = false }) {
   const { user, isLoggedIn, loading } = useAuth();
 
   if (loading) {
@@ -21,6 +21,10 @@ export function ProtectedRoute({ children, requireAdmin = false }) {
 
   if (requireAdmin && user?.role !== "admin") {
     return <Navigate to="/" replace />;
+  }
+
+  if (user?.profileCompleted === false && !allowIncompleteProfile) {
+    return <Navigate to="/complete-profile" replace />;
   }
 
   return children;

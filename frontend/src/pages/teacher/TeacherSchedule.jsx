@@ -27,12 +27,15 @@ const tok = () => ({
   "Content-Type": "application/json"
 });
 
+// 15-minute intervals from 7:30 AM to 5:30 PM (41 slot marks, 40 intervals)
 const TIME_SLOTS = [
-  "7:30 AM", "8:00 AM", "8:30 AM", "9:00 AM", "9:30 AM",
-  "10:00 AM", "10:30 AM", "11:00 AM", "11:30 AM", "12:00 PM",
-  "12:30 PM", "1:00 PM", "1:30 PM", "2:00 PM", "2:30 PM",
-  "3:00 PM", "3:30 PM", "4:00 PM", "4:30 PM", "5:00 PM",
-  "5:30 PM"
+  "7:30 AM", "7:45 AM", "8:00 AM", "8:15 AM", "8:30 AM", "8:45 AM",
+  "9:00 AM", "9:15 AM", "9:30 AM", "9:45 AM", "10:00 AM", "10:15 AM",
+  "10:30 AM", "10:45 AM", "11:00 AM", "11:15 AM", "11:30 AM", "11:45 AM",
+  "12:00 PM", "12:15 PM", "12:30 PM", "12:45 PM", "1:00 PM", "1:15 PM",
+  "1:30 PM", "1:45 PM", "2:00 PM", "2:15 PM", "2:30 PM", "2:45 PM",
+  "3:00 PM", "3:15 PM", "3:30 PM", "3:45 PM", "4:00 PM", "4:15 PM",
+  "4:30 PM", "4:45 PM", "5:00 PM", "5:15 PM", "5:30 PM"
 ];
 
 const DAYS_OF_WEEK = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
@@ -52,12 +55,12 @@ const parseTimeToMinutes = (timeStr) => {
   return hours * 60 + minutes;
 };
 
-// Map time string to 30-min slot index (0 = 7:30 AM)
+// Map time string to 15-min slot index (0 = 7:30 AM)
 const timeToSlotIndex = (timeStr) => {
   const min = parseTimeToMinutes(timeStr);
   if (min === null) return -1;
   const startMin = 7 * 60 + 30; // 7:30 AM = 450 min
-  const slotIdx = Math.round((min - startMin) / 30);
+  const slotIdx = Math.round((min - startMin) / 15);
   return slotIdx >= 0 && slotIdx < TIME_SLOTS.length ? slotIdx : -1;
 };
 
@@ -444,16 +447,21 @@ export function TeacherSchedule() {
                   <div className="relative grid grid-cols-[80px_repeat(5,1fr)]">
                     {/* Time Column (Left) */}
                     <div className="divide-y divide-gray-100 border-r border-gray-200 bg-gray-50/50">
-                      {TIME_SLOTS.slice(0, -1).map((slot, i) => (
-                        <div
-                          key={slot}
-                          className={`h-11 px-2 flex items-center justify-center text-[11px] font-semibold text-gray-500 ${
-                            i % 2 === 0 ? "bg-gray-50/80" : ""
-                          }`}
-                        >
-                          {slot}
-                        </div>
-                      ))}
+                      {TIME_SLOTS.slice(0, -1).map((slot) => {
+                        const isMajor = slot.endsWith(":00 AM") || slot.endsWith(":00 PM") || slot.endsWith(":30 AM") || slot.endsWith(":30 PM");
+                        return (
+                          <div
+                            key={slot}
+                            className={`h-[34px] px-1 flex items-center justify-center select-none ${
+                              isMajor
+                                ? "bg-gray-100/90 font-bold text-gray-800 text-[10.5px]"
+                                : "font-medium text-gray-400 text-[9px]"
+                            }`}
+                          >
+                            {slot}
+                          </div>
+                        );
+                      })}
                     </div>
 
                     {/* Day Columns */}
@@ -468,19 +476,24 @@ export function TeacherSchedule() {
                             isToday ? "bg-amber-50/20" : "bg-white"
                           }`}
                         >
-                          {/* 20 slot background cells (30 mins each = 44px height) */}
-                          {TIME_SLOTS.slice(0, -1).map((_, i) => (
-                            <div
-                              key={i}
-                              className={`h-11 ${
-                                i % 2 === 0
-                                  ? isToday
-                                    ? "bg-amber-50/30"
-                                    : "bg-gray-50/30"
-                                  : ""
-                              }`}
-                            />
-                          ))}
+                          {/* 40 slot background cells (15 mins each = 34px height) */}
+                          {TIME_SLOTS.slice(0, -1).map((slot, i) => {
+                            const isMajor = slot.endsWith(":00 AM") || slot.endsWith(":00 PM") || slot.endsWith(":30 AM") || slot.endsWith(":30 PM");
+                            return (
+                              <div
+                                key={i}
+                                className={`h-[34px] ${
+                                  isMajor
+                                    ? isToday
+                                      ? "bg-amber-50/35 border-b border-gray-200/90"
+                                      : "bg-gray-50/35 border-b border-gray-200/90"
+                                    : isToday
+                                      ? "bg-amber-50/15"
+                                      : ""
+                                }`}
+                              />
+                            );
+                          })}
 
                           {/* Render class blocks for this day */}
                           {dayClasses.map((item) => {
@@ -491,8 +504,8 @@ export function TeacherSchedule() {
                               return null;
                             }
 
-                            const topPx = startIdx * 44 + 2;
-                            const heightPx = (endIdx - startIdx) * 44 - 4;
+                            const topPx = startIdx * 34 + 2;
+                            const heightPx = (endIdx - startIdx) * 34 - 4;
                             const colors = getSubjectColor(item.subjectName);
 
                             return (

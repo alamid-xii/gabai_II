@@ -8,18 +8,16 @@ function computeFinalAndRemarks(q1, q2, q3, q4) {
   const quarters = terms.map(v => (v !== null && v !== undefined && v !== '' ? parseFloat(v) : null));
   const entered = quarters.filter(v => v !== null);
 
-  if (entered.length === 0) return { finalGrade: null, remarks: 'Incomplete' };
-
-  const avg = entered.reduce((sum, v) => sum + v, 0) / entered.length;
-  const finalGrade = Math.round(avg * 100) / 100;
-
   const totalRequired = isFourTerms ? 4 : 3;
-  let remarks;
+
+  // Final grade is ONLY calculated and displayed once ALL 3 trimesters have complete grades
   if (entered.length < totalRequired) {
-    remarks = 'Incomplete';
-  } else {
-    remarks = finalGrade >= 75 ? 'Passed' : 'Failed';
+    return { finalGrade: null, remarks: 'Incomplete' };
   }
+
+  const avg = entered.reduce((sum, v) => sum + v, 0) / totalRequired;
+  const finalGrade = Math.round(avg * 100) / 100;
+  const remarks = finalGrade >= 75 ? 'Passed' : 'Failed';
 
   return { finalGrade, remarks };
 }
@@ -138,7 +136,7 @@ export const getTeacherClasses = async (req, res) => {
     const teacherName = req.user.name;
 
     const [classes] = await sequelize.query(`
-      SELECT DISTINCT
+      SELECT
         es.subjectCode,
         es.subjectDescription,
         es.sectionId,
@@ -151,12 +149,22 @@ export const getTeacherClasses = async (req, res) => {
         COUNT(es.id) AS studentCount
       FROM enrollment_subjects es
       LEFT JOIN sections s ON es.sectionId = s.id
-      WHERE (es.teacherId = ? OR es.instructor = ? OR s.teacherId = ? OR s.instructor = ?)
+      WHERE (es.teacherId = ? OR es.instructor = ? OR s.teacherId = ? OR s.instructor = ?
+             OR EXISTS (SELECT 1 FROM class_schedules cs WHERE cs.sectionId = es.sectionId AND cs.subjectCode = es.subjectCode AND (cs.teacherId = ? OR cs.teacherName = ?)))
         AND es.status = 'enrolled'
         AND (s.isActive = 1 OR s.isActive IS NULL)
-      GROUP BY es.subjectCode, es.sectionId
+      GROUP BY 
+        es.subjectCode,
+        es.subjectDescription,
+        es.sectionId,
+        es.sectionName,
+        s.course,
+        s.yearLevel,
+        s.strand,
+        s.schoolYear,
+        s.semester
       ORDER BY s.yearLevel ASC, es.subjectCode ASC, es.sectionName ASC
-    `, { replacements: [teacherId, teacherName, teacherId, teacherName] });
+    `, { replacements: [teacherId, teacherName, teacherId, teacherName, teacherId, teacherName] });
 
     res.json(classes || []);
   } catch (err) {
@@ -183,9 +191,10 @@ export const getGradeSheet = async (req, res) => {
     const [[check]] = await sequelize.query(
       `SELECT es.id FROM enrollment_subjects es
        LEFT JOIN sections s ON es.sectionId = s.id
-       WHERE (es.teacherId = ? OR es.instructor = ? OR s.teacherId = ? OR s.instructor = ?)
+       WHERE (es.teacherId = ? OR es.instructor = ? OR s.teacherId = ? OR s.instructor = ?
+              OR EXISTS (SELECT 1 FROM class_schedules cs WHERE cs.sectionId = es.sectionId AND cs.subjectCode = es.subjectCode AND (cs.teacherId = ? OR cs.teacherName = ?)))
          AND es.sectionId = ? AND es.subjectCode = ? LIMIT 1`,
-      { replacements: [teacherId, teacherName, teacherId, teacherName, sectionId, subjectCode] }
+      { replacements: [teacherId, teacherName, teacherId, teacherName, teacherId, teacherName, sectionId, subjectCode] }
     );
     if (!check) {
       return res.status(403).json({ error: 'You are not assigned to this subject in this section' });
@@ -226,10 +235,19 @@ export const getGradeSheet = async (req, res) => {
       { replacements: [activeSchoolYear || ''] }
     );
 
+    const processedStudents = (students || []).map(s => {
+      const isComplete = s.q1 != null && s.q1 !== '' && s.q2 != null && s.q2 !== '' && s.q3 != null && s.q3 !== '';
+      return {
+        ...s,
+        finalGrade: isComplete ? s.finalGrade : null,
+        remarks: isComplete ? s.remarks : 'Incomplete'
+      };
+    });
+
     res.json({
       section: section || null,
       subjectCode,
-      students: students || [],
+      students: processedStudents,
       gradingPeriods: periods || []
     });
   } catch (err) {
@@ -268,8 +286,9 @@ export const saveGrade = async (req, res) => {
     const [[es]] = await sequelize.query(
       `SELECT es.* FROM enrollment_subjects es
        LEFT JOIN sections s ON es.sectionId = s.id
-       WHERE es.id = ? AND (es.teacherId = ? OR es.instructor = ? OR s.teacherId = ? OR s.instructor = ?)`,
-      { replacements: [enrollmentSubjectId, teacherId, teacherName, teacherId, teacherName] }
+       WHERE es.id = ? AND (es.teacherId = ? OR es.instructor = ? OR s.teacherId = ? OR s.instructor = ?
+              OR EXISTS (SELECT 1 FROM class_schedules cs WHERE cs.sectionId = es.sectionId AND cs.subjectCode = es.subjectCode AND (cs.teacherId = ? OR cs.teacherName = ?)))`,
+      { replacements: [enrollmentSubjectId, teacherId, teacherName, teacherId, teacherName, teacherId, teacherName] }
     );
     if (!es) return res.status(403).json({ error: 'You are not authorized to grade this student for this subject' });
 
@@ -362,23 +381,52 @@ export const getStudentGrades = async (req, res) => {
       ORDER BY es.subjectCode ASC
     `, { replacements: [enrollmentId] });
 
-    // Summary stats
-    const passed = grades.filter(g => g.remarks === 'Passed').length;
-    const failed = grades.filter(g => g.remarks === 'Failed').length;
-    const incomplete = grades.filter(g => !g.remarks || g.remarks === 'Incomplete').length;
-    const gwa = grades.filter(g => g.finalGrade !== null).length > 0
-      ? grades.filter(g => g.finalGrade !== null).reduce((sum, g) => sum + parseFloat(g.finalGrade), 0)
-        / grades.filter(g => g.finalGrade !== null).length
+    // Ensure finalGrade and remarks are only finalized if all 3 trimesters are complete
+    const processedGrades = (grades || []).map(g => {
+      const isFourTerms = g.q4 !== null && g.q4 !== undefined && g.q4 !== '';
+      const isComplete = isFourTerms
+        ? (g.q1 != null && g.q1 !== '' && g.q2 != null && g.q2 !== '' && g.q3 != null && g.q3 !== '' && g.q4 != null && g.q4 !== '')
+        : (g.q1 != null && g.q1 !== '' && g.q2 != null && g.q2 !== '' && g.q3 != null && g.q3 !== '');
+      return {
+        ...g,
+        finalGrade: isComplete ? g.finalGrade : null,
+        remarks: isComplete ? g.remarks : 'Incomplete'
+      };
+    });
+
+    // Summary stats based on complete grades
+    const passed = processedGrades.filter(g => g.remarks === 'Passed').length;
+    const failed = processedGrades.filter(g => g.remarks === 'Failed').length;
+    const incomplete = processedGrades.filter(g => !g.remarks || g.remarks === 'Incomplete').length;
+    const completedGrades = processedGrades.filter(g => g.finalGrade !== null);
+    const gwa = completedGrades.length > 0
+      ? completedGrades.reduce((sum, g) => sum + parseFloat(g.finalGrade), 0) / completedGrades.length
       : null;
 
+    // Students only see whole numbers (rounded); decimals are preserved for teachers & registrar/admin
+    const isStudent = !isStaff || req.user.role === 'student';
+    const roundVal = (v) => (v !== null && v !== undefined && v !== '' ? Math.round(parseFloat(v)) : null);
+
+    const formattedGrades = processedGrades.map(g => {
+      if (!isStudent) return g;
+      return {
+        ...g,
+        q1: roundVal(g.q1),
+        q2: roundVal(g.q2),
+        q3: roundVal(g.q3),
+        q4: roundVal(g.q4),
+        finalGrade: g.finalGrade !== null ? Math.round(parseFloat(g.finalGrade)) : null,
+      };
+    });
+
     res.json({
-      grades,
+      grades: formattedGrades,
       summary: {
-        total: grades.length,
+        total: processedGrades.length,
         passed,
         failed,
         incomplete,
-        gwa: gwa !== null ? Math.round(gwa * 100) / 100 : null
+        gwa: gwa !== null ? (isStudent ? Math.round(gwa) : Math.round(gwa * 100) / 100) : null
       }
     });
   } catch (err) {
@@ -421,7 +469,16 @@ export const getSectionGrades = async (req, res) => {
       ORDER BY er.familyName ASC, er.firstName ASC, es.subjectCode ASC
     `, { replacements: [sectionId] });
 
-    res.json({ section, grades: rows || [] });
+    const processedRows = (rows || []).map(r => {
+      const isComplete = r.q1 != null && r.q1 !== '' && r.q2 != null && r.q2 !== '' && r.q3 != null && r.q3 !== '';
+      return {
+        ...r,
+        finalGrade: isComplete ? r.finalGrade : null,
+        remarks: isComplete ? r.remarks : 'Incomplete'
+      };
+    });
+
+    res.json({ section, grades: processedRows });
   } catch (err) {
     console.error('getSectionGrades error:', err);
     res.status(500).json({ error: 'Failed to fetch section grades' });

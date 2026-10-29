@@ -2,12 +2,15 @@ import PDFDocument from 'pdfkit';
 import path from 'path';
 import fs from 'fs';
 
+// 15-minute intervals from 7:30 AM to 5:30 PM (41 slot marks, 40 intervals)
 const TIME_SLOTS = [
-  "7:30 AM", "8:00 AM", "8:30 AM", "9:00 AM", "9:30 AM",
-  "10:00 AM", "10:30 AM", "11:00 AM", "11:30 AM", "12:00 PM",
-  "12:30 PM", "1:00 PM", "1:30 PM", "2:00 PM", "2:30 PM",
-  "3:00 PM", "3:30 PM", "4:00 PM", "4:30 PM", "5:00 PM",
-  "5:30 PM"
+  "7:30 AM", "7:45 AM", "8:00 AM", "8:15 AM", "8:30 AM", "8:45 AM",
+  "9:00 AM", "9:15 AM", "9:30 AM", "9:45 AM", "10:00 AM", "10:15 AM",
+  "10:30 AM", "10:45 AM", "11:00 AM", "11:15 AM", "11:30 AM", "11:45 AM",
+  "12:00 PM", "12:15 PM", "12:30 PM", "12:45 PM", "1:00 PM", "1:15 PM",
+  "1:30 PM", "1:45 PM", "2:00 PM", "2:15 PM", "2:30 PM", "2:45 PM",
+  "3:00 PM", "3:15 PM", "3:30 PM", "3:45 PM", "4:00 PM", "4:15 PM",
+  "4:30 PM", "4:45 PM", "5:00 PM", "5:15 PM", "5:30 PM"
 ];
 
 const DAYS_OF_WEEK = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
@@ -30,7 +33,7 @@ const timeToIndex = (timeStr) => {
   const min = parseTimeToMinutes(timeStr);
   if (min === null) return -1;
   const startMin = 7 * 60 + 30; // 7:30 AM = 450 min
-  const slotIdx = Math.round((min - startMin) / 30);
+  const slotIdx = Math.round((min - startMin) / 15);
   return (slotIdx >= 0 && slotIdx < TIME_SLOTS.length) ? slotIdx : -1;
 };
 
@@ -131,8 +134,8 @@ export const generateStudentSchedulePDF = ({ student, section, schedules, advise
       const TIME_COL_W = 58;
       const DAY_COL_W = (USABLE_W - TIME_COL_W) / 5; // (744 - 58) / 5 = 137.2 pt
       const HEADER_H = 17;
-      const NUM_ROWS = 20; // 20 intervals from 7:30 AM to 5:30 PM
-      const ROW_H = 22.5;  // 20 * 22.5 = 450 pt. Grid total height = 467 pt
+      const NUM_ROWS = 40; // 40 intervals from 7:30 AM to 5:30 PM (15 mins each)
+      const ROW_H = 11.25; // 40 * 11.25 = 450 pt. Grid total height = 467 pt
       const GRID_H = HEADER_H + NUM_ROWS * ROW_H; // 467 pt
 
       // Draw Header Background
@@ -151,15 +154,21 @@ export const generateStudentSchedulePDF = ({ student, section, schedules, advise
       // Horizontal Lines & Time Labels
       for (let r = 0; r <= NUM_ROWS; r++) {
         const currentY = gridTopY + HEADER_H + r * ROW_H;
+        const isMajor = r % 2 === 0;
         
         // Horizontal line
-        doc.strokeColor('#E2E8F0').lineWidth(0.5)
+        doc.strokeColor(isMajor ? '#CBD5E1' : '#F1F5F9').lineWidth(isMajor ? 0.5 : 0.3)
           .moveTo(LEFT, currentY).lineTo(RIGHT, currentY).stroke();
 
         // Time slot label
         if (r < NUM_ROWS) {
-          doc.font('Helvetica').fontSize(6.8).fillColor('#64748B')
-            .text(TIME_SLOTS[r], LEFT, currentY + 6.5, { width: TIME_COL_W, align: 'center', lineBreak: false });
+          if (isMajor) {
+            doc.font('Helvetica-Bold').fontSize(5.8).fillColor('#334155')
+              .text(TIME_SLOTS[r], LEFT, currentY + 2.5, { width: TIME_COL_W, align: 'center', lineBreak: false });
+          } else {
+            doc.font('Helvetica').fontSize(4.8).fillColor('#94A3B8')
+              .text(TIME_SLOTS[r], LEFT, currentY + 3, { width: TIME_COL_W, align: 'center', lineBreak: false });
+          }
         }
       }
 
@@ -192,19 +201,31 @@ export const generateStudentSchedulePDF = ({ student, section, schedules, advise
           const cardW = DAY_COL_W - 3;
           const cardH = (endIdx - startIdx) * ROW_H - 3;
 
-          // Background Fill: soft mint green (#DCFCE7)
-          doc.roundedRect(cardX, cardY, cardW, cardH, 3)
-            .fillColor('#DCFCE7').fill();
+          const isItemBreak = item.subjectCode === 'BREAK' ||
+            item.subjectCode === 'HEALTH-BREAK' ||
+            item.subjectCode === 'LUNCH-BREAK' ||
+            (item.subjectName && (item.subjectName.toLowerCase().includes('break') || item.subjectName.toLowerCase().includes('recess'))) ||
+            item.teacherName === 'No Teacher';
 
-          // Border: green (#86EFAC)
+          const isLunch = item.subjectCode === 'LUNCH-BREAK' || (item.subjectName && item.subjectName.toLowerCase().includes('lunch'));
+          const fillColor = isItemBreak ? (isLunch ? '#FFEDD5' : '#FEF3C7') : '#DCFCE7';
+          const strokeColor = isItemBreak ? (isLunch ? '#FED7AA' : '#FDE68A') : '#86EFAC';
+          const titleColor = isItemBreak ? (isLunch ? '#7C2D12' : '#78350F') : '#0F172A';
+          const timeColor = isItemBreak ? (isLunch ? '#9A3412' : '#92400E') : '#065F46';
+
+          // Background Fill
           doc.roundedRect(cardX, cardY, cardW, cardH, 3)
-            .strokeColor('#86EFAC').lineWidth(0.75).stroke();
+            .fillColor(fillColor).fill();
+
+          // Border
+          doc.roundedRect(cardX, cardY, cardW, cardH, 3)
+            .strokeColor(strokeColor).lineWidth(0.75).stroke();
 
           // Text inside card
           let textY = cardY + 3;
           
           // 1. Subject Name (Bold)
-          doc.font('Helvetica-Bold').fontSize(7.5).fillColor('#0F172A')
+          doc.font('Helvetica-Bold').fontSize(7.5).fillColor(titleColor)
             .text(item.subjectName || '', cardX + 3, textY, {
               width: cardW - 6,
               align: 'center',
@@ -214,8 +235,8 @@ export const generateStudentSchedulePDF = ({ student, section, schedules, advise
           textY += 10;
 
           // 2. Time range
-          if (cardH > 24) {
-            doc.font('Helvetica-Bold').fontSize(6.5).fillColor('#065F46')
+          if (cardH > 18) {
+            doc.font('Helvetica-Bold').fontSize(6.5).fillColor(timeColor)
               .text(`${item.startTime} – ${item.endTime}`, cardX + 2, textY, {
                 width: cardW - 4,
                 align: 'center',
@@ -225,21 +246,32 @@ export const generateStudentSchedulePDF = ({ student, section, schedules, advise
             textY += 8.5;
           }
 
-          // 3. Teacher Name
-          if (cardH > 36 && item.teacherName) {
-            doc.font('Helvetica').fontSize(6.5).fillColor('#334155')
-              .text(item.teacherName, cardX + 2, textY, {
-                width: cardW - 4,
-                align: 'center',
-                lineBreak: false,
-                ellipsis: true
-              });
-            textY += 8.5;
+          // 3. Teacher Name or Break badge
+          if (cardH > 27) {
+            if (!isItemBreak && item.teacherName && item.teacherName !== 'No Teacher') {
+              doc.font('Helvetica').fontSize(6.5).fillColor('#334155')
+                .text(item.teacherName, cardX + 2, textY, {
+                  width: cardW - 4,
+                  align: 'center',
+                  lineBreak: false,
+                  ellipsis: true
+                });
+              textY += 8.5;
+            } else if (isItemBreak) {
+              doc.font('Helvetica-Oblique').fontSize(6).fillColor(titleColor)
+                .text(isLunch ? 'Lunch Time' : 'Wellness Break', cardX + 2, textY, {
+                  width: cardW - 4,
+                  align: 'center',
+                  lineBreak: false,
+                  ellipsis: true
+                });
+              textY += 8.5;
+            }
           }
 
           // 4. Room
-          if (cardH > 48 && item.room) {
-            doc.font('Helvetica-Oblique').fontSize(6).fillColor('#047857')
+          if (cardH > 38 && item.room) {
+            doc.font('Helvetica-Oblique').fontSize(6).fillColor(timeColor)
               .text(`Room: ${item.room}`, cardX + 2, textY, {
                 width: cardW - 4,
                 align: 'center',
@@ -366,8 +398,8 @@ export const generateTeacherSchedulePDF = ({ teacher, schedules = [], advisorySe
       const TIME_COL_W = 60;
       const DAY_COL_W = (USABLE_W - TIME_COL_W) / 5;
       const HEADER_H = 17;
-      const NUM_ROWS = 20;
-      const ROW_H = 22.5;
+      const NUM_ROWS = 40; // 40 intervals from 7:30 AM to 5:30 PM (15 mins each)
+      const ROW_H = 11.25; // 40 * 11.25 = 450 pt. Grid total height = 467 pt
       const GRID_H = HEADER_H + NUM_ROWS * ROW_H;
 
       // Header background
@@ -386,17 +418,22 @@ export const generateTeacherSchedulePDF = ({ teacher, schedules = [], advisorySe
       const bodyTopY = gridTopY + HEADER_H;
       for (let r = 0; r < NUM_ROWS; r++) {
         const y = bodyTopY + r * ROW_H;
-        const isEven = r % 2 === 0;
+        const isMajor = r % 2 === 0;
 
-        doc.rect(LEFT, y, TIME_COL_W, ROW_H).fill(isEven ? '#F8FAFC' : '#FFFFFF');
-        doc.rect(LEFT + TIME_COL_W, y, USABLE_W - TIME_COL_W, ROW_H).fill(isEven ? '#FAFAFA' : '#FFFFFF');
+        doc.rect(LEFT, y, TIME_COL_W, ROW_H).fill(isMajor ? '#F8FAFC' : '#FFFFFF');
+        doc.rect(LEFT + TIME_COL_W, y, USABLE_W - TIME_COL_W, ROW_H).fill(isMajor ? '#FAFAFA' : '#FFFFFF');
 
-        doc.strokeColor('#E2E8F0').lineWidth(0.4)
+        doc.strokeColor(isMajor ? '#CBD5E1' : '#F1F5F9').lineWidth(isMajor ? 0.5 : 0.3)
           .moveTo(LEFT, y + ROW_H).lineTo(RIGHT, y + ROW_H).stroke();
 
         const slotLabel = TIME_SLOTS[r];
-        doc.font('Helvetica-Bold').fontSize(6.5).fillColor('#64748B')
-          .text(slotLabel, LEFT + 2, y + 6.5, { width: TIME_COL_W - 4, align: 'center', lineBreak: false });
+        if (isMajor) {
+          doc.font('Helvetica-Bold').fontSize(5.8).fillColor('#475569')
+            .text(slotLabel, LEFT + 2, y + 2.5, { width: TIME_COL_W - 4, align: 'center', lineBreak: false });
+        } else {
+          doc.font('Helvetica').fontSize(4.8).fillColor('#94A3B8')
+            .text(slotLabel, LEFT + 2, y + 3, { width: TIME_COL_W - 4, align: 'center', lineBreak: false });
+        }
       }
 
       // Vertical column dividers
@@ -446,7 +483,7 @@ export const generateTeacherSchedulePDF = ({ teacher, schedules = [], advisorySe
           textY += 10;
 
           // 2. Time range
-          if (cardH > 24) {
+          if (cardH > 18) {
             doc.font('Helvetica-Bold').fontSize(6.5).fillColor('#1E3A8A')
               .text(`${item.startTime} – ${item.endTime}`, cardX + 3, textY, {
                 width: cardW - 6,
@@ -458,7 +495,7 @@ export const generateTeacherSchedulePDF = ({ teacher, schedules = [], advisorySe
           }
 
           // 3. Section Name
-          if (cardH > 36 && item.sectionName) {
+          if (cardH > 27 && item.sectionName) {
             doc.font('Helvetica-Bold').fontSize(6.5).fillColor('#001840')
               .text(item.sectionName, cardX + 3, textY, {
                 width: cardW - 6,
@@ -470,7 +507,7 @@ export const generateTeacherSchedulePDF = ({ teacher, schedules = [], advisorySe
           }
 
           // 4. Room
-          if (cardH > 48 && item.room) {
+          if (cardH > 38 && item.room) {
             doc.font('Helvetica-Oblique').fontSize(6).fillColor('#047857')
               .text(`Room: ${item.room}`, cardX + 3, textY, {
                 width: cardW - 6,

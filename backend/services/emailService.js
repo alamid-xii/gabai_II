@@ -67,6 +67,15 @@ async function send(to, subject, html) {
 // ── Email templates ───────────────────────────────────────────────────────────
 
 // 1. Welcome / Account Created
+export async function sendPasswordResetEmail(user, resetUrl) {
+  const body = `
+    <p style="color:#444;font-size:14px;line-height:1.6;">We received a request to reset your GabAI password.</p>
+    ${btn("Reset Password", resetUrl)}
+    <p style="color:#444;font-size:14px;line-height:1.6;">This link expires in 30 minutes and can only be used once. Requesting another link replaces this one.</p>
+    <p style="color:#888;font-size:12px;">If you did not request this, you can ignore this email. Your password will stay the same.</p>`;
+  return send(user.email, "Reset Your Password — GabAI EMC", wrap("Password Reset", body));
+}
+
 export async function sendWelcomeEmail(user) {
   const body = `
     <p style="color:#444;font-size:14px;line-height:1.6;">Hello <strong>${user.name}</strong>,</p>

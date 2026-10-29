@@ -1,3 +1,4 @@
+import { validateLabels } from "../services/panoramaLabels.js";
 /*
     MIT License
     
@@ -6,7 +7,7 @@
 */
 
 import { Building } from "../models/buildingModel.js";
-import { sequelize } from "../models/db.js";
+import { publicBuilding, MAX_SCRIPT_LENGTH } from "../services/buildingVoiceover.js";
 import multer from "multer";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -15,7 +16,7 @@ import fs from "fs";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-try { await sequelize.authenticate(); } catch (err) { console.warn("DB unavailable at import (buildingController):", err.message); }
+
 
 // Configure multer for 360° photo uploads
 const storage = multer.diskStorage({
@@ -51,7 +52,7 @@ export const upload = multer({
 export const getAllBuildings = async (req, res) => {
   try {
     const buildings = await Building.findAll({ where: { isActive: true } });
-    res.json(buildings);
+    res.json(buildings.map(publicBuilding));
   } catch (error) {
     console.error("Error fetching buildings:", error);
     res.status(500).json({ error: "Failed to fetch buildings" });
@@ -64,7 +65,7 @@ export const getBuildingById = async (req, res) => {
     if (!building) {
       return res.status(404).json({ error: "Building not found" });
     }
-    res.json(building);
+    res.json(publicBuilding(building));
   } catch (error) {
     console.error("Error fetching building:", error);
     res.status(500).json({ error: "Failed to fetch building" });
@@ -73,7 +74,7 @@ export const getBuildingById = async (req, res) => {
 
 export const createBuilding = async (req, res) => {
   try {
-    const buildingData = { ...req.body };
+    const buildingData = buildingInput(req.body);
     
     // If a file was uploaded, set the imageUrl to the file path
     if (req.file) {
@@ -84,7 +85,7 @@ export const createBuilding = async (req, res) => {
     res.status(201).json(building);
   } catch (error) {
     console.error("Error creating building:", error);
-    res.status(500).json({ error: "Failed to create building" });
+    res.status(error.status || 500).json({ error: error.status ? error.message : "Failed to create building" });
   }
 };
 
@@ -95,11 +96,13 @@ export const updateBuilding = async (req, res) => {
       return res.status(404).json({ error: "Building not found" });
     }
     
-    const updateData = { ...req.body };
+    const updateData = buildingInput(req.body);
+    if (updateData.voiceoverScript !== undefined && updateData.voiceoverScript !== (building.voiceoverScript || "")) updateData.voiceoverPublished = false;
     
     // If a new file was uploaded, update the imageUrl
     if (req.file) {
       updateData.imageUrl = `/uploads/360photos/${req.file.filename}`;
+      updateData.panoramaLabels = []; // Old angular positions do not belong to a replacement photo.
       
       // Delete old image if it exists
       if (building.imageUrl && building.imageUrl.startsWith("/uploads/")) {
@@ -114,7 +117,7 @@ export const updateBuilding = async (req, res) => {
     res.json(building);
   } catch (error) {
     console.error("Error updating building:", error);
-    res.status(500).json({ error: "Failed to update building" });
+    res.status(error.status || 500).json({ error: error.status ? error.message : "Failed to update building" });
   }
 };
 
@@ -140,3 +143,15 @@ export const deleteBuilding = async (req, res) => {
     res.status(500).json({ error: "Failed to delete building" });
   }
 };
+
+// Audio URLs, generation signatures, and publication are server-managed.
+function buildingInput(body) {
+  const allowed = ['name', 'shortName', 'category', 'description', 'offices', 'hours', 'coordinates', 'imageUrl', 'color', 'voiceoverScript', 'panoramaLabels'];
+  const value = Object.fromEntries(allowed.filter(key => body[key] !== undefined).map(key => [key, body[key]]));
+  if (value.voiceoverScript !== undefined) {
+    if (typeof value.voiceoverScript !== 'string' || value.voiceoverScript.length > MAX_SCRIPT_LENGTH) throw Object.assign(new Error('Voiceover script must be at most 2,500 characters.'), { status: 400 });
+    value.voiceoverScript = value.voiceoverScript.trim();
+  }
+  if (value.panoramaLabels !== undefined) value.panoramaLabels = validateLabels(value.panoramaLabels);
+  return value;
+}

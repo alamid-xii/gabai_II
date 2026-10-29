@@ -119,7 +119,7 @@ export function SubjectSelection() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-linear-to-br from-[#FFFDF0] via-[#FFF9E6] to-[#FFFDF0] flex items-center justify-center">
+      <div className="min-h-[calc(100svh-4rem)] lg:min-h-[calc(100svh-5rem)] bg-linear-to-br from-[#FFFDF0] via-[#FFF9E6] to-[#FFFDF0] flex items-center justify-center">
         <div className="text-center">
           <Loader className="w-12 h-12 text-[#102A71] animate-spin mx-auto mb-4" />
           <p className="text-gray-600">Loading subjects...</p>
@@ -130,7 +130,7 @@ export function SubjectSelection() {
 
   if (!enrollment) {
     return (
-      <div className="min-h-screen bg-linear-to-br from-[#FFFDF0] via-[#FFF9E6] to-[#FFFDF0] flex items-center justify-center">
+      <div className="min-h-[calc(100svh-4rem)] lg:min-h-[calc(100svh-5rem)] bg-linear-to-br from-[#FFFDF0] via-[#FFF9E6] to-[#FFFDF0] flex items-center justify-center">
         <div className="text-center">
           <AlertCircle className="w-12 h-12 text-red-600 mx-auto mb-4" />
           <p className="text-gray-600">Enrollment not found</p>
@@ -149,7 +149,7 @@ export function SubjectSelection() {
     : `${enrollment.course}${enrollment.major ? ` (${enrollment.major})` : ''}`;
 
   return (
-    <div className="min-h-screen bg-linear-to-br from-[#FFFDF0] via-[#FFF9E6] to-[#FFFDF0] py-8">
+    <div className="min-h-[calc(100svh-4rem)] lg:min-h-[calc(100svh-5rem)] bg-linear-to-br from-[#FFFDF0] via-[#FFF9E6] to-[#FFFDF0] py-4 sm:py-8">
       <div className="max-w-4xl mx-auto px-4">
         {/* Header */}
         <div className="mb-6">
@@ -161,7 +161,7 @@ export function SubjectSelection() {
           </button>
           <div className="flex items-center gap-3 mb-4">
             <BookOpen className="w-8 h-8 text-[#102A71]" />
-            <h1 className="text-3xl font-bold text-[#001840]">Subject Selection</h1>
+            <h1 className="text-2xl sm:text-3xl font-bold text-[#001840]">Subject Selection</h1>
           </div>
           <p className="text-gray-600">
             {isManualSelection
@@ -201,7 +201,7 @@ export function SubjectSelection() {
           </div>
 
           {availableSubjects.length === 0 ? (
-            <div className="p-12 text-center">
+            <div className="px-4 py-8 sm:p-12 text-center">
               <AlertCircle className="w-12 h-12 text-gray-300 mx-auto mb-4" />
               <p className="text-gray-600">No subjects available for your program</p>
             </div>

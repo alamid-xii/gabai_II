@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import {
-  BookOpen, Users, RefreshCw, ChevronLeft,
+  BookOpen, Users, RefreshCw, ChevronLeft, ChevronRight,
   GraduationCap, Search, X, FlaskConical, School,
   ClipboardList, Save, CheckCircle, AlertCircle, Lock
 } from 'lucide-react';
@@ -115,12 +115,29 @@ export function SectionView({ section, onBack }) {
       .finally(() => setLoading(false));
   }, [section.id]);
 
+  const [page, setPage] = useState(1);
+  const pageSize = 10;
+
   const filtered = students.filter(s =>
     !search ||
     `${s.firstName} ${s.familyName}`.toLowerCase().includes(search.toLowerCase()) ||
     (s.studentNumber || '').includes(search) ||
     (s.lrn || '').includes(search)
   );
+
+  const totalPages = Math.ceil(filtered.length / pageSize) || 1;
+  const pagedStudents = filtered.slice((page - 1) * pageSize, page * pageSize);
+
+  const getPageNumbers = () => {
+    if (totalPages <= 7) return Array.from({ length: totalPages }, (_, i) => i + 1);
+    if (page <= 4) return [1, 2, 3, 4, 5, '...', totalPages];
+    if (page >= totalPages - 3) return [1, '...', totalPages - 4, totalPages - 3, totalPages - 2, totalPages - 1, totalPages];
+    return [1, '...', page - 1, page, page + 1, '...', totalPages];
+  };
+
+  const pages = getPageNumbers();
+  const startItem = filtered.length === 0 ? 0 : (page - 1) * pageSize + 1;
+  const endItem = Math.min(page * pageSize, filtered.length);
 
   const sscCount = students.filter(s => s.sscClass === 'SSC').length;
   const regularCount = students.filter(s => s.sscClass !== 'SSC').length;
@@ -183,9 +200,21 @@ export function SectionView({ section, onBack }) {
       {/* Search */}
       <div className="relative">
         <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-        <input type="text" value={search} onChange={e => setSearch(e.target.value)}
+        <input
+          type="text"
+          value={search}
+          onChange={e => { setSearch(e.target.value); setPage(1); }}
           placeholder="Search by name, student ID, or LRN..."
-          className="w-full pl-9 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#102A71]/20 focus:border-[#102A71] bg-white" />
+          className="w-full pl-9 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-hidden focus:ring-2 focus:ring-[#102A71]/20 focus:border-[#102A71] bg-white"
+        />
+        {search && (
+          <button
+            onClick={() => { setSearch(''); setPage(1); }}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+          >
+            <X size={14} />
+          </button>
+        )}
       </div>
 
       {/* Student List */}
@@ -211,37 +240,89 @@ export function SectionView({ section, onBack }) {
               </div>
             </div>
             <div className="divide-y divide-gray-50">
-              {filtered.map((s, idx) => (
-                <div key={s.id}
-                  onClick={() => setSelectedStudent(s)}
-                  className="grid grid-cols-12 gap-3 px-5 py-3.5 hover:bg-gray-50 cursor-pointer transition-colors items-center">
-                  <div className="col-span-1 text-xs text-gray-400">{idx + 1}</div>
-                  <div className="col-span-5">
-                    <p className="text-sm font-semibold text-[#001840] truncate">
-                      {s.familyName}, {s.firstName}{s.middleName ? ` ${s.middleName[0]}.` : ''}
-                    </p>
-                    <p className="text-xs text-gray-400 mt-0.5">{s.gradeLevel}{s.strand && s.strand !== 'SSC' ? ` · ${s.strand}` : ''}</p>
+              {pagedStudents.map((s, idx) => {
+                const globalIdx = (page - 1) * pageSize + idx + 1;
+                return (
+                  <div key={s.id}
+                    onClick={() => setSelectedStudent(s)}
+                    className="grid grid-cols-12 gap-3 px-5 py-3.5 hover:bg-gray-50 cursor-pointer transition-colors items-center">
+                    <div className="col-span-1 text-xs text-gray-400">{globalIdx}</div>
+                    <div className="col-span-5">
+                      <p className="text-sm font-semibold text-[#001840] truncate">
+                        {s.familyName}, {s.firstName}{s.middleName ? ` ${s.middleName[0]}.` : ''}
+                      </p>
+                      <p className="text-xs text-gray-400 mt-0.5">{s.gradeLevel}{s.strand && s.strand !== 'SSC' ? ` · ${s.strand}` : ''}</p>
+                    </div>
+                    <div className="col-span-3">
+                      <p className="text-xs font-mono text-gray-700">{s.studentNumber || '—'}</p>
+                      <p className="text-xs text-gray-400">{s.lrn || '—'}</p>
+                    </div>
+                    <div className="col-span-2">
+                      {s.sscClass === 'SSC' ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-yellow-100 text-yellow-800 text-xs font-semibold rounded-full">
+                          <FlaskConical size={9} /> SSC
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-semibold rounded-full">
+                          <School size={9} /> Regular
+                        </span>
+                      )}
+                    </div>
+                    <div className="col-span-1 text-right">
+                      <span className="text-xs text-[#102A71] hover:underline">View</span>
+                    </div>
                   </div>
-                  <div className="col-span-3">
-                    <p className="text-xs font-mono text-gray-700">{s.studentNumber || '—'}</p>
-                    <p className="text-xs text-gray-400">{s.lrn || '—'}</p>
-                  </div>
-                  <div className="col-span-2">
-                    {s.sscClass === 'SSC' ? (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-yellow-100 text-yellow-800 text-xs font-semibold rounded-full">
-                        <FlaskConical size={9} /> SSC
-                      </span>
+                );
+              })}
+            </div>
+
+            {/* Pagination Controls */}
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-6 py-4 border-t border-gray-100 bg-white">
+              <p className="text-xs text-gray-500">
+                Showing <span className="font-semibold text-gray-700">{startItem}</span> to{' '}
+                <span className="font-semibold text-gray-700">{endItem}</span> of{' '}
+                <span className="font-semibold text-gray-700">{filtered.length}</span> students
+              </p>
+
+              {totalPages > 1 && (
+                <div className="flex items-center gap-1 flex-wrap justify-center sm:justify-end">
+                  <button
+                    onClick={() => setPage(p => Math.max(1, p - 1))}
+                    disabled={page === 1}
+                    className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium rounded-lg border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  >
+                    <ChevronLeft size={14} />
+                    <span>Prev</span>
+                  </button>
+
+                  {pages.map((p, idx) =>
+                    p === '...' ? (
+                      <span key={`dots_${idx}`} className="px-2 text-xs text-gray-400">...</span>
                     ) : (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-semibold rounded-full">
-                        <School size={9} /> Regular
-                      </span>
-                    )}
-                  </div>
-                  <div className="col-span-1 text-right">
-                    <span className="text-xs text-[#102A71] hover:underline">View</span>
-                  </div>
+                      <button
+                        key={p}
+                        onClick={() => setPage(p)}
+                        className={`min-w-7 h-7 px-2 text-xs rounded-lg font-semibold transition-colors ${
+                          page === p
+                            ? 'bg-[#102A71] text-white shadow-2xs'
+                            : 'border border-gray-200 text-gray-600 hover:bg-gray-50'
+                        }`}
+                      >
+                        {p}
+                      </button>
+                    )
+                  )}
+
+                  <button
+                    onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                    disabled={page === totalPages}
+                    className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium rounded-lg border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  >
+                    <span>Next</span>
+                    <ChevronRight size={14} />
+                  </button>
                 </div>
-              ))}
+              )}
             </div>
           </>
         )}
@@ -261,6 +342,9 @@ function GradeSheet({ cls, onBack }) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState({}); // { enrollmentSubjectId_quarter: true }
   const [edits, setEdits] = useState({});   // { `${esId}_${quarter}`: value }
+  const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const pageSize = 10;
 
   const QUARTERS = ['Q1', 'Q2', 'Q3'];
   const QUARTER_LABELS = { Q1: '1st Tri', Q2: '2nd Tri', Q3: '3rd Tri' };
@@ -329,25 +413,66 @@ function GradeSheet({ cls, onBack }) {
     return <span className="text-xs font-bold text-red-500">Failed</span>;
   }
 
-  return (
-    <div className="space-y-5">
-      
+  const allStudents = data?.students || [];
+  const filteredStudents = allStudents.filter(s => {
+    if (!search.trim()) return true;
+    const q = search.toLowerCase();
+    const fullName = `${s.familyName || ''} ${s.firstName || ''} ${s.middleName || ''}`.toLowerCase();
+    const studentNum = (s.studentNumber || '').toLowerCase();
+    const lrn = (s.lrn || '').toLowerCase();
+    return fullName.includes(q) || studentNum.includes(q) || lrn.includes(q);
+  });
 
-      {/* Header */}
+  const totalPages = Math.ceil(filteredStudents.length / pageSize) || 1;
+  const pagedStudents = filteredStudents.slice((page - 1) * pageSize, page * pageSize);
+
+  const getPageNumbers = () => {
+    if (totalPages <= 7) return Array.from({ length: totalPages }, (_, i) => i + 1);
+    if (page <= 4) return [1, 2, 3, 4, 5, '...', totalPages];
+    if (page >= totalPages - 3) return [1, '...', totalPages - 4, totalPages - 3, totalPages - 2, totalPages - 1, totalPages];
+    return [1, '...', page - 1, page, page + 1, '...', totalPages];
+  };
+
+  const pages = getPageNumbers();
+  const startItem = filteredStudents.length === 0 ? 0 : (page - 1) * pageSize + 1;
+  const endItem = Math.min(page * pageSize, filteredStudents.length);
+
+  return (
+    <div className="space-y-4">
+      {/* Top back button */}
+      <div>
+        <button
+          type="button"
+          onClick={onBack}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs font-semibold text-[#102A71] hover:text-[#001840] hover:bg-gray-50 transition-colors shadow-2xs"
+        >
+          <ChevronLeft size={14} />
+          <span>Back to Classes</span>
+        </button>
+      </div>
+
+      {/* Header Info Card */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
-            <h2 className="text-xl font-bold text-[#001840]">{cls.subjectCode}</h2>
-            <p className="text-sm text-gray-500 mt-0.5">{cls.subjectDescription}</p>
-            <p className="text-xs text-gray-400 mt-1">
-              Section {cls.sectionName} · {cls.course} Grade {cls.yearLevel}
+            <div className="flex items-center gap-2 mb-1">
+              <span className="font-mono text-xs font-bold text-[#102A71] bg-[#EEF2FF] border border-[#102A71]/20 px-2 py-0.5 rounded-md">
+                {cls.subjectCode}
+              </span>
+              <h2 className="text-xl font-bold text-[#001840]">{cls.subjectDescription}</h2>
+            </div>
+            <p className="text-xs text-gray-500 mt-1">
+              Section <span className="font-semibold text-gray-700">{cls.sectionName}</span> · {cls.course} Grade {cls.yearLevel}
               {cls.strand ? ` · ${cls.strand}` : ''}
-              {cls.schoolYear ? ` · ${cls.schoolYear}` : ''}
+              {cls.schoolYear ? ` · SY ${cls.schoolYear}` : ''}
+              {cls.semester ? ` · ${cls.semester}` : ''}
             </p>
           </div>
-          <button onClick={load}
-            className="flex items-center gap-1.5 px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 transition-colors">
-            <RefreshCw size={13} /> Refresh
+          <button
+            onClick={load}
+            className="flex items-center gap-1.5 px-3 py-2 border border-gray-200 rounded-lg text-xs text-gray-600 hover:bg-gray-50 transition-colors font-medium"
+          >
+            <RefreshCw size={12} /> Refresh
           </button>
         </div>
 
@@ -375,43 +500,89 @@ function GradeSheet({ cls, onBack }) {
         )}
       </div>
 
+      {/* Search & Counter Bar */}
+      <div className="bg-white rounded-2xl border border-gray-100 p-4 shadow-xs flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+        <div className="relative flex-1 max-w-md">
+          <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
+          <input
+            type="text"
+            placeholder="Search student by name, student ID, or LRN..."
+            value={search}
+            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+            className="w-full pl-10 pr-9 py-2 text-sm bg-gray-50/60 border border-gray-200 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-[#102A71]/20 focus:border-[#102A71] transition-all text-[#001840]"
+          />
+          {search && (
+            <button
+              onClick={() => { setSearch(''); setPage(1); }}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+            >
+              <X size={14} />
+            </button>
+          )}
+        </div>
+        <div className="text-xs text-gray-500 font-medium sm:text-right">
+          Total Students: <span className="font-bold text-[#001840]">{allStudents.length}</span>
+        </div>
+      </div>
+
       {/* Grade table */}
       {loading ? (
         <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center text-gray-400 text-sm">
-          <RefreshCw size={18} className="animate-spin mx-auto mb-2" /> Loading grade sheet...
+          <RefreshCw size={18} className="animate-spin mx-auto mb-2" /> Loading students and grades...
         </div>
-      ) : !data?.students?.length ? (
+      ) : !allStudents.length ? (
         <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center text-gray-400 text-sm">
-          <Users size={32} className="mx-auto mb-3 opacity-40" />
-          No students enrolled in this class
+          <Users size={32} className="mx-auto mb-3 opacity-40 text-gray-300" />
+          <p className="font-semibold text-gray-600">No students enrolled in this class</p>
+          <p className="text-xs text-gray-400 mt-1">Students enrolled in this section and subject will automatically appear here.</p>
+        </div>
+      ) : filteredStudents.length === 0 ? (
+        <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center">
+          <Search size={36} className="mx-auto mb-3 text-gray-300" />
+          <p className="text-sm font-semibold text-[#001840]">No students matched "{search}"</p>
+          <button
+            onClick={() => { setSearch(''); setPage(1); }}
+            className="mt-3 text-xs text-[#102A71] hover:underline font-semibold"
+          >
+            Clear search filter
+          </button>
         </div>
       ) : (
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-gray-100 bg-gray-50/60">
-                  <th className="text-left px-5 py-3 text-xs font-bold text-gray-400 uppercase tracking-wider">Student</th>
+              <thead className="bg-[#FFFDF0] border-b border-gray-100 text-xs font-bold text-[#001840] uppercase tracking-wider">
+                <tr>
+                  <th className="text-center px-4 py-3.5 w-12 text-gray-400">#</th>
+                  <th className="text-left px-5 py-3.5">Student</th>
                   {QUARTERS.map(q => (
-                    <th key={q} className="text-center px-4 py-3 text-xs font-bold uppercase tracking-wider whitespace-nowrap">
-                      <span className={openQuarters.has(q) ? 'text-emerald-600' : 'text-gray-300'}>
-                        {openQuarters.has(q) ? <CheckCircle size={10} className="inline mr-1" /> : <Lock size={10} className="inline mr-1" />}
+                    <th key={q} className="text-center px-4 py-3.5 whitespace-nowrap">
+                      <span className={openQuarters.has(q) ? 'text-emerald-700' : 'text-gray-400'}>
+                        {openQuarters.has(q) ? <CheckCircle size={11} className="inline mr-1 text-emerald-600" /> : <Lock size={11} className="inline mr-1 text-gray-400" />}
                         {QUARTER_LABELS[q] || q}
                       </span>
                     </th>
                   ))}
-                  <th className="text-center px-4 py-3 text-xs font-bold text-gray-400 uppercase tracking-wider">Final</th>
-                  <th className="text-center px-4 py-3 text-xs font-bold text-gray-400 uppercase tracking-wider">Remarks</th>
+                  <th className="text-center px-4 py-3.5 text-gray-600">Final</th>
+                  <th className="text-center px-4 py-3.5 text-gray-600">Remarks</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {data.students.map((s, idx) => {
+                {pagedStudents.map((s, idx) => {
+                  const globalIdx = (page - 1) * pageSize + idx + 1;
                   const name = `${s.familyName}, ${s.firstName}${s.middleName ? ` ${s.middleName[0]}.` : ''}`;
                   return (
                     <tr key={s.enrollmentSubjectId} className={`${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'} hover:bg-[#FFFDF0] transition-colors`}>
+                      <td className="px-4 py-3 text-center text-xs text-gray-400 font-mono">
+                        {globalIdx}
+                      </td>
                       <td className="px-5 py-3">
                         <p className="font-semibold text-[#001840] text-sm">{name}</p>
-                        <p className="text-xs text-gray-400">{s.studentNumber || s.lrn || ''}</p>
+                        <p className="text-xs text-gray-400">
+                          {s.studentNumber ? `ID: ${s.studentNumber}` : ''}
+                          {s.studentNumber && s.lrn ? ' · ' : ''}
+                          {s.lrn ? `LRN: ${s.lrn}` : ''}
+                        </p>
                       </td>
                       {QUARTERS.map(q => {
                         const col = q.toLowerCase();
@@ -432,7 +603,7 @@ function GradeSheet({ cls, onBack }) {
                                   onBlur={() => saveGrade(s.enrollmentSubjectId, q)}
                                   onKeyDown={e => { if (e.key === 'Enter') { e.target.blur(); } }}
                                   placeholder="—"
-                                  className={`w-16 text-center text-sm border rounded-lg py-1.5 px-1 focus:outline-none focus:ring-2 transition-all ${
+                                  className={`w-16 text-center text-sm border rounded-lg py-1.5 px-1 focus:outline-hidden focus:ring-2 transition-all ${
                                     hasEdit
                                       ? 'border-[#F5C400] focus:ring-[#F5C400]/30 bg-[#FFFDF0]'
                                       : 'border-gray-200 focus:ring-[#102A71]/20 focus:border-[#102A71] bg-white'
@@ -440,9 +611,12 @@ function GradeSheet({ cls, onBack }) {
                                 />
                                 {isSaving && <RefreshCw size={11} className="animate-spin text-gray-400 shrink-0" />}
                                 {hasEdit && !isSaving && (
-                                  <button onClick={() => saveGrade(s.enrollmentSubjectId, q)}
-                                    className="text-emerald-600 hover:text-emerald-700">
-                                    <Save size={11} />
+                                  <button
+                                    onClick={() => saveGrade(s.enrollmentSubjectId, q)}
+                                    title="Save Grade"
+                                    className="text-emerald-600 hover:text-emerald-700"
+                                  >
+                                    <Save size={12} />
                                   </button>
                                 )}
                               </div>
@@ -468,6 +642,56 @@ function GradeSheet({ cls, onBack }) {
               </tbody>
             </table>
           </div>
+
+          {/* Pagination Controls */}
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-6 py-4 border-t border-gray-100 bg-white">
+            <p className="text-xs text-gray-500">
+              Showing <span className="font-semibold text-gray-700">{startItem}</span> to{' '}
+              <span className="font-semibold text-gray-700">{endItem}</span> of{' '}
+              <span className="font-semibold text-gray-700">{filteredStudents.length}</span> students
+            </p>
+
+            {totalPages > 1 && (
+              <div className="flex items-center gap-1 flex-wrap justify-center sm:justify-end">
+                <button
+                  onClick={() => setPage(p => Math.max(1, p - 1))}
+                  disabled={page === 1}
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium rounded-lg border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  <ChevronLeft size={14} />
+                  <span>Prev</span>
+                </button>
+
+                {pages.map((p, idx) =>
+                  p === '...' ? (
+                    <span key={`dots_${idx}`} className="px-2 text-xs text-gray-400">...</span>
+                  ) : (
+                    <button
+                      key={p}
+                      onClick={() => setPage(p)}
+                      className={`min-w-7 h-7 px-2 text-xs rounded-lg font-semibold transition-colors ${
+                        page === p
+                          ? 'bg-[#102A71] text-white shadow-2xs'
+                          : 'border border-gray-200 text-gray-600 hover:bg-gray-50'
+                      }`}
+                    >
+                      {p}
+                    </button>
+                  )
+                )}
+
+                <button
+                  onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                  disabled={page === totalPages}
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium rounded-lg border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  <span>Next</span>
+                  <ChevronRight size={14} />
+                </button>
+              </div>
+            )}
+          </div>
+
           <div className="px-5 py-3 bg-gray-50/50 border-t border-gray-50 flex items-center gap-2 text-xs text-gray-400">
             <AlertCircle size={12} />
             Grades auto-save on blur (click outside the field) or press Enter. Only open quarters are editable.
@@ -483,6 +707,9 @@ export function MyClassesView() {
   const [classes, setClasses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeClass, setActiveClass] = useState(null);
+  const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const pageSize = 10;
 
   useEffect(() => {
     fetch(`${API}/teacher/classes`, { headers: tok() })
@@ -496,46 +723,207 @@ export function MyClassesView() {
     return <GradeSheet cls={activeClass} onBack={() => setActiveClass(null)} />;
   }
 
+  const filtered = classes.filter(cls => {
+    if (!search.trim()) return true;
+    const q = search.toLowerCase();
+    return (
+      (cls.subjectCode || '').toLowerCase().includes(q) ||
+      (cls.subjectDescription || '').toLowerCase().includes(q) ||
+      (cls.sectionName || '').toLowerCase().includes(q) ||
+      (cls.course || '').toLowerCase().includes(q) ||
+      (cls.strand || '').toLowerCase().includes(q) ||
+      `grade ${cls.yearLevel}`.includes(q)
+    );
+  });
+
+  const totalPages = Math.ceil(filtered.length / pageSize) || 1;
+  const pagedClasses = filtered.slice((page - 1) * pageSize, page * pageSize);
+
+  const getPageNumbers = () => {
+    if (totalPages <= 7) return Array.from({ length: totalPages }, (_, i) => i + 1);
+    if (page <= 4) return [1, 2, 3, 4, 5, '...', totalPages];
+    if (page >= totalPages - 3) return [1, '...', totalPages - 4, totalPages - 3, totalPages - 2, totalPages - 1, totalPages];
+    return [1, '...', page - 1, page, page + 1, '...', totalPages];
+  };
+
+  const pages = getPageNumbers();
+  const startItem = filtered.length === 0 ? 0 : (page - 1) * pageSize + 1;
+  const endItem = Math.min(page * pageSize, filtered.length);
+
   return (
-    <div className="space-y-5">
-     
+    <div className="space-y-4">
+      {/* Search & Summary Bar */}
+      <div className="bg-white rounded-2xl border border-gray-100 p-4 shadow-xs flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+        <div className="relative flex-1 max-w-md">
+          <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
+          <input
+            type="text"
+            placeholder="Search by subject, section, or grade level..."
+            value={search}
+            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+            className="w-full pl-10 pr-9 py-2 text-sm bg-gray-50/60 border border-gray-200 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-[#102A71]/20 focus:border-[#102A71] transition-all text-[#001840]"
+          />
+          {search && (
+            <button
+              onClick={() => { setSearch(''); setPage(1); }}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+            >
+              <X size={14} />
+            </button>
+          )}
+        </div>
+        <div className="text-xs text-gray-500 font-medium sm:text-right">
+          Total Classes: <span className="font-bold text-[#001840]">{classes.length}</span>
+        </div>
+      </div>
 
       {loading ? (
-        <div className="flex items-center justify-center py-20 gap-2 text-gray-400 text-sm">
-          <RefreshCw size={15} className="animate-spin" /> Loading classes...
+        <div className="bg-white rounded-2xl border border-gray-100 p-16 text-center text-gray-400 text-sm">
+          <RefreshCw size={20} className="animate-spin mx-auto mb-3 text-gray-300" />
+          Loading your assigned classes...
         </div>
       ) : classes.length === 0 ? (
         <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center">
           <ClipboardList size={40} className="mx-auto mb-4 text-gray-300" />
-          <p className="text-sm font-medium text-gray-500">No subject assignments yet</p>
-          <p className="text-xs text-gray-400 mt-1">Ask admin to assign you as a teacher to subjects in sections.</p>
+          <p className="text-sm font-semibold text-[#001840]">No subject assignments yet</p>
+          <p className="text-xs text-gray-500 mt-1">Ask the admin or registrar to assign you as a teacher to subjects in sections.</p>
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center">
+          <Search size={36} className="mx-auto mb-3 text-gray-300" />
+          <p className="text-sm font-semibold text-[#001840]">No classes matched "{search}"</p>
+          <button
+            onClick={() => { setSearch(''); setPage(1); }}
+            className="mt-3 text-xs text-[#102A71] hover:underline font-semibold"
+          >
+            Clear search filter
+          </button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {classes.map((cls, i) => (
-            <div key={`${cls.sectionId}_${cls.subjectCode}`}
-              onClick={() => setActiveClass(cls)}
-              className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 cursor-pointer hover:shadow-md hover:border-[#102A71]/30 transition-all">
-              <div className="flex items-start justify-between gap-2 mb-3">
-                <div className="flex-1 min-w-0">
-                  <p className="font-bold text-[#001840] truncate">{cls.subjectCode}</p>
-                  <p className="text-xs text-gray-500 mt-0.5 truncate">{cls.subjectDescription}</p>
-                </div>
-                <div className="w-9 h-9 bg-[#EEF2FF] rounded-xl flex items-center justify-center shrink-0">
-                  <ClipboardList size={15} className="text-[#102A71]" />
-                </div>
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-xs overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm text-left">
+              <thead className="bg-[#FFFDF0] border-b border-gray-100 text-xs font-bold text-[#001840] uppercase tracking-wider">
+                <tr>
+                  <th className="px-5 py-3.5">Subject</th>
+                  <th className="px-4 py-3.5">Section</th>
+                  <th className="px-4 py-3.5">Level & Program</th>
+                  <th className="px-4 py-3.5">Academic Year</th>
+                  <th className="px-4 py-3.5 text-center">Students</th>
+                  <th className="px-5 py-3.5 text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {pagedClasses.map((cls) => (
+                  <tr
+                    key={`${cls.sectionId}_${cls.subjectCode}`}
+                    onClick={() => setActiveClass(cls)}
+                    className="hover:bg-[#FFFDF0]/80 transition-colors cursor-pointer group"
+                  >
+                    <td className="px-5 py-4">
+                      <div className="flex items-center gap-3">
+                        <span className="font-mono text-xs font-bold text-[#102A71] bg-[#EEF2FF] border border-[#102A71]/20 px-2.5 py-1 rounded-lg">
+                          {cls.subjectCode}
+                        </span>
+                        <div className="min-w-0">
+                          <p className="font-bold text-[#001840] text-sm group-hover:text-[#102A71] transition-colors truncate">
+                            {cls.subjectDescription}
+                          </p>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-4 py-4">
+                      <span className="font-semibold text-gray-800 text-sm">
+                        Section {cls.sectionName}
+                      </span>
+                    </td>
+                    <td className="px-4 py-4 text-xs text-gray-600">
+                      <span className="font-medium text-gray-800">
+                        {cls.course} · Grade {cls.yearLevel}
+                      </span>
+                      {cls.strand && (
+                        <span className="ml-1 px-1.5 py-0.5 bg-gray-100 text-gray-600 rounded text-[11px]">
+                          {cls.strand}
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-4 text-xs text-gray-600">
+                      {cls.schoolYear ? (
+                        <span>{cls.schoolYear} {cls.semester ? `· ${cls.semester}` : ''}</span>
+                      ) : (
+                        <span className="text-gray-400 italic">—</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-4 text-center">
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                        <Users size={12} />
+                        {cls.studentCount || 0}
+                      </span>
+                    </td>
+                    <td className="px-5 py-4 text-right">
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); setActiveClass(cls); }}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#102A71] hover:bg-[#001840] text-white rounded-lg text-xs font-semibold transition-all shadow-2xs group-hover:scale-[1.02]"
+                      >
+                        <ClipboardList size={13} />
+                        <span>Enter Grades →</span>
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Pagination */}
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-6 py-4 border-t border-gray-100 bg-white">
+            <p className="text-xs text-gray-500">
+              Showing <span className="font-semibold text-gray-700">{startItem}</span> to{' '}
+              <span className="font-semibold text-gray-700">{endItem}</span> of{' '}
+              <span className="font-semibold text-gray-700">{filtered.length}</span> classes
+            </p>
+
+            {totalPages > 1 && (
+              <div className="flex items-center gap-1 flex-wrap justify-center sm:justify-end">
+                <button
+                  onClick={() => setPage(p => Math.max(1, p - 1))}
+                  disabled={page === 1}
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium rounded-lg border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  <ChevronLeft size={14} />
+                  <span>Prev</span>
+                </button>
+
+                {pages.map((p, idx) =>
+                  p === '...' ? (
+                    <span key={`dots_${idx}`} className="px-2 text-xs text-gray-400">...</span>
+                  ) : (
+                    <button
+                      key={p}
+                      onClick={() => setPage(p)}
+                      className={`min-w-7 h-7 px-2 text-xs rounded-lg font-semibold transition-colors ${
+                        page === p
+                          ? 'bg-[#102A71] text-white shadow-2xs'
+                          : 'border border-gray-200 text-gray-600 hover:bg-gray-50'
+                      }`}
+                    >
+                      {p}
+                    </button>
+                  )
+                )}
+
+                <button
+                  onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                  disabled={page === totalPages}
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium rounded-lg border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  <span>Next</span>
+                  <ChevronRight size={14} />
+                </button>
               </div>
-              <div className="space-y-1 text-xs text-gray-500">
-                <p>📚 Section <span className="font-semibold text-[#001840]">{cls.sectionName}</span></p>
-                <p>🎓 {cls.course} · Grade {cls.yearLevel}{cls.strand ? ` · ${cls.strand}` : ''}</p>
-                <p>👥 <span className="font-semibold text-[#001840]">{cls.studentCount || 0}</span> students</p>
-                {cls.schoolYear && <p>📅 {cls.schoolYear} · {cls.semester}</p>}
-              </div>
-              <div className="mt-3 pt-3 border-t border-gray-50">
-                <span className="text-xs text-[#102A71] font-semibold">Enter Grades →</span>
-              </div>
-            </div>
-          ))}
+            )}
+          </div>
         </div>
       )}
     </div>

@@ -1,5 +1,5 @@
 import { Op } from "sequelize";
-import { ClassSchedule, Section, Subject, User, EnrollmentRecord, sequelize } from '../models/index.js';
+import { ClassSchedule, Section, Subject, User, EnrollmentRecord, SchoolYear, sequelize } from '../models/index.js';
 import { generateStudentSchedulePDF, generateTeacherSchedulePDF } from '../services/schedulePdfGenerator.js';
 
 // ── GET all class schedules ──────────────────────────────────────────────────
@@ -56,17 +56,25 @@ export const createClassSchedule = async (req, res) => {
       teacherId,
       teacherName,
       dayOfWeek,
+      days,
       startTime,
       endTime,
       room,
       schoolYear,
       semester,
+      isBreak: explicitBreak
     } = req.body;
 
-    if (!subjectName) return res.status(400).json({ error: 'Subject is required' });
+    const isBreak = explicitBreak === true ||
+      ['health break', 'lunch break', 'recess', 'break'].includes((subjectName || '').trim().toLowerCase()) ||
+      teacherName === 'No Teacher' ||
+      teacherName === '—' ||
+      (!teacherName && ['health break', 'lunch break'].includes((subjectName || '').trim().toLowerCase()));
+
+    if (!subjectName) return res.status(400).json({ error: 'Subject / Activity name is required' });
     if (!sectionName) return res.status(400).json({ error: 'Grade and section is required' });
-    if (!teacherName) return res.status(400).json({ error: 'Teacher is required' });
-    if (!dayOfWeek) return res.status(400).json({ error: 'Day of week is required' });
+    if (!isBreak && !teacherName) return res.status(400).json({ error: 'Teacher is required' });
+    if (!dayOfWeek && (!days || !days.length)) return res.status(400).json({ error: 'Day of week is required' });
     if (!startTime || !endTime) return res.status(400).json({ error: 'Start and end time are required' });
 
     const newStart = parseTimeToMinutes(startTime);
@@ -76,87 +84,104 @@ export const createClassSchedule = async (req, res) => {
       return res.status(400).json({ error: 'End time must be later than start time' });
     }
 
+    const targetDays = Array.isArray(days) && days.length > 0
+      ? days
+      : dayOfWeek === 'All Weekdays'
+        ? ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']
+        : [dayOfWeek];
+
+    const cleanTeacher = (!isBreak && teacherName) ? teacherName.trim().toLowerCase() : null;
+    const cleanSection = sectionName.trim().toLowerCase();
+    const cleanRoom = room ? room.trim().toLowerCase() : null;
+    const tid = (!isBreak && teacherId) ? parseInt(teacherId) : null;
+    const sid = sectionId ? parseInt(sectionId) : null;
+
     // ── Conflict-Free Enforcement ──────────────────────────────────────────
     // Every teacher is assigned to at most one class/activity at any given time.
     // No section can be double-booked at overlapping time slots.
     // No room can be occupied by multiple classes simultaneously.
-    const existingSchedules = await ClassSchedule.findAll({
-      where: { dayOfWeek }
-    });
+    for (const day of targetDays) {
+      const existingSchedules = await ClassSchedule.findAll({
+        where: { dayOfWeek: day }
+      });
 
-    const cleanTeacher = teacherName.trim().toLowerCase();
-    const cleanSection = sectionName.trim().toLowerCase();
-    const cleanRoom = room ? room.trim().toLowerCase() : null;
-    const tid = teacherId ? parseInt(teacherId) : null;
-    const sid = sectionId ? parseInt(sectionId) : null;
+      for (const s of existingSchedules) {
+        const existStart = parseTimeToMinutes(s.startTime);
+        const existEnd = parseTimeToMinutes(s.endTime);
+        if (existStart === null || existEnd === null) continue;
 
-    for (const s of existingSchedules) {
-      const existStart = parseTimeToMinutes(s.startTime);
-      const existEnd = parseTimeToMinutes(s.endTime);
-      if (existStart === null || existEnd === null) continue;
+        // Check overlap: max(newStart, existStart) < min(newEnd, existEnd)
+        const hasOverlap = Math.max(newStart, existStart) < Math.min(newEnd, existEnd);
+        if (!hasOverlap) continue;
 
-      // Check overlap: max(newStart, existStart) < min(newEnd, existEnd)
-      const hasOverlap = Math.max(newStart, existStart) < Math.min(newEnd, existEnd);
-      if (!hasOverlap) continue;
+        // 1. Teacher Conflict check (only if not a break and both have assigned teachers)
+        if (!isBreak && cleanTeacher && s.teacherName && s.teacherName !== 'No Teacher' && s.teacherName !== '—') {
+          const isSameTeacher = (tid && s.teacherId && s.teacherId === tid) ||
+            (s.teacherName && s.teacherName.trim().toLowerCase() === cleanTeacher);
 
-      // 1. Teacher Conflict check
-      const isSameTeacher = (tid && s.teacherId && s.teacherId === tid) ||
-        (s.teacherName && s.teacherName.trim().toLowerCase() === cleanTeacher);
+          if (isSameTeacher) {
+            return res.status(400).json({
+              error: `Teacher conflict: ${s.teacherName} is already assigned to ${s.subjectName} (${s.sectionName}) on ${day} from ${s.startTime} to ${s.endTime}.`,
+              conflictType: 'teacher',
+              conflictSchedule: s
+            });
+          }
+        }
 
-      if (isSameTeacher) {
-        return res.status(400).json({
-          error: `Teacher conflict: ${s.teacherName} is already assigned to ${s.subjectName} (${s.sectionName}) on ${dayOfWeek} from ${s.startTime} to ${s.endTime}.`,
-          conflictType: 'teacher',
-          conflictSchedule: s
-        });
-      }
+        // 2. Section / Class Conflict check
+        const isSameSection = (sid && s.sectionId && s.sectionId === sid) ||
+          (s.sectionName && s.sectionName.trim().toLowerCase() === cleanSection);
 
-      // 2. Section / Class Conflict check
-      const isSameSection = (sid && s.sectionId && s.sectionId === sid) ||
-        (s.sectionName && s.sectionName.trim().toLowerCase() === cleanSection);
+        if (isSameSection) {
+          const teacherPart = s.teacherName && s.teacherName !== 'No Teacher' && s.teacherName !== '—' ? ` with ${s.teacherName}` : '';
+          return res.status(400).json({
+            error: `Section conflict: ${s.sectionName} already has ${s.subjectName}${teacherPart} on ${day} from ${s.startTime} to ${s.endTime}.`,
+            conflictType: 'section',
+            conflictSchedule: s
+          });
+        }
 
-      if (isSameSection) {
-        return res.status(400).json({
-          error: `Section conflict: ${s.sectionName} already has ${s.subjectName} with ${s.teacherName} on ${dayOfWeek} from ${s.startTime} to ${s.endTime}.`,
-          conflictType: 'section',
-          conflictSchedule: s
-        });
-      }
-
-      // 3. Room Conflict check
-      if (cleanRoom && s.room && s.room.trim().toLowerCase() === cleanRoom) {
-        return res.status(400).json({
-          error: `Room conflict: ${s.room} is already booked for ${s.sectionName} (${s.subjectName}) on ${dayOfWeek} from ${s.startTime} to ${s.endTime}.`,
-          conflictType: 'room',
-          conflictSchedule: s
-        });
+        // 3. Room Conflict check
+        if (cleanRoom && s.room && s.room.trim().toLowerCase() === cleanRoom) {
+          return res.status(400).json({
+            error: `Room conflict: ${s.room} is already booked for ${s.sectionName} (${s.subjectName}) on ${day} from ${s.startTime} to ${s.endTime}.`,
+            conflictType: 'room',
+            conflictSchedule: s
+          });
+        }
       }
     }
 
-    // Create schedule record
-    const scheduleRecord = await ClassSchedule.create({
-      subjectId: subjectId ? parseInt(subjectId) : null,
-      subjectCode: subjectCode || null,
-      subjectName: subjectName.trim(),
-      sectionId: sectionId ? parseInt(sectionId) : null,
-      sectionName: sectionName.trim(),
-      gradeLevel: gradeLevel || null,
-      teacherId: teacherId ? parseInt(teacherId) : null,
-      teacherName: teacherName.trim(),
-      dayOfWeek,
-      startTime,
-      endTime,
-      room: room ? room.trim() : null,
-      schoolYear: schoolYear || null,
-      semester: semester || null,
-    });
+    // Create schedule records for each target day
+    const createdRecords = [];
+    const finalTeacherName = isBreak ? (teacherName && teacherName !== 'No Teacher' ? teacherName.trim() : 'No Teacher') : teacherName.trim();
 
-    // Optionally sync with Section table if sectionId provided
-    if (sectionId) {
+    for (const day of targetDays) {
+      const scheduleRecord = await ClassSchedule.create({
+        subjectId: isBreak ? null : (subjectId ? parseInt(subjectId) : null),
+        subjectCode: subjectCode || (isBreak ? 'BREAK' : null),
+        subjectName: subjectName.trim(),
+        sectionId: sectionId ? parseInt(sectionId) : null,
+        sectionName: sectionName.trim(),
+        gradeLevel: gradeLevel || null,
+        teacherId: isBreak ? null : (teacherId ? parseInt(teacherId) : null),
+        teacherName: finalTeacherName,
+        dayOfWeek: day,
+        startTime,
+        endTime,
+        room: room ? room.trim() : null,
+        schoolYear: schoolYear || null,
+        semester: semester || null,
+      });
+      createdRecords.push(scheduleRecord);
+    }
+
+    // Optionally sync with Section table if sectionId provided (only for academic subjects)
+    if (sectionId && !isBreak) {
       try {
         const sec = await Section.findByPk(sectionId);
         if (sec) {
-          const schedText = `${dayOfWeek.slice(0, 3)} ${startTime}–${endTime}`;
+          const schedText = `${targetDays[0].slice(0, 3)} ${startTime}–${endTime}`;
           await sec.update({
             schedule: schedText,
             room: room ? room.trim() : sec.room,
@@ -169,8 +194,8 @@ export const createClassSchedule = async (req, res) => {
       }
     }
 
-    // Optionally sync with enrollment_subjects if sectionId & subjectCode provided
-    if (sectionId && subjectCode) {
+    // Optionally sync with enrollment_subjects if sectionId & subjectCode provided (only for academic subjects)
+    if (sectionId && subjectCode && !isBreak) {
       try {
         await sequelize.query(
           `UPDATE enrollment_subjects
@@ -178,7 +203,7 @@ export const createClassSchedule = async (req, res) => {
            WHERE sectionId = ? AND subjectCode = ?`,
           {
             replacements: [
-              `${dayOfWeek} ${startTime}–${endTime}`,
+              `${targetDays[0]} ${startTime}–${endTime}`,
               teacherName,
               teacherId || null,
               room || null,
@@ -193,8 +218,11 @@ export const createClassSchedule = async (req, res) => {
     }
 
     res.status(201).json({
-      message: 'Class scheduled successfully',
-      schedule: scheduleRecord
+      message: targetDays.length > 1
+        ? `Scheduled ${subjectName} for ${sectionName} across ${targetDays.length} days!`
+        : `Scheduled ${subjectName} for ${sectionName} successfully!`,
+      schedule: createdRecords[0],
+      schedules: createdRecords
     });
   } catch (error) {
     console.error('Create class schedule error:', error);
@@ -246,10 +274,26 @@ export const getStudentSchedule = async (req, res) => {
       targetEnrollment = userEnrollments.find(e => String(e.id) === String(enrollmentId));
     }
     if (!targetEnrollment) {
-      // Prioritize active or enrolled with a sectionId
-      targetEnrollment = userEnrollments.find(e => e.sectionId) ||
-        userEnrollments.find(e => ['enrolled', 'active', 'approved', 'subjects_enrolled'].includes(e.status)) ||
-        userEnrollments[0];
+      let activeSY = null;
+      try {
+        const syRecord = await SchoolYear.findOne({ where: { isActive: true } });
+        activeSY = syRecord?.year;
+      } catch (_) {}
+
+      // Prioritize active school year first
+      if (activeSY) {
+        targetEnrollment = userEnrollments.find(e => e.academicYear === activeSY && e.sectionId) ||
+          userEnrollments.find(e => e.academicYear === activeSY && ['enrolled', 'active', 'approved', 'subjects_enrolled'].includes(e.status)) ||
+          userEnrollments.find(e => e.academicYear === activeSY);
+      }
+
+      // Fallback: any ongoing enrolled record with a sectionId, or latest record
+      if (!targetEnrollment) {
+        targetEnrollment = userEnrollments.find(e => e.status !== 'completed' && e.sectionId) ||
+          userEnrollments.find(e => ['enrolled', 'active', 'approved', 'subjects_enrolled'].includes(e.status)) ||
+          userEnrollments.find(e => e.sectionId) ||
+          userEnrollments[0];
+      }
     }
 
     let section = null;
@@ -365,9 +409,24 @@ export const downloadStudentSchedulePDF = async (req, res) => {
       targetEnrollment = userEnrollments.find(e => String(e.id) === String(enrollmentId));
     }
     if (!targetEnrollment) {
-      targetEnrollment = userEnrollments.find(e => e.sectionId) ||
-        userEnrollments.find(e => ['enrolled', 'active', 'approved', 'subjects_enrolled'].includes(e.status)) ||
-        userEnrollments[0];
+      let activeSY = null;
+      try {
+        const syRecord = await SchoolYear.findOne({ where: { isActive: true } });
+        activeSY = syRecord?.year;
+      } catch (_) {}
+
+      if (activeSY) {
+        targetEnrollment = userEnrollments.find(e => e.academicYear === activeSY && e.sectionId) ||
+          userEnrollments.find(e => e.academicYear === activeSY && ['enrolled', 'active', 'approved', 'subjects_enrolled'].includes(e.status)) ||
+          userEnrollments.find(e => e.academicYear === activeSY);
+      }
+
+      if (!targetEnrollment) {
+        targetEnrollment = userEnrollments.find(e => e.status !== 'completed' && e.sectionId) ||
+          userEnrollments.find(e => ['enrolled', 'active', 'approved', 'subjects_enrolled'].includes(e.status)) ||
+          userEnrollments.find(e => e.sectionId) ||
+          userEnrollments[0];
+      }
     }
 
     let section = null;

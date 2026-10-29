@@ -1,4 +1,7 @@
-﻿/*
+import { documentPublicDirectory } from "../services/documentStorage.js";
+import { getApplicationPolicy, submitApplication } from "../controllers/admissionSettingsController.js";
+import { currentAdmission, policyFor, validateSelection, validateDocuments } from "../services/admissionPolicy.js";
+/*
 MIT License
 
 Copyright (c) 2025 Christian I. Cabrera || XianFire Framework
@@ -38,6 +41,7 @@ import {
   getEnrollmentById,
   getUserEnrollments,
   updateEnrollment,
+  updateStudentProfileSections,
   updateEnrollmentStatus,
   deleteEnrollment,
   downloadEnrollmentPDF,
@@ -76,31 +80,26 @@ const MAX_FILE_BYTES = 10 * 1024 * 1024; // 10MB
 const memUploadInstance = multer({
   storage: multer.memoryStorage(),
   fileFilter: (req, file, cb) => {
-    if (!ALLOWED_MIMES.includes(file.mimetype)) {
+    if (!ALLOWED_MIMES.includes(file.mimetype) || ![".pdf", ".jpg", ".jpeg", ".png"].includes(path.extname(file.originalname).toLowerCase())) {
       return cb(new Error(`Invalid file type "${file.originalname}". Only PDF, JPG, JPEG, and PNG files are allowed.`));
     }
     cb(null, true);
   },
-  limits: { fileSize: MAX_FILE_BYTES },
+  limits: { fileSize: MAX_FILE_BYTES, files: 20 },
 });
 
 // Pre-bound middleware for credential document uploads (used in /:id/documents)
-const memUpload = memUploadInstance.fields([
-  { name: "f138", maxCount: 1 }, { name: "f137a", maxCount: 1 },
-  { name: "cgmc", maxCount: 1 }, { name: "tor", maxCount: 1 },
-  { name: "birthCert", maxCount: 1 }, { name: "marriageCert", maxCount: 1 },
-  { name: "cert", maxCount: 1 }, { name: "f137e", maxCount: 1 },
-]);
+const memUpload = memUploadInstance.any();
 
 const router = express.Router();
 
-// GET /api/enrollments/check-lrn?lrn=xxx - Check if LRN is already taken
+// GET /api/enrollments/check-lrn?lrn=xxx - Check if LRN is already taken by another student
 router.get("/check-lrn", requireAuth, async (req, res) => {
   const { lrn } = req.query;
   if (!lrn || lrn.length < 12) return res.json({ taken: false });
   const [rows] = await sequelize.query(
-    "SELECT id FROM enrollment_records WHERE lrn = ? LIMIT 1",
-    { replacements: [lrn] }
+    "SELECT id FROM enrollment_records WHERE lrn = ? AND userId != ? LIMIT 1",
+    { replacements: [lrn, req.user.id] }
   );
   res.json({ taken: rows.length > 0 });
 });
@@ -132,6 +131,8 @@ router.post("/ssc-application", requireAuth, (req, res, next) => {
 }, async (req, res) => {
   try {
     const userId = req.user.id;
+    const { policy, revision } = await currentAdmission();
+    validateSelection(policy, { educationLevel: 'JHS', gradeLevel: 'Grade 7', enrollmentType: 'new', sscApplied: true, grade6Average: req.body.grade6Average });
     // Check if already applied for SSC this school year
     let activeYear = null;
     try {
@@ -160,12 +161,14 @@ router.post("/ssc-application", requireAuth, (req, res, next) => {
       gradeLevel: "Grade 7",
       studentType: "New",
       sscApplied: true,
+      grade6Average: Number(req.body.grade6Average),
+      admissionPolicy: policy, admissionRevision: revision,
       status: "pending_exam",
       ...(activeYear && { academicYear: activeYear }),
     });
 
     // Save the uploaded file to disk
-    const uploadDir = path.join(process.cwd(), "public", "uploads", "documents", `enrollment-${enrollment.id}`);
+    const uploadDir = path.join(documentPublicDirectory, "uploads", "documents", `enrollment-${enrollment.id}`);
     fs.mkdirSync(uploadDir, { recursive: true });
     const ext = path.extname(req.file.originalname) || ".jpg";
     const filename = `sscCard-${Date.now()}${ext}`;
@@ -184,10 +187,13 @@ router.post("/ssc-application", requireAuth, (req, res, next) => {
 
     res.status(201).json({ message: "SSC application submitted successfully.", enrollmentId: enrollment.id });
   } catch (err) {
-    console.error("SSC application error:", err);
-    res.status(500).json({ message: "Failed to submit SSC application." });
+    if (!err.status) console.error("SSC application error:", err);
+    res.status(err.status || 500).json({ message: err.status ? err.message : "Failed to submit SSC application." });
   }
 });
+
+router.get("/:id/admission-policy", requireAuth, getApplicationPolicy);
+router.post("/:id/submit", requireAuth, submitApplication);
 
 // POST /api/enrollments - Create new enrollment (authenticated users)
 router.post(
@@ -224,6 +230,14 @@ router.put(
   sanitizeBody,
   validateEnrollmentUpdate,
   updateEnrollment
+);
+
+// PUT /api/enrollments/:id/profile-sections - Update student Personal Info & Family sections from Profile page
+router.put(
+  "/:id/profile-sections",
+  requireAuth,
+  sanitizeBody,
+  updateStudentProfileSections
 );
 
 // PUT /api/enrollments/:id/status - Update enrollment status (admin only)
@@ -309,10 +323,19 @@ router.post("/:id/documents", requireAuth, (req, res) => {
       const isStaff = ["admin", "registrar"].includes(req.user.role);
       if (!isOwner && !isStaff) return res.status(403).json({ error: "Access denied" });
 
+      const { policy, revision } = await policyFor(enrollment);
+      if (!isStaff && !['draft', 'returned'].includes(enrollment.status)) return res.status(409).json({ error: 'Open the enrollment for editing before changing its documents.' });
+      const allowed = new Set([...policy.documents.map(doc => doc.key), ...(revision === 0 ? ['cgmc','tor','marriageCert','sscCard'] : [])]);
+      const grouped = Object.create(null);
+      for (const file of req.files || []) {
+        if (!allowed.has(file.fieldname) || grouped[file.fieldname]) return res.status(400).json({ error: 'Invalid or duplicate document field.' });
+        grouped[file.fieldname] = [file];
+      }
+      req.files = grouped;
       if (!req.files || Object.keys(req.files).length === 0)
         return res.status(400).json({ error: "No files uploaded" });
 
-      const uploadDir = path.join(process.cwd(), "public", "uploads", "documents", `enrollment-${enrollmentId}`);
+      const uploadDir = path.join(documentPublicDirectory, "uploads", "documents", `enrollment-${enrollmentId}`);
       fs.mkdirSync(uploadDir, { recursive: true });
 
       const saved = [];
@@ -321,7 +344,7 @@ router.post("/:id/documents", requireAuth, (req, res) => {
         // Remove old doc of same type
         const existing = await EnrollmentDocument.findOne({ where: { enrollmentId, documentType: docType } });
         if (existing) {
-          const oldPath = path.join(process.cwd(), "public", existing.filePath);
+          const oldPath = path.join(documentPublicDirectory, existing.filePath);
           if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
           await existing.destroy();
         }
@@ -333,7 +356,7 @@ router.post("/:id/documents", requireAuth, (req, res) => {
         const doc = await EnrollmentDocument.create({
           enrollmentId,
           documentType: docType,
-          documentLabel: CREDENTIAL_LABELS[docType] || docType,
+          documentLabel: policy.documents.find(doc => doc.key === docType)?.label || CREDENTIAL_LABELS[docType] || docType,
           filePath: relativePath,
           originalName: file.originalname,
           mimeType: file.mimetype,
@@ -368,6 +391,9 @@ router.post("/:id/resubmit", requireAuth, async (req, res) => {
     if (enrollment.userId !== req.user.id) return res.status(403).json({ error: "Access denied" });
     if (enrollment.status !== "returned") return res.status(400).json({ error: "Only returned enrollments can be resubmitted" });
 
+    const { policy } = await policyFor(enrollment);
+    validateSelection(policy, enrollment, { sscPlaceholder: Boolean(enrollment.sscResult) });
+    validateDocuments(policy, enrollment, await EnrollmentDocument.findAll({ where: { enrollmentId } }));
     await sequelize.query(
       "UPDATE enrollment_records SET status = 'submitted', updatedAt = NOW() WHERE id = ?",
       { replacements: [enrollmentId] }
@@ -381,7 +407,7 @@ router.post("/:id/resubmit", requireAuth, async (req, res) => {
       res.json({ message: "Enrollment resubmitted successfully", enrollment: updated });
   } catch (e) {
     console.error("Resubmit error:", e);
-    res.status(500).json({ error: "Failed to resubmit enrollment" });
+    res.status(e.status || 500).json({ error: e.status ? e.message : "Failed to resubmit enrollment" });
   }
 });
 export default router;

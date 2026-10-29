@@ -1,22 +1,13 @@
+import { generateStudentNumber } from "../services/studentNumbers.js";
+import { validateForReview } from "../services/enrollmentReview.js";
 import { sendEnrollmentVerifiedEmail, sendEnrollmentReturnedEmail, sendSSCExamScheduledEmail, sendSSCResultEmail, sendEnrollmentApprovedEmail, sendLifeStatusEmail } from '../services/emailService.js';
 import { sequelize } from '../models/db.js';
-import { autoAssignSection } from '../services/sectionAssignment.js';
+import { autoAssignSection, moveToSection, removeFromSection } from '../services/sectionAssignment.js';
 
 /**
  * Generate a unique student ID in YYYY-NNNNN format (shared with adminEnrollmentController)
  */
-async function generateStudentNumber() {
-  const year = new Date().getFullYear();
-  const prefix = `${year}-`;
-  const [[row]] = await sequelize.query(
-    `SELECT MAX(CAST(SUBSTR(studentNumber, 6) AS INTEGER)) as maxSeq
-     FROM enrollment_records
-     WHERE studentNumber LIKE ? AND LENGTH(studentNumber) = 10`,
-    { replacements: [`${prefix}%`] }
-  );
-  const next = ((row?.maxSeq) || 0) + 1;
-  return `${prefix}${String(next).padStart(5, '0')}`;
-}
+
 
 // ── Dashboard stats ───────────────────────────────────────────────────────────
 export const getRegistrarStats = async (req, res) => {
@@ -54,7 +45,7 @@ export const getRegistrarStats = async (req, res) => {
 
     const [recentActivity] = await sequelize.query(`
       SELECT er.id, er.firstName, er.familyName, er.educationLevel,
-             er.gradeLevel, er.course, er.status, er.createdAt, er.updatedAt,
+             er.gradeLevel, er.status, er.createdAt, er.updatedAt,
              er.academicYear, u.name as user_name, u.email as userEmail
       FROM enrollment_records er
       LEFT JOIN users u ON er.userId = u.id
@@ -87,11 +78,17 @@ export const getRegistrarStats = async (req, res) => {
 // ── Get enrollments for registrar ─────────────────────────────────────────────
 export const getRegistrarEnrollments = async (req, res) => {
   try {
-    const { status, educationLevel, search, academicYear } = req.query;
+    const { status, educationLevel, schoolLevel, enrollmentType, search, academicYear } = req.query;
+    if (schoolLevel && !['all', 'jhs_regular', 'jhs_ssc', 'shs'].includes(schoolLevel)) {
+      return res.status(400).json({ error: 'Invalid school level filter' });
+    }
+    if (enrollmentType && !['all', 'new', 'old', 'returnee', 'transferee'].includes(enrollmentType)) {
+      return res.status(400).json({ error: 'Invalid enrollment type filter' });
+    }
 
     // Default to active school year if not specified
     let yearFilter = academicYear;
-    if (!yearFilter || yearFilter === 'all') {
+    if (!yearFilter) {
       try {
         const [[sy]] = await sequelize.query("SELECT year FROM school_years WHERE isActive = 1 LIMIT 1");
         if (sy?.year) yearFilter = sy.year;
@@ -112,16 +109,31 @@ export const getRegistrarEnrollments = async (req, res) => {
       params.push(yearFilter);
     }
 
-    if (status && status !== 'all') {
+    if (status === 'needs_review') {
+      query += ` AND er.status IN ('submitted', 'verified')`;
+    } else if (status === 'enrolled_active') {
+      query += ` AND er.status IN ('enrolled', 'active') AND COALESCE(er.lifeStatus, 'enrolled') NOT IN ('dropped', 'transferred_out', 'retained', 'completed')`;
+    } else if (status === 'awaiting_section') {
+      query += ` AND er.status IN ('approved', 'subjects_enrolled') AND er.sectionId IS NULL`;
+    } else if (status && status !== 'all') {
       query += ` AND er.status = ?`;
       params.push(status);
     } else {
-      query += ` AND er.status IN ('submitted', 'pending_exam', 'verified', 'returned', 'approved', 'enrolled')`;
+      query += ` AND er.status IN ('submitted', 'pending_exam', 'verified', 'returned', 'approved', 'subjects_enrolled', 'enrolled', 'active', 'completed', 'rejected')`;
     }
 
     if (educationLevel && educationLevel !== 'all') {
       query += ` AND er.educationLevel = ?`;
       params.push(educationLevel);
+    }
+
+    const sscPredicate = `(COALESCE(er.sscClass, '') = 'SSC' OR (COALESCE(er.sscApplied, 0) = 1 AND COALESCE(er.sscClass, '') = '' AND COALESCE(er.sscResult, '') <> 'failed'))`;
+    if (schoolLevel === 'shs') query += ` AND er.educationLevel = 'SHS'`;
+    if (schoolLevel === 'jhs_ssc') query += ` AND er.educationLevel = 'JHS' AND ${sscPredicate}`;
+    if (schoolLevel === 'jhs_regular') query += ` AND er.educationLevel = 'JHS' AND NOT ${sscPredicate}`;
+    if (enrollmentType && enrollmentType !== 'all') {
+      query += ` AND er.enrollmentType = ?`;
+      params.push(enrollmentType);
     }
 
     if (search) {
@@ -158,6 +170,8 @@ export const verifyEnrollment = async (req, res) => {
       return res.status(400).json({ error: `Cannot verify enrollment with status: ${enrollment.status}` });
     }
 
+    await validateForReview(enrollment);
+
     await sequelize.query(
       `UPDATE enrollment_records
        SET status = 'verified',
@@ -182,8 +196,8 @@ export const verifyEnrollment = async (req, res) => {
 
     res.json({ message: 'Enrollment verified successfully', enrollment: updated });
   } catch (error) {
-    console.error('Verify enrollment error:', error);
-    res.status(500).json({ error: 'Failed to verify enrollment' });
+    if (!error.status) console.error('Verify enrollment error:', error);
+    res.status(error.status || 500).json({ error: error.status ? error.message : 'Failed to verify enrollment' });
   }
 };
 
@@ -200,20 +214,31 @@ export const approveEnrollment = async (req, res) => {
     );
 
     if (!enrollment) return res.status(404).json({ error: 'Enrollment not found' });
+    if (['enrolled','active','subjects_enrolled'].includes(enrollment.status)) return res.json({ message: 'Enrollment is already approved.', enrollment });
+    await validateForReview(enrollment);
 
     if (!['verified', 'submitted', 'returned'].includes(enrollment.status)) {
       return res.status(400).json({ error: `Cannot approve enrollment with status: ${enrollment.status}` });
     }
 
-    // Generate student number if not already assigned
-    const studentNumber = enrollment.studentNumber || await generateStudentNumber();
+    // Generate student number if not already assigned, preserving any existing number from previous years
+    let studentNumber = enrollment.studentNumber;
+    if (!studentNumber) {
+      const [[prev]] = await sequelize.query(
+        `SELECT studentNumber FROM enrollment_records
+         WHERE userId = ? AND studentNumber IS NOT NULL AND studentNumber != ''
+         ORDER BY id DESC LIMIT 1`,
+        { replacements: [enrollment.userId] }
+      );
+      studentNumber = prev?.studentNumber || await generateStudentNumber();
+    }
 
     // Auto-set lifeStatus: transferees get 'transferred_in', everyone else gets 'enrolled'
     const autoLifeStatus = enrollment.enrollmentType === 'transferee' ? 'transferred_in' : 'enrolled';
 
     await sequelize.query(
       `UPDATE enrollment_records
-       SET status = 'enrolled',
+       SET status = 'approved',
            lifeStatus = ?,
            studentNumber = ?,
            registrar_remarks = ?,
@@ -226,25 +251,23 @@ export const approveEnrollment = async (req, res) => {
       { replacements: [autoLifeStatus, studentNumber, remarks || null, registrarId, registrarId, id] }
     );
 
-    const [[updated]] = await sequelize.query(
+    let [[updated]] = await sequelize.query(
       'SELECT * FROM enrollment_records WHERE id = ?',
       { replacements: [id] }
     );
 
-    // Auto-assign to a section (non-blocking — won't fail approval if no section available)
-    autoAssignSection(id).catch(err =>
-      console.error('Auto-assign section error after registrar approval:', err.message)
-    );
+    const assignment = await autoAssignSection(id);
+    [[updated]] = await sequelize.query('SELECT * FROM enrollment_records WHERE id = ?', { replacements: [id] });
 
     try {
       const [[user]] = await sequelize.query('SELECT * FROM users WHERE id = ?', { replacements: [updated.userId] });
       if (user) await sendEnrollmentApprovedEmail(user, updated);
     } catch (_) {}
 
-    res.json({ message: 'Enrollment approved successfully', enrollment: updated });
+    res.json({ message: 'Enrollment approved successfully', enrollment: updated, sectionAssignment: assignment });
   } catch (error) {
-    console.error('Approve enrollment error:', error);
-    res.status(500).json({ error: 'Failed to approve enrollment' });
+    if (!error.status) console.error('Approve enrollment error:', error);
+    res.status(error.status || 500).json({ error: error.status ? error.message : 'Failed to approve enrollment' });
   }
 };
 
@@ -573,7 +596,7 @@ export const updateLifeStatus = async (req, res) => {
     // If dropped or transferred out — free up the section slot
     if (['dropped', 'transferred_out'].includes(lifeStatus) && enrollment.sectionId) {
       await sequelize.query(
-        `UPDATE sections SET currentEnrollment = MAX(0, currentEnrollment - 1), updatedAt = NOW() WHERE id = ?`,
+        `UPDATE sections SET currentEnrollment = GREATEST(0, CAST(currentEnrollment AS SIGNED) - 1), updatedAt = NOW() WHERE id = ?`,
         { replacements: [enrollment.sectionId] }
       ).catch(() => {}); // non-blocking
     }
@@ -678,5 +701,40 @@ export const getStudentsByLifeStatus = async (req, res) => {
   } catch (error) {
     console.error('getStudentsByLifeStatus error:', error);
     res.status(500).json({ error: 'Failed to fetch students' });
+  }
+};
+
+// ── Assign Section to Student Enrollment ─────────────────────────────────────
+export const assignEnrollmentSection = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { sectionId } = req.body;
+
+    if (!sectionId) return res.status(400).json({ error: 'sectionId is required' });
+
+    const result = await moveToSection(parseInt(id), parseInt(sectionId));
+    if (!result.success) return res.status(400).json({ error: result.reason });
+
+    res.json({
+      message: `Student assigned to section ${result.section.code}`,
+      section: result.section
+    });
+  } catch (error) {
+    console.error('Assign enrollment section error:', error);
+    res.status(500).json({ error: error.message || 'Failed to assign section' });
+  }
+};
+
+// ── Remove Student Enrollment from Section ───────────────────────────────────
+export const removeEnrollmentSection = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await removeFromSection(parseInt(id));
+    if (!result.success) return res.status(400).json({ error: result.reason });
+
+    res.json({ message: 'Student removed from section' });
+  } catch (error) {
+    console.error('Remove enrollment section error:', error);
+    res.status(500).json({ error: error.message || 'Failed to remove section' });
   }
 };

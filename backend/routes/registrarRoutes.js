@@ -1,4 +1,5 @@
 import express from 'express';
+import { getRegistrarDashboard } from '../controllers/registrarDashboardController.js';
 import { sequelize } from '../models/db.js';
 import { authenticateToken, requireRegistrar } from '../middleware/auth.js';
 import {
@@ -12,6 +13,8 @@ import {
   recordSSCResult,
   updateLifeStatus,
   getStudentsByLifeStatus,
+  assignEnrollmentSection,
+  removeEnrollmentSection,
 } from '../controllers/registrarController.js';
 import { sanitizeBody, validateRemarks, validateSSCSchedule, validateSSCResult } from '../middleware/validate.js';
 
@@ -21,6 +24,7 @@ router.use(authenticateToken);
 router.use(requireRegistrar);
 
 // Dashboard
+router.get('/dashboard', getRegistrarDashboard);
 router.get('/stats', getRegistrarStats);
 
 // Enrollment list
@@ -48,5 +52,9 @@ router.put('/enrollments/:id/life-status', sanitizeBody, updateLifeStatus);
 
 // Get enrolled students filterable by life status
 router.get('/students', getStudentsByLifeStatus);
+
+// ── Section Assignment ───────────────────────────────────────────────────────
+router.post('/enrollments/:id/assign-section', sanitizeBody, assignEnrollmentSection);
+router.delete('/enrollments/:id/assign-section', removeEnrollmentSection);
 
 export default router;

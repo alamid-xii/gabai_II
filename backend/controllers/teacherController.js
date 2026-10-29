@@ -46,10 +46,10 @@ export const getSectionStudents = async (req, res) => {
 
     // Verify this section belongs to this teacher
     const [[section]] = await sequelize.query(
-      `SELECT id, code, course, yearLevel, strand, semester, schoolYear,
-              instructor, schedule, room, capacity, currentEnrollment
-       FROM sections WHERE id = ? AND (s.teacherId = ? OR s.instructor = ? OR teacherId = ? OR instructor = ?) AND isActive = 1`,
-      { replacements: [sectionId, teacherId, teacherName, teacherId, teacherName] }
+      `SELECT s.id, s.code, s.course, s.yearLevel, s.strand, s.semester, s.schoolYear,
+              s.instructor, s.schedule, s.room, s.capacity, s.currentEnrollment
+       FROM sections s WHERE s.id = ? AND (s.teacherId = ? OR s.instructor = ?) AND s.isActive = 1`,
+      { replacements: [sectionId, teacherId, teacherName] }
     );
 
     if (!section) {

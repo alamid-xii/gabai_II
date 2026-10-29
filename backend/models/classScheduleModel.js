@@ -37,7 +37,7 @@ export const ClassSchedule = sequelize.define("ClassSchedule", {
   },
   teacherName: {
     type: DataTypes.STRING(100),
-    allowNull: false, // e.g. "De Guzman, P."
+    allowNull: true, // Nullable for breaks (Health Break, Lunch Break)
   },
   dayOfWeek: {
     type: DataTypes.ENUM("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"),

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
+import { SchoolName } from "../components/SchoolName";
 import { Link, useNavigate } from "react-router";
-import { MapPin, Eye, EyeOff, LogIn, Mail, Lock, AlertCircle, Loader2, CheckCircle } from "lucide-react";
+import { Eye, EyeOff, LogIn, Mail, Lock, AlertCircle, Loader2, CheckCircle } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
@@ -39,13 +40,17 @@ export function Login() {
       setLoading(true);
       setError("");
       try {
-        const response = await fetch(`${API_BASE_URL}/api/auth/google/session`, {
+        const response = await fetch(`${API}/auth/google/session`, {
           credentials: "include",
         });
         const data = await response.json();
         if (!response.ok) throw new Error(data.message || "Google sign-in failed.");
 
         login(data.user, data.token);
+        if (data.user.profileCompleted === false) {
+          navigate("/complete-profile", { replace: true });
+          return;
+        }
         if (data.user.role === "admin") {
           navigate("/admin", { replace: true });
         } else if (data.user.role === "registrar") {
@@ -73,6 +78,7 @@ export function Login() {
     try {
       const response = await fetch(`${API}/auth/login`, {
         method: "POST",
+        credentials: "include",
         headers: {
           "Content-Type": "application/json",
         },
@@ -91,6 +97,10 @@ export function Login() {
 
       // Use auth context to update login state
       login(data.user, data.token);
+      if (data.user.profileCompleted === false) {
+        navigate("/complete-profile", { replace: true });
+        return;
+      }
 
       // Navigate based on role
       if (data.user.role === "admin") {
@@ -116,9 +126,11 @@ export function Login() {
         {/* Logo Header */}
         <div className="text-center mb-6">
           <Link to="/" className="inline-flex items-center gap-2 mb-3">
-            <div className="bg-[#F5C400] w-12 h-12 rounded-xl flex items-center justify-center shadow-lg">
-              <MapPin className="w-7 h-7 text-[#001840]" />
-            </div>
+            <img
+              src="/GabAi_Logo.png"
+              alt="GabAI Logo"
+              className="w-12 h-12 rounded-xl object-contain shadow-lg"
+            />
             <div className="text-left">
               <span className="font-bold text-2xl tracking-wide text-white">
                 GabAI
@@ -128,7 +140,7 @@ export function Login() {
               </p>
             </div>
           </Link>
-          
+
           <p className="text-sm text-[#FFDC5F]"></p>
         </div>
 

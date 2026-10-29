@@ -59,7 +59,7 @@ export function isValidDate(dateStr) {
 
 export function isValidStudentNumber(sn) {
   // Format: YYYY-NNNNN  e.g. 2025-00123
-  return /^\d{4}-\d{5}$/.test(sn);
+  return /^([A-Z]{1,3}-\d{3,6}|\d{4}-\d{4,6})$/i.test(String(sn || '').trim());
 }
 
 // ── Enrollment middleware ─────────────────────────────────────────────────────
@@ -82,7 +82,7 @@ const ENROLLMENT_STRING_LIMITS = {
   lastHSSYStart: 4,
   lastHSSYEnd: 4,
   enrollmentType: 20,
-  studentNumber: 10,
+  studentNumber: 20,
   academicYear: 20,
   dateEnrolled: 10,
   familyName: 100,
@@ -107,6 +107,7 @@ const ENROLLMENT_STRING_LIMITS = {
 };
 
 function validateEnrollmentStringLimits(body, errors) {
+  if (typeof body.grade6Average === 'number' && Number.isFinite(body.grade6Average)) body.grade6Average = String(body.grade6Average);
   for (const [field, maxLength] of Object.entries(ENROLLMENT_STRING_LIMITS)) {
     const value = body[field];
     if (value === undefined || value === null || value === '') continue;
@@ -159,7 +160,7 @@ export function validateEnrollmentCreate(req, res, next) {
 
   // Student number format (optional but format-checked when present)
   if (b.studentNumber && !isValidStudentNumber(b.studentNumber)) {
-    errors.push({ field: 'studentNumber', message: 'Student number must be in YYYY-NNNNN format' });
+    errors.push({ field: 'studentNumber', message: 'Invalid Student ID format. Use your EMC Student ID (e.g., A-9869) or Portal ID (e.g., 2025-00123).' });
   }
 
   // Enum checks
@@ -226,7 +227,7 @@ export function validateEnrollmentUpdate(req, res, next) {
     errors.push({ field: 'lrn', message: 'LRN must be exactly 12 digits' });
   }
   if (b.studentNumber !== undefined && b.studentNumber && !isValidStudentNumber(b.studentNumber)) {
-    errors.push({ field: 'studentNumber', message: 'Student number must be in YYYY-NNNNN format' });
+    errors.push({ field: 'studentNumber', message: 'Invalid Student ID format. Use your EMC Student ID (e.g., A-9869) or Portal ID (e.g., 2025-00123).' });
   }
   if (b.familyName !== undefined && /\d/.test(b.familyName)) errors.push({ field: 'familyName', message: 'Family name must not contain numbers' });
   if (b.firstName  !== undefined && /\d/.test(b.firstName))  errors.push({ field: 'firstName',  message: 'First name must not contain numbers' });

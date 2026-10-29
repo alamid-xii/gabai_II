@@ -23,7 +23,7 @@ import { useAuth } from "../../contexts/AuthContext";
 // ── Status config ─────────────────────────────────────────────────────────────
 export const ADMIN_STATUS_CFG = {
   draft:             { label: 'Draft',             color: 'bg-gray-100 text-gray-700' },
-  submitted:         { label: 'Submitted',          color: 'bg-blue-100 text-blue-700' },
+  submitted:         { label: 'Pending',           color: 'bg-amber-100 text-amber-800' },
   pending_exam:      { label: 'Pending Exam',       color: 'bg-yellow-100 text-yellow-700' },
   returned:          { label: 'Returned',           color: 'bg-orange-100 text-orange-700' },
   approved:          { label: 'Enrolled',           color: 'bg-emerald-100 text-emerald-700' },

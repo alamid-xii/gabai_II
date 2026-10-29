@@ -2,10 +2,10 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import { getUserEnrollments, downloadEnrollmentPDF, deleteEnrollment } from '../../services/enrollmentApi';
-import { 
-  FileText, Download, Eye, Trash2, Plus, Upload, 
+import {
+  FileText, Download, Eye, Trash2, Plus, Upload,
   CheckCircle, Clock, XCircle, AlertCircle, Calendar, BookOpen,
-  UserX, ArrowRightLeft, RotateCcw, FlaskConical, Loader2
+  UserX, ArrowRightLeft, RotateCcw, FlaskConical, Loader2, Award
 } from 'lucide-react';
 import { API } from '../../config/api';
 
@@ -57,7 +57,7 @@ export function MyEnrollments() {
     }).catch(err => toast.error(err.message))
       .finally(() => setLoading(false));
   }, []);
-  
+
   const handleDownloadPDF = async (id) => {
     try {
       await downloadEnrollmentPDF(id);
@@ -66,7 +66,7 @@ export function MyEnrollments() {
       toast.error(error.message);
     }
   };
-  
+
   const handleDelete = async (id) => {
     try {
       setDeleting(true);
@@ -80,7 +80,7 @@ export function MyEnrollments() {
       setDeleting(false);
     }
   };
-  
+
   const getStatusConfig = (status) => {
     const configs = {
       draft: {
@@ -89,9 +89,9 @@ export function MyEnrollments() {
         label: 'Draft'
       },
       submitted: {
-        icon: AlertCircle,
-        color: 'bg-blue-100 text-blue-700 border-blue-300',
-        label: 'Submitted'
+        icon: Clock,
+        color: 'bg-amber-100 text-amber-800 border-amber-300',
+        label: 'Pending'
       },
       pending_exam: {
         icon: Calendar,
@@ -123,6 +123,11 @@ export function MyEnrollments() {
         color: 'bg-emerald-100 text-emerald-700 border-emerald-300',
         label: 'Enrolled'
       },
+      completed: {
+        icon: CheckCircle,
+        color: 'bg-blue-100 text-blue-700 border-blue-300',
+        label: 'Completed'
+      },
       rejected: {
         icon: XCircle,
         color: 'bg-red-100 text-red-700 border-red-300',
@@ -131,7 +136,7 @@ export function MyEnrollments() {
     };
     return configs[status] || configs.draft;
   };
-  
+
   const calculateProgress = (enrollment) => {
     const fields = [
       enrollment.studentType,
@@ -189,36 +194,44 @@ export function MyEnrollments() {
       ? currentEnrollments.filter(e => e.status === 'enrolled' || e.status === 'subjects_enrolled')
       : currentEnrollments.filter(e => (e.status || 'draft') === filterStatus);
 
-  const hasActiveEnrollment = currentEnrollments.some(e =>
-    !['rejected', 'completed', 'draft'].includes(e.status)
+  // Active for the CURRENT active school year (blocks starting a duplicate application for the same year)
+  const hasActiveEnrollment = enrollments.some(e =>
+    !['rejected', 'completed', 'draft'].includes(e.status) &&
+    (!activeYear || !e.academicYear || e.academicYear === activeYear)
+  );
+
+  // Student has a completed enrollment or enrollment from a previous school year (eligible to advance grade level)
+  const completedOrPastEnrollment = enrollments.find(e =>
+    e.status === 'completed' ||
+    (e.status === 'enrolled' && activeYear && e.academicYear && e.academicYear !== activeYear)
   );
 
   return (
-    <div className="min-h-screen bg-linear-to-br from-[#FFFDF0] via-[#FFF9E6] to-[#FFFDF0] py-8">
+    <div className="min-h-[calc(100svh-4rem)] lg:min-h-[calc(100svh-5rem)] bg-linear-to-br from-[#FFFDF0] via-[#FFF9E6] to-[#FFFDF0] py-4 sm:py-8">
       <div className="max-w-6xl mx-auto px-4">
         {/* Header */}
         <div className="mb-6">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-4">
             <div>
-              <h1 className="text-3xl font-bold text-[#001840] mb-2">My Enrollments</h1>
+              <h1 className="text-2xl sm:text-3xl font-bold text-[#001840] mb-2">Enrollments</h1>
               <p className="text-gray-600">Manage and track your enrollment forms</p>
             </div>
           </div>
         </div>
-        
+
         {/* Enrollments List */}
         <div className="bg-white rounded-xl shadow-lg border border-gray-200">
           {loading ? (
-            <div className="p-12 text-center">
+            <div className="px-4 py-8 sm:p-12 text-center">
               <div className="w-12 h-12 border-4 border-[#F5C400] border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
               <p className="text-gray-600">Loading enrollments...</p>
             </div>
           ) : filteredEnrollments.length === 0 ? (
-            <div className="p-12 text-center">
+            <div className="px-4 py-8 sm:p-12 text-center">
               <FileText className="w-16 h-16 text-gray-300 mx-auto mb-4" />
               <p className="text-gray-600 mb-4">
-                {filterStatus === 'all' 
-                  ? "You haven't created any enrollment forms yet" 
+                {filterStatus === 'all'
+                  ? "You haven't created any enrollment forms yet"
                   : `No ${filterStatus} enrollments found`}
               </p>
               {filterStatus === 'all' && !hasActiveEnrollment && (
@@ -226,7 +239,7 @@ export function MyEnrollments() {
                   onClick={() => navigate('/enroll')}
                   className="px-6 py-2.5 bg-[#102A71] text-white rounded-lg hover:bg-[#001840] transition-all font-medium"
                 >
-                  Create Your First Enrollment
+                  Create Enrollment
                 </button>
               )}
             </div>
@@ -236,11 +249,11 @@ export function MyEnrollments() {
                 const statusConfig = getStatusConfig(enrollment.status || 'draft');
                 const StatusIcon = statusConfig.icon;
                 const progress = calculateProgress(enrollment);
-                
+
                 return (
-                  <div 
-                    key={enrollment.id} 
-                    className="p-6 hover:bg-[#FFFDF0] transition-colors"
+                  <div
+                    key={enrollment.id}
+                    className="p-4 sm:p-6 hover:bg-[#FFFDF0] transition-colors"
                   >
                     <div className="flex flex-col lg:flex-row lg:items-center gap-4">
                       {/* Left Section - Info */}
@@ -252,14 +265,14 @@ export function MyEnrollments() {
                           <div className="flex-1">
                             <div className="flex flex-wrap items-center gap-2 mb-2">
                               <h3 className="text-lg font-semibold text-[#001840]">
-                                {`${enrollment.educationLevel} — ${enrollment.gradeLevel || ''}${enrollment.strand ? ` (${enrollment.strand})` : ''}`}
+                                {`${enrollment.educationLevel} — ${enrollment.gradeLevel || ''}${enrollment.strand ? ` (${enrollment.strand})` : enrollment.educationLevel === 'JHS' && enrollment.sscClass === 'SSC' ? ' (SSC)' : ''}`}
                               </h3>
                               <div className={`flex items-center gap-1.5 px-3 py-1 rounded-full border ${statusConfig.color} text-sm font-medium`}>
                                 <StatusIcon className="w-4 h-4" />
                                 {statusConfig.label}
                               </div>
                             </div>
-                            
+
                             <div className="flex flex-wrap items-center gap-4 text-sm text-gray-600">
                               <div className="flex items-center gap-1.5">
                                 <Calendar className="w-4 h-4" />
@@ -274,7 +287,7 @@ export function MyEnrollments() {
                                 <span className="text-xs font-mono bg-[#EEF2FF] text-[#102A71] border border-[#102A71]/20 px-2.5 py-1 rounded-lg font-semibold">
                                   ID: {enrollment.studentNumber}
                                 </span>
-                              ) : ['approved','enrolled','active'].includes(enrollment.status) ? (
+                              ) : ['approved', 'enrolled', 'active'].includes(enrollment.status) ? (
                                 <span className="text-xs bg-yellow-50 text-yellow-700 border border-yellow-200 px-2.5 py-1 rounded-lg">
                                   ID: Pending assignment
                                 </span>
@@ -289,7 +302,20 @@ export function MyEnrollments() {
                                 </div>
                                 <div>
                                   <p className="text-xs text-emerald-600 font-medium">Assigned Section</p>
-                                  <p className="text-sm font-bold text-emerald-800">Section {enrollment.sectionName}</p>
+                                  <p className="text-sm font-bold text-emerald-800"> {enrollment.sectionName}</p>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Pending Registrar Approval Banner */}
+                            {enrollment.status === 'submitted' && (
+                              <div className="mt-3 flex items-start gap-2.5 bg-amber-50 border border-amber-200 rounded-lg px-4 py-2.5">
+                                <Clock className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
+                                <div>
+                                  <p className="text-xs text-amber-800 font-semibold">Pending Registrar Approval</p>
+                                  <p className="text-xs text-amber-700 mt-0.5">
+                                    Your enrollment application has been submitted and is currently pending review and section assignment by the Registrar.
+                                  </p>
                                 </div>
                               </div>
                             )}
@@ -356,40 +382,37 @@ export function MyEnrollments() {
                                 </div>
                               </div>
                             )}
-                            
+
                             {/* Life Status Banner — shown when registrar has updated student status */}
                             {enrollment.lifeStatus && enrollment.lifeStatus !== 'enrolled' && (
-                              <div className={`mt-3 flex items-start gap-2.5 rounded-lg px-4 py-3 border ${
-                                enrollment.lifeStatus === 'dropped'
-                                  ? 'bg-red-50 border-red-200'
-                                  : enrollment.lifeStatus === 'transferred_out'
+                              <div className={`mt-3 flex items-start gap-2.5 rounded-lg px-4 py-3 border ${enrollment.lifeStatus === 'dropped'
+                                ? 'bg-red-50 border-red-200'
+                                : enrollment.lifeStatus === 'transferred_out'
                                   ? 'bg-orange-50 border-orange-200'
                                   : enrollment.lifeStatus === 'retained'
-                                  ? 'bg-yellow-50 border-yellow-200'
-                                  : enrollment.lifeStatus === 'transferred_in'
-                                  ? 'bg-blue-50 border-blue-200'
-                                  : 'bg-slate-50 border-slate-200'
-                              }`}>
-                                <div className={`mt-0.5 shrink-0 ${
-                                  enrollment.lifeStatus === 'dropped' ? 'text-red-500' :
-                                  enrollment.lifeStatus === 'transferred_out' ? 'text-orange-500' :
-                                  enrollment.lifeStatus === 'retained' ? 'text-yellow-600' :
-                                  enrollment.lifeStatus === 'transferred_in' ? 'text-blue-500' :
-                                  'text-slate-400'
+                                    ? 'bg-yellow-50 border-yellow-200'
+                                    : enrollment.lifeStatus === 'transferred_in'
+                                      ? 'bg-blue-50 border-blue-200'
+                                      : 'bg-slate-50 border-slate-200'
                                 }`}>
+                                <div className={`mt-0.5 shrink-0 ${enrollment.lifeStatus === 'dropped' ? 'text-red-500' :
+                                  enrollment.lifeStatus === 'transferred_out' ? 'text-orange-500' :
+                                    enrollment.lifeStatus === 'retained' ? 'text-yellow-600' :
+                                      enrollment.lifeStatus === 'transferred_in' ? 'text-blue-500' :
+                                        'text-slate-400'
+                                  }`}>
                                   {enrollment.lifeStatus === 'dropped' && <UserX className="w-4 h-4" />}
                                   {enrollment.lifeStatus === 'transferred_out' && <ArrowRightLeft className="w-4 h-4" />}
                                   {enrollment.lifeStatus === 'transferred_in' && <ArrowRightLeft className="w-4 h-4" />}
                                   {enrollment.lifeStatus === 'retained' && <RotateCcw className="w-4 h-4" />}
                                 </div>
                                 <div>
-                                  <p className={`text-xs font-bold uppercase tracking-wide mb-0.5 ${
-                                    enrollment.lifeStatus === 'dropped' ? 'text-red-700' :
+                                  <p className={`text-xs font-bold uppercase tracking-wide mb-0.5 ${enrollment.lifeStatus === 'dropped' ? 'text-red-700' :
                                     enrollment.lifeStatus === 'transferred_out' ? 'text-orange-700' :
-                                    enrollment.lifeStatus === 'retained' ? 'text-yellow-700' :
-                                    enrollment.lifeStatus === 'transferred_in' ? 'text-blue-700' :
-                                    'text-slate-600'
-                                  }`}>
+                                      enrollment.lifeStatus === 'retained' ? 'text-yellow-700' :
+                                        enrollment.lifeStatus === 'transferred_in' ? 'text-blue-700' :
+                                          'text-slate-600'
+                                    }`}>
                                     {{
                                       dropped: 'Enrollment Dropped',
                                       transferred_out: 'Transferred Out',
@@ -411,23 +434,63 @@ export function MyEnrollments() {
                               </div>
                             )}
 
-                            {/* Progress Bar */}
-                            <div className="mt-3">
-                              <div className="flex items-center justify-between text-xs mb-1">
-                                <span className="text-gray-600">Completion</span>
-                                <span className="font-semibold text-[#102A71]">{progress}%</span>
+                            {/* School Year Completed / Advance Grade Level Banner */}
+                            {(enrollment.status === 'completed' || (enrollment.status === 'enrolled' && activeYear && enrollment.academicYear && enrollment.academicYear !== activeYear)) && (
+                              <div className="mt-3 bg-linear-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-3.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                                <div className="flex items-center gap-2.5">
+                                  <div className="w-8 h-8 rounded-lg bg-[#102A71] text-[#F5C400] flex items-center justify-center shrink-0 shadow-xs">
+                                    <BookOpen className="w-4 h-4" />
+                                  </div>
+                                  <div>
+                                    <p className="text-xs font-bold text-[#001840]">
+                                      {enrollment.lifeStatus === 'retained' ? 'School Year Finished' : 'School Year Completed'}
+                                    </p>
+                                    <p className="text-xs text-gray-600 mt-0.5">
+                                      {enrollment.lifeStatus === 'retained'
+                                        ? 'You have finished this school year. Re-enroll for the upcoming school year.'
+                                        : 'You have completed this school year! Advance to your next grade level for the new school year.'}
+                                    </p>
+                                  </div>
+                                </div>
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <button
+                                    onClick={() => navigate(`/student-dashboard/${enrollment.id}`)}
+                                    className="shrink-0 px-3.5 py-2 bg-white text-[#102A71] border border-[#102A71]/30 hover:bg-[#EEF2FF] font-bold text-xs rounded-lg transition-all flex items-center gap-1.5 shadow-2xs hover:scale-[1.02] active:scale-[0.98]"
+                                  >
+                                    <Award className="w-3.5 h-3.5 text-[#F5C400]" />
+                                    View Past Grades
+                                  </button>
+                                  {!hasActiveEnrollment && (
+                                    <button
+                                      onClick={() => navigate('/enroll')}
+                                      className="shrink-0 px-4 py-2 bg-[#102A71] hover:bg-[#001840] text-[#FFDC5F] font-bold text-xs rounded-lg transition-all flex items-center gap-1.5 shadow-xs hover:scale-[1.02] active:scale-[0.98]"
+                                    >
+                                      {enrollment.lifeStatus === 'retained' ? 'Re-enroll →' : 'Enroll for Next Level →'}
+                                    </button>
+                                  )}
+                                </div>
                               </div>
-                              <div className="w-full bg-gray-200 rounded-full h-2">
-                                <div 
-                                  className="bg-linear-to-r from-[#F5C400] to-[#FFDC5F] h-2 rounded-full transition-all duration-500"
-                                  style={{ width: `${progress}%` }}
-                                ></div>
+                            )}
+
+                            {/* Progress Bar — hide when already enrolled */}
+                            {!['enrolled', 'completed'].includes(enrollment.status) && (
+                              <div className="mt-3">
+                                <div className="flex items-center justify-between text-xs mb-1">
+                                  <span className="text-gray-600">Completion</span>
+                                  <span className="font-semibold text-[#102A71]">{progress}%</span>
+                                </div>
+                                <div className="w-full bg-gray-200 rounded-full h-2">
+                                  <div
+                                    className="bg-linear-to-r from-[#F5C400] to-[#FFDC5F] h-2 rounded-full transition-all duration-500"
+                                    style={{ width: `${progress}%` }}
+                                  ></div>
+                                </div>
                               </div>
-                            </div>
+                            )}
                           </div>
                         </div>
                       </div>
-                      
+
                       {/* Right Section - Actions */}
                       <div className="flex flex-wrap lg:flex-col gap-2 lg:w-48">
 
@@ -475,11 +538,10 @@ export function MyEnrollments() {
                         {/* Choice made — show Complete Enrollment Form button */}
                         {enrollment.sscApplied && !enrollment.firstName && enrollment.sscResult === 'passed' && enrollment.sscChoiceMade && (
                           <div className="w-full space-y-2">
-                            <div className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold ${
-                              enrollment.sscClass === 'SSC'
-                                ? 'bg-[#F5C400]/20 text-[#001840] border border-[#F5C400]/40'
-                                : 'bg-gray-100 text-gray-700 border border-gray-200'
-                            }`}>
+                            <div className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold ${enrollment.sscClass === 'SSC'
+                              ? 'bg-[#F5C400]/20 text-[#001840] border border-[#F5C400]/40'
+                              : 'bg-gray-100 text-gray-700 border border-gray-200'
+                              }`}>
                               {enrollment.sscClass === 'SSC'
                                 ? <><FlaskConical className="w-3.5 h-3.5 shrink-0 text-[#F5C400]" /> Enrolled in SSC Class</>
                                 : <><BookOpen className="w-3.5 h-3.5 shrink-0" /> Enrolled in Regular Class</>
@@ -509,7 +571,7 @@ export function MyEnrollments() {
                             View Details
                           </button>
                         )}
-                        
+
                         {enrollment.status === 'returned' && enrollment.firstName && (
                           <button
                             onClick={() => navigate(`/resubmit/${enrollment.id}`)}
@@ -520,23 +582,13 @@ export function MyEnrollments() {
                           </button>
                         )}
 
-                        {enrollment.status === 'approved' && (
+                        {['enrolled', 'active', 'completed'].includes(enrollment.status) && (
                           <button
                             onClick={() => navigate(`/student-dashboard/${enrollment.id}`)}
-                            className="flex-1 lg:flex-none px-4 py-2 bg-[#F5C400] text-[#001840] rounded-lg hover:bg-[#FFDC5F] transition-all font-medium flex items-center justify-center gap-2"
+                            className="flex-1 lg:flex-none px-4 py-2 bg-emerald-700 text-white rounded-lg hover:bg-emerald-800 transition-all font-medium flex items-center justify-center gap-2"
                           >
-                            <BookOpen className="w-4 h-4" />
-                            View Dashboard
-                          </button>
-                        )}
-                        
-                        {(enrollment.status === 'enrolled' || enrollment.status === 'subjects_enrolled') && (
-                          <button
-                            onClick={() => navigate(`/student-dashboard/${enrollment.id}`)}
-                            className="flex-1 lg:flex-none px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-all font-medium flex items-center justify-center gap-2"
-                          >
-                            <CheckCircle className="w-4 h-4" />
-                            View Dashboard
+                            <Award className="w-4 h-4 text-[#FFDC5F]" />
+                            {enrollment.status === 'completed' ? 'View Past Grades' : 'View Grades'}
                           </button>
                         )}
 
@@ -549,7 +601,7 @@ export function MyEnrollments() {
                             View Schedule
                           </button>
                         )}
-                        
+
                         <button
                           onClick={() => handleDownloadPDF(enrollment.id)}
                           className="flex-1 lg:flex-none px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-all font-medium flex items-center justify-center gap-2"
@@ -557,9 +609,9 @@ export function MyEnrollments() {
                           <Download className="w-4 h-4" />
                           Download PDF
                         </button>
-                        
-                        {/* Only allow delete when status is draft, submitted, or returned */}
-                        {['draft', 'submitted', 'returned', 'rejected'].includes(enrollment.status) && (
+
+                        {/* Only allow delete before the enrollment is submitted (draft only) */}
+                        {enrollment.status === 'draft' && (
                           <button
                             onClick={() => setDeleteConfirm(enrollment.id)}
                             className="flex-1 lg:flex-none px-4 py-2 border-2 border-red-300 text-red-600 bg-white rounded-lg hover:bg-red-50 transition-all font-medium flex items-center justify-center gap-2"
@@ -577,7 +629,7 @@ export function MyEnrollments() {
           )}
         </div>
       </div>
-      
+
       {/* ── Enrollment History (past school years) ── */}
       {pastYears.length > 0 && (
         <div className="mt-6">
@@ -622,7 +674,7 @@ export function MyEnrollments() {
                             <div className="min-w-0">
                               <p className="font-semibold text-[#001840] text-sm">
                                 {enrollment.educationLevel} — {enrollment.gradeLevel || ''}
-                                {enrollment.strand ? ` (${enrollment.strand})` : ''}
+                                {enrollment.strand ? ` (${enrollment.strand})` : enrollment.educationLevel === 'JHS' && enrollment.sscClass === 'SSC' ? ' (SSC)' : ''}
                               </p>
                               <p className="text-xs text-gray-400 mt-0.5">
                                 {enrollment.sectionName ? `Section ${enrollment.sectionName}` : 'No section'}
@@ -635,6 +687,13 @@ export function MyEnrollments() {
                               <StatusIcon className="w-3 h-3" />
                               {statusConfig.label}
                             </div>
+                            <button
+                              onClick={() => navigate(`/student-dashboard/${enrollment.id}`)}
+                              className="px-3 py-1.5 text-xs bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-lg hover:bg-emerald-100 transition-colors font-semibold flex items-center gap-1.5"
+                            >
+                              <Award className="w-3.5 h-3.5 text-emerald-600" />
+                              Grades
+                            </button>
                             <button
                               onClick={() => navigate(`/enrollment/${enrollment.id}`, { state: { educationLevel: enrollment.educationLevel } })}
                               className="px-3 py-1.5 text-xs border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 transition-colors font-medium"
@@ -694,11 +753,10 @@ function FilterTab({ label, count, active, onClick }) {
   return (
     <button
       onClick={onClick}
-      className={`px-4 py-2 rounded-lg font-medium transition-all ${
-        active 
-          ? 'bg-[#102A71] text-white shadow-md' 
-          : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
-      }`}
+      className={`px-4 py-2 rounded-lg font-medium transition-all ${active
+        ? 'bg-[#102A71] text-white shadow-md'
+        : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+        }`}
     >
       {label} <span className={`ml-1 ${active ? 'text-[#F5C400]' : 'text-gray-500'}`}>({count})</span>
     </button>

@@ -1,3 +1,4 @@
+import { useAdmissionSettings, admissionChecklist } from "../../hooks/useAdmissionSettings";
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router";
 import { toast } from "sonner";
@@ -5,21 +6,12 @@ import { AlertCircle, Upload, X, FileText, CheckCircle2, Loader2, ChevronLeft } 
 import { getEnrollmentById, getEnrollmentDocuments, uploadEnrollmentDocuments, deleteEnrollmentDocument, resubmitEnrollment } from "../../services/enrollmentApi";
 import { BACKEND_URL } from "../../config/api";
 
-const CREDENTIALS = [
-  { key: "f138", label: "F-138" },
-  { key: "f137a", label: "F-137-A" },
-  { key: "cgmc", label: "CGMC" },
-  { key: "tor", label: "TOR" },
-  { key: "birthCert", label: "Birth Certificate" },
-  { key: "marriageCert", label: "Marriage Certificate", optional: true },
-  { key: "cert", label: "Certificate" },
-  { key: "f137e", label: "F-137-E" },
-];
-
 export function ResubmitPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const [enrollment, setEnrollment] = useState(null);
+  const { settings, error: policyError, retry: retryPolicy } = useAdmissionSettings(id);
+  const CREDENTIALS = admissionChecklist(settings?.content, enrollment?.educationLevel || 'JHS', enrollment?.enrollmentType || 'new').map(doc => ({ ...doc, optional: !doc.required }));
   const [uploadedDocs, setUploadedDocs] = useState([]);
   const [newFiles, setNewFiles] = useState({});
   const [loading, setLoading] = useState(true);
@@ -60,9 +52,7 @@ export function ResubmitPage() {
 
   async function handleResubmit() {
     // Check all required credentials have files
-    const checkedKeys = Array.isArray(enrollment?.admissionCredentials)
-      ? enrollment.admissionCredentials
-      : [];
+    const checkedKeys = CREDENTIALS.map(cred => cred.key);
     const missing = checkedKeys.filter(k => {
       const cred = CREDENTIALS.find(c => c.key === k);
       if (cred?.optional) return false;
@@ -85,9 +75,9 @@ export function ResubmitPage() {
     }
   }
 
-  if (loading) {
+  if (loading || (!settings && !policyError)) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#FFFDF0]">
+      <div className="min-h-[calc(100svh-4rem)] lg:min-h-[calc(100svh-5rem)] flex items-center justify-center bg-[#FFFDF0]">
         <Loader2 className="w-8 h-8 animate-spin text-[#102A71]" />
       </div>
     );
@@ -95,17 +85,17 @@ export function ResubmitPage() {
 
   if (!enrollment) return null;
 
-  const checkedKeys = Array.isArray(enrollment.admissionCredentials)
-    ? enrollment.admissionCredentials
-    : [];
+  const checkedKeys = CREDENTIALS.map(cred => cred.key);
+
+  if (policyError && !settings) return <div className="p-8 text-center"><p>{policyError}</p><button onClick={retryPolicy}>Try again</button></div>;
 
   return (
-    <div className="min-h-screen bg-linear-to-br from-[#FFFDF0] via-[#FFF9E6] to-[#FFFDF0] py-8">
+    <div className="min-h-[calc(100svh-4rem)] lg:min-h-[calc(100svh-5rem)] bg-linear-to-br from-[#FFFDF0] via-[#FFF9E6] to-[#FFFDF0] py-4 sm:py-8">
       <div className="max-w-2xl mx-auto px-4">
         {/* Back */}
         <button onClick={() => navigate("/my-enrollments")}
           className="flex items-center gap-2 text-[#102A71] hover:text-[#001840] mb-6 font-medium">
-          <ChevronLeft size={18} /> Back to My Enrollments
+          <ChevronLeft size={18} /> Back to Enrollments
         </button>
 
         {/* Header */}
@@ -179,8 +169,8 @@ export function ResubmitPage() {
                           onChange={e => {
                             const file = e.target.files[0];
                             if (!file) return;
-                            const ALLOWED = ['application/pdf','image/jpeg','image/jpg','image/png'];
-                            const ALLOWED_EXT = ['.pdf','.jpg','.jpeg','.png'];
+                            const ALLOWED = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png'];
+                            const ALLOWED_EXT = ['.pdf', '.jpg', '.jpeg', '.png'];
                             const ext = '.' + file.name.split('.').pop().toLowerCase();
                             if (!ALLOWED.includes(file.type) || !ALLOWED_EXT.includes(ext)) {
                               toast.error(`Invalid file type. Only PDF, JPG, and PNG are allowed.`);
@@ -208,10 +198,9 @@ export function ResubmitPage() {
               <span className="text-gray-600">
                 {uploadedDocs.filter(d => checkedKeys.includes(d.documentType)).length} of {checkedKeys.filter(k => !CREDENTIALS.find(c => c.key === k)?.optional).length} required documents uploaded
               </span>
-              <span className={`font-semibold ${
-                checkedKeys.filter(k => !CREDENTIALS.find(c => c.key === k)?.optional && !uploadedDocs.find(d => d.documentType === k)).length === 0
+              <span className={`font-semibold ${checkedKeys.filter(k => !CREDENTIALS.find(c => c.key === k)?.optional && !uploadedDocs.find(d => d.documentType === k)).length === 0
                   ? "text-green-600" : "text-red-500"
-              }`}>
+                }`}>
                 {checkedKeys.filter(k => !CREDENTIALS.find(c => c.key === k)?.optional && !uploadedDocs.find(d => d.documentType === k)).length === 0
                   ? "Ready to resubmit" : "Missing documents"}
               </span>

@@ -23,6 +23,7 @@ export function AuthProvider({ children }) {
 
       try {
         const response = await fetch(`${API}/auth/me`, {
+          credentials: "include",
           headers: { Authorization: `Bearer ${storedToken}` },
         });
 

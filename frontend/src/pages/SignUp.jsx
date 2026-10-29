@@ -1,16 +1,20 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router";
-import { MapPin, Eye, EyeOff, UserPlus, Mail, Lock, User, Phone, AlertCircle, Loader2, CheckCircle, Check, X } from "lucide-react";
+import { Eye, EyeOff, UserPlus, Mail, Lock, User, Phone, AlertCircle, Loader2, CheckCircle, Check, X } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { API } from "../config/api";
 
+const NAME_PATTERN = /^[\p{L}\p{M}\s'\u2019-]+$/u;
+
 export function SignUp() {
   const [formData, setFormData] = useState({
-    fullName: "",
+    firstName: "",
+    middleName: "",
+    lastName: "",
     email: "",
-    phone: "",
+    mobileNumber: "",
     password: "",
     confirmPassword: "",
   });
@@ -25,9 +29,9 @@ export function SignUp() {
 
   // Password requirement checks
   const pwRules = {
-    length:    formData.password.length >= 12,
+    length: formData.password.length >= 12,
     uppercase: /[A-Z]/.test(formData.password),
-    number:    /[0-9]/.test(formData.password),
+    number: /[0-9]/.test(formData.password),
   };
   const pwValid = Object.values(pwRules).every(Boolean);
   const showRules = formData.password.length > 0;
@@ -37,10 +41,72 @@ export function SignUp() {
     setError("");
 
     // Client-side validation
-    if (!formData.fullName.trim()) { setError("Full name is required."); return; }
-    if (formData.fullName.trim().length > 100) { setError("Name must be 100 characters or less."); return; }
-    if (!formData.email.trim()) { setError("Email is required."); return; }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) { setError("Please enter a valid email address."); return; }
+    const firstName = formData.firstName.trim();
+    const middleName = formData.middleName.trim();
+    const lastName = formData.lastName.trim();
+    const mobileNumber = formData.mobileNumber.trim();
+
+    if (!firstName) {
+      setError("First name is required.");
+      return;
+    }
+    if (!NAME_PATTERN.test(firstName) || !/\p{L}/u.test(firstName)) {
+      setError("First name must contain letters, spaces, apostrophes or hyphens.");
+      return;
+    }
+    if (firstName.length > 100) {
+      setError("First name must be 100 characters or less.");
+      return;
+    }
+
+    if (middleName) {
+      if (!NAME_PATTERN.test(middleName) || !/\p{L}/u.test(middleName)) {
+        setError("Middle name must contain letters, spaces, apostrophes or hyphens.");
+        return;
+      }
+      if (middleName.length > 100) {
+        setError("Middle name must be 100 characters or less.");
+        return;
+      }
+    }
+
+    if (!lastName) {
+      setError("Last name is required.");
+      return;
+    }
+    if (!NAME_PATTERN.test(lastName) || !/\p{L}/u.test(lastName)) {
+      setError("Last name must contain letters, spaces, apostrophes or hyphens.");
+      return;
+    }
+    if (lastName.length > 100) {
+      setError("Last name must be 100 characters or less.");
+      return;
+    }
+
+    const fullName = [firstName, middleName, lastName].filter(Boolean).join(" ");
+    if (fullName.length > 100) {
+      setError("Combined full name must be 100 characters or less.");
+      return;
+    }
+
+    if (!formData.email.trim()) {
+      setError("Email is required.");
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+      setError("Please enter a valid email address.");
+      return;
+    }
+
+    if (!mobileNumber) {
+      setError("Mobile number is required.");
+      return;
+    }
+    if (!/^09[0-9]{9}$/.test(mobileNumber)) {
+      setError("Enter a valid mobile number: exactly 11 digits starting with 09.");
+      return;
+    }
+
     if (formData.password !== formData.confirmPassword) {
       setError("Passwords do not match!");
       return;
@@ -63,8 +129,12 @@ export function SignUp() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          name: formData.fullName,
-          email: formData.email,
+          name: fullName,
+          firstName,
+          middleName: middleName || null,
+          lastName,
+          mobileNumber,
+          email: formData.email.trim(),
           password: formData.password,
         }),
       });
@@ -86,10 +156,23 @@ export function SignUp() {
   };
 
   const handleChange = (e) => {
-    setFormData({
-      ...formData,
-      [e.target.id]: e.target.value,
-    });
+    const { id, value } = e.target;
+    if (id === "mobileNumber") {
+      setFormData((prev) => ({
+        ...prev,
+        [id]: value.replace(/[^0-9]/g, "").slice(0, 11),
+      }));
+    } else if (id === "firstName" || id === "middleName" || id === "lastName") {
+      setFormData((prev) => ({
+        ...prev,
+        [id]: value.slice(0, 100),
+      }));
+    } else {
+      setFormData((prev) => ({
+        ...prev,
+        [id]: value,
+      }));
+    }
   };
 
 
@@ -136,9 +219,11 @@ export function SignUp() {
         {/* Logo Header */}
         <div className="text-center mb-6">
           <Link to="/" className="inline-flex items-center gap-2 mb-3">
-            <div className="bg-[#F5C400] w-12 h-12 rounded-xl flex items-center justify-center shadow-lg">
-              <MapPin className="w-7 h-7 text-[#001840]" />
-            </div>
+            <img
+              src="/GabAi_Logo.png"
+              alt="GabAI Logo"
+              className="w-12 h-12 rounded-xl object-contain shadow-lg"
+            />
             <div className="text-left">
               <span className="font-bold text-2xl tracking-wide text-white">
                 GabAI
@@ -148,12 +233,12 @@ export function SignUp() {
               </p>
             </div>
           </Link>
-          
+
         </div>
 
         {/* Sign Up Card */}
         <div className="bg-[#FFFDF0] rounded-2xl shadow-2xl p-6 sm:p-8 border-2 border-[#F5C400]/20">
-        <h1 className="text-3xl font-bold text-[#001840] mt-4 mb-2 text-center">
+          <h1 className="text-3xl font-bold text-[#001840] mt-4 mb-2 text-center">
             Create Your Account
           </h1>
           {/* Error Message */}
@@ -163,36 +248,80 @@ export function SignUp() {
               <p className="text-sm text-red-800 font-medium">{error}</p>
             </div>
           )}
-          
+
 
           <form onSubmit={handleSubmit} className="space-y-5">
-            {/* Full Name */}
-            
-            <div className="space-y-2">
-              <Label htmlFor="fullName" className="text-[#001840] font-semibold">
-                Full Name
-              </Label>
-              <div className="relative">
-                <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-[#102A71]" />
-                <Input
-                  id="fullName"
-                  type="text"
-                  placeholder="Juan Dela Cruz"
-                  value={formData.fullName}
-                  onChange={handleChange}
-                  className="pl-11 h-12 border-[#102A71]/30 focus:border-[#102A71] focus:ring-[#102A71] text-base"
-                  required
-                  autoComplete="name"
-                />
+            {/* Name Fields: First, Middle, Last */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {/* First Name */}
+              <div className="space-y-2">
+                <Label htmlFor="firstName" className="text-[#001840] font-semibold">
+                  First Name <span className="text-red-500">*</span>
+                </Label>
+                <div className="relative">
+                  <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-[#102A71]" />
+                  <Input
+                    id="firstName"
+                    type="text"
+                    placeholder="Juan"
+                    value={formData.firstName}
+                    onChange={handleChange}
+                    className="pl-11 h-12 border-[#102A71]/30 focus:border-[#102A71] focus:ring-[#102A71] text-base"
+                    required
+                    maxLength={100}
+                    autoComplete="given-name"
+                  />
+                </div>
+              </div>
+
+              {/* Middle Name */}
+              <div className="space-y-2">
+                <Label htmlFor="middleName" className="text-[#001840] font-semibold">
+                  Middle Name <span className="text-gray-400 font-normal">(Optional)</span>
+                </Label>
+                <div className="relative">
+                  <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-[#102A71]" />
+                  <Input
+                    id="middleName"
+                    type="text"
+                    placeholder="Reyes"
+                    value={formData.middleName}
+                    onChange={handleChange}
+                    className="pl-11 h-12 border-[#102A71]/30 focus:border-[#102A71] focus:ring-[#102A71] text-base"
+                    maxLength={100}
+                    autoComplete="additional-name"
+                  />
+                </div>
+              </div>
+
+              {/* Last Name */}
+              <div className="space-y-2">
+                <Label htmlFor="lastName" className="text-[#001840] font-semibold">
+                  Last Name <span className="text-red-500">*</span>
+                </Label>
+                <div className="relative">
+                  <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-[#102A71]" />
+                  <Input
+                    id="lastName"
+                    type="text"
+                    placeholder="Dela Cruz"
+                    value={formData.lastName}
+                    onChange={handleChange}
+                    className="pl-11 h-12 border-[#102A71]/30 focus:border-[#102A71] focus:ring-[#102A71] text-base"
+                    required
+                    maxLength={100}
+                    autoComplete="family-name"
+                  />
+                </div>
               </div>
             </div>
 
-            {/* Email & Phone Grid */}
+            {/* Email & Mobile Number Grid */}
             <div className="grid sm:grid-cols-2 gap-5">
               {/* Email Field */}
               <div className="space-y-2">
                 <Label htmlFor="email" className="text-[#001840] font-semibold">
-                  Email Address
+                  Email Address <span className="text-red-500">*</span>
                 </Label>
                 <div className="relative">
                   <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-[#102A71]" />
@@ -209,20 +338,23 @@ export function SignUp() {
                 </div>
               </div>
 
-              {/* Phone Field */}
+              {/* Mobile Number Field */}
               <div className="space-y-2">
-                <Label htmlFor="phone" className="text-[#001840] font-semibold">
-                  Phone Number <span className="text-gray-400 font-normal">(Optional)</span>
+                <Label htmlFor="mobileNumber" className="text-[#001840] font-semibold">
+                  Mobile Number <span className="text-red-500">*</span>
                 </Label>
                 <div className="relative">
                   <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-[#102A71]" />
                   <Input
-                    id="phone"
+                    id="mobileNumber"
                     type="tel"
-                    placeholder="+63 912 345 6789"
-                    value={formData.phone}
+                    inputMode="numeric"
+                    placeholder="09171234567"
+                    value={formData.mobileNumber}
                     onChange={handleChange}
                     className="pl-11 h-12 border-[#102A71]/30 focus:border-[#102A71] focus:ring-[#102A71] text-base"
+                    required
+                    maxLength={11}
                     autoComplete="tel"
                   />
                 </div>
@@ -292,9 +424,9 @@ export function SignUp() {
             {showRules && (
               <div className="flex flex-wrap gap-x-5 gap-y-1.5 px-1">
                 {[
-                  { met: pwRules.length,    label: "At least 12 characters" },
+                  { met: pwRules.length, label: "At least 12 characters" },
                   { met: pwRules.uppercase, label: "1 uppercase letter" },
-                  { met: pwRules.number,    label: "1 number" },
+                  { met: pwRules.number, label: "1 number" },
                 ].map(({ met, label }) => (
                   <div key={label} className="flex items-center gap-1.5">
                     <span className={`shrink-0 w-4 h-4 rounded-full flex items-center justify-center transition-colors ${met ? "bg-green-500" : "bg-gray-300"}`}>

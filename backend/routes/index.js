@@ -1,3 +1,8 @@
+import { getAdmissionSettings, updateAdmissionSettings } from "../controllers/admissionSettingsController.js";
+import { getSchoolProfile, updateSchoolProfile } from "../controllers/schoolProfileController.js";
+import { getEnrollmentGuide, updateEnrollmentGuide } from "../controllers/enrollmentGuideController.js";
+import { getPublicStats } from "../controllers/publicStatsController.js";
+import { getSystemLogs, exportSystemLogsCSV } from "../controllers/systemLogController.js";
 
 /*
     MIT License
@@ -25,8 +30,11 @@
     */
     
 import express from "express";
+import { buildingVoiceover } from "../controllers/buildingVoiceoverController.js";
+import passwordResetRoutes from "./passwordResetRoutes.js";
 import { homePage } from "../controllers/homeController.js";
 import { loginPage, registerPage, forgotPasswordPage, dashboardPage, loginUser, registerUser, logoutUser, verifyEmail, resendVerification, startGoogleAuth, completeGoogleAuth, consumeGoogleAuth, getCurrentUser, updateProfile } from "../controllers/authController.js";
+import { createChatLimiter } from "../services/chatGuardrails.js";
 import { sendMessage, rateFeedback } from "../controllers/chatController.js";
 import { getAllBuildings, getBuildingById, createBuilding, updateBuilding, deleteBuilding, upload } from "../controllers/buildingController.js";
 import { requireAdmin, getDashboardStats, getAllFAQs, createFAQ, updateFAQ, deleteFAQ, getAllUsers, updateUser, deleteUser, resetUserPassword, toggleUserStatus } from "../controllers/adminController.js";
@@ -54,6 +62,7 @@ import {
 } from "../controllers/academicController.js";
 
 const router = express.Router();
+router.use("/api/auth", passwordResetRoutes);
 
 // Public routes
 router.get("/", homePage);
@@ -80,15 +89,25 @@ router.put("/api/auth/profile", authenticateToken, sanitizeBody, updateProfile);
 router.get("/dashboard", dashboardPage);
 
 // Chat API
-router.post("/api/chat/message", sendMessage);
-router.post("/api/chat/feedback", rateFeedback);
+const chatLimiter = createChatLimiter();
+router.post("/api/chat/message", chatLimiter, sendMessage);
+router.post("/api/chat/feedback", chatLimiter, rateFeedback);
 
-// Buildings API
+// Public stats & settings API
+router.get("/api/public-stats", getPublicStats);
+router.get("/api/admission-settings", getAdmissionSettings);
+router.put("/api/admin/admission-settings", requireAdmin, updateAdmissionSettings);
+router.get("/api/school-profile", getSchoolProfile);
+router.put("/api/admin/school-profile", requireAdmin, updateSchoolProfile);
+router.get("/api/enrollment-guide", getEnrollmentGuide);
+router.put("/api/admin/enrollment-guide", requireAdmin, updateEnrollmentGuide);
 router.get("/api/buildings", getAllBuildings);
 router.get("/api/buildings/:id", getBuildingById);
 
 // Admin API (protected)
 router.get("/api/admin/stats", requireAdmin, getDashboardStats);
+router.get("/api/admin/system-logs", requireAdmin, getSystemLogs);
+router.get("/api/admin/system-logs/export", requireAdmin, exportSystemLogsCSV);
 router.get("/api/admin/faqs", requireAdmin, getAllFAQs);
 router.post("/api/admin/faqs", requireAdmin, sanitizeBody, validateFAQ, createFAQ);
 router.put("/api/admin/faqs/:id", requireAdmin, sanitizeBody, validateFAQ, updateFAQ);
@@ -105,6 +124,9 @@ router.put("/api/admin/sections/:id/assign-teacher", authenticateToken, requireA
 router.post("/api/admin/buildings", requireAdmin, upload.single("photo360"), createBuilding);
 router.put("/api/admin/buildings/:id", requireAdmin, upload.single("photo360"), updateBuilding);
 router.delete("/api/admin/buildings/:id", requireAdmin, deleteBuilding);
+router.get("/api/admin/buildings/:id/voiceover", requireAdmin, buildingVoiceover.get);
+router.post("/api/admin/buildings/:id/voiceover/generate", requireAdmin, buildingVoiceover.generate);
+router.put("/api/admin/buildings/:id/voiceover/publish", requireAdmin, buildingVoiceover.publish);
 
 // Enrollment API (protected)
 router.use("/api/enrollments", enrollmentRoutes);

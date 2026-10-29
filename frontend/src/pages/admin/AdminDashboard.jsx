@@ -1,11 +1,14 @@
+import { AdminAdmissionSettings } from "./AdminAdmissionSettings";
+import { AdminSchoolProfile } from "./AdminSchoolProfile";
+import { AdminEnrollmentGuide } from "./AdminEnrollmentGuide";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { Link, useNavigate, useLocation } from "react-router";
 import {
-  MapPin, Users, MessageSquare, FileText, BarChart3, Settings, LogOut,
+  ClipboardList, School, MapPin, Users, MessageSquare, FileText, BarChart3, Settings, LogOut,
   Bell, Search, TrendingUp, AlertCircle, CheckCircle2, Clock, RefreshCw, Menu, X,
   Plus, Edit, Trash2, Eye, Building2, Home, Target, BookOpen,
   CheckCircle, XCircle, Download, Calendar, Filter, ChevronLeft, ChevronRight,
-  UserPlus, Archive
+  UserPlus, Archive, Activity
 } from "lucide-react";
 import { MapContainer, TileLayer, Marker, useMapEvents } from "react-leaflet";
 import L from "leaflet";
@@ -28,6 +31,7 @@ import { AdminArchives } from "./AdminArchives";
 import { AdminUsers } from "./AdminUsers";
 import { AdminBuildings } from "./AdminBuildings";
 import { AdminSettings } from "./AdminSettings";
+import { AdminSystemLogs } from "./AdminSystemLogs";
 
 export function AdminDashboard({ initialTab = "dashboard" }) {
   const { user, isLoggedIn, loading: authLoading } = useAuth();
@@ -169,6 +173,10 @@ export function AdminDashboard({ initialTab = "dashboard" }) {
     { id: "faqs", label: "Manage FAQs", icon: MessageSquare },
     { id: "users", label: "Manage Users", icon: Users },
     { id: "buildings", label: "Manage Buildings", icon: Building2 },
+    { id: "profile-settings", label: "School Profile & Contacts", icon: School },
+    { id: "admission", label: "Admission Settings", icon: ClipboardList },
+    { id: "guide", label: "Enrollment Guide", icon: BookOpen },
+    { id: "logs", label: "System Logs", icon: Activity },
     { id: "settings", label: "Settings", icon: Settings },
   ];
 
@@ -236,6 +244,10 @@ export function AdminDashboard({ initialTab = "dashboard" }) {
           {activeTab === "buildings" && <AdminBuildings buildings={buildings} onRefresh={fetchDashboardData} />}
           {activeTab === "academic" && <AcademicSetup />}
           {activeTab === "archives" && <AdminArchives />}
+          {activeTab === "profile-settings" && <AdminSchoolProfile />}
+          {activeTab === "admission" && <AdminAdmissionSettings />}
+          {activeTab === "guide" && <AdminEnrollmentGuide />}
+          {activeTab === "logs" && <AdminSystemLogs />}
           {activeTab === "settings" && <AdminSettings />}
         </main>
       </div>

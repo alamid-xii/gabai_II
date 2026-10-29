@@ -1,3 +1,4 @@
+import { documentPublicDirectory } from "../services/documentStorage.js";
 ﻿import multer from "multer";
 import path from "path";
 import fs from "fs";
@@ -52,7 +53,7 @@ export const uploadEnrollmentDocuments = async (req, res) => {
     }
 
     // Ensure upload directory exists
-    const uploadDir = path.join(process.cwd(), "public", "uploads", "documents", `enrollment-${enrollmentId}`);
+    const uploadDir = path.join(documentPublicDirectory, "uploads", "documents", `enrollment-${enrollmentId}`);
     fs.mkdirSync(uploadDir, { recursive: true });
 
     const saved = [];
@@ -65,7 +66,7 @@ export const uploadEnrollmentDocuments = async (req, res) => {
         where: { enrollmentId, documentType: docType },
       });
       if (existing) {
-        const oldPath = path.join(process.cwd(), "public", existing.filePath);
+        const oldPath = path.join(documentPublicDirectory, existing.filePath);
         if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
         await existing.destroy();
       }
@@ -140,10 +141,12 @@ export const deleteEnrollmentDocument = async (req, res) => {
     const isStaff = ["admin", "registrar"].includes(req.user.role);
     if (!isOwner && !isStaff) return res.status(403).json({ error: "Access denied" });
 
+    if (!isStaff && !['draft', 'returned'].includes(enrollment.status)) return res.status(409).json({ error: 'Open the enrollment for editing before deleting documents.' });
+
     const doc = await EnrollmentDocument.findOne({ where: { id: docId, enrollmentId } });
     if (!doc) return res.status(404).json({ error: "Document not found" });
 
-    const fullPath = path.join(process.cwd(), "public", doc.filePath);
+    const fullPath = path.join(documentPublicDirectory, doc.filePath);
     if (fs.existsSync(fullPath)) fs.unlinkSync(fullPath);
 
     await doc.destroy();

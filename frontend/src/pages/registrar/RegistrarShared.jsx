@@ -18,11 +18,12 @@ export const tok = () => ({ Authorization: `Bearer ${localStorage.getItem('token
 // ── Application status config (enrollment pipeline) ──────────────────────────
 export const STATUS_CFG = {
   draft:             { label: 'Draft',             color: 'bg-gray-100 text-gray-700' },
-  submitted:         { label: 'Submitted',          color: 'bg-blue-100 text-blue-700' },
+  submitted:         { label: 'Pending',           color: 'bg-amber-100 text-amber-800' },
   pending_exam:      { label: 'Pending Exam',       color: 'bg-yellow-100 text-yellow-700' },
   verified:          { label: 'Verified',           color: 'bg-purple-100 text-purple-700' },
   returned:          { label: 'Returned',           color: 'bg-orange-100 text-orange-700' },
   approved:          { label: 'Approved',           color: 'bg-green-100 text-green-700' },
+  subjects_enrolled: { label: 'Subjects enrolled',  color: 'bg-indigo-100 text-indigo-700' },
   enrolled:          { label: 'Enrolled',           color: 'bg-emerald-100 text-emerald-700' },
   active:            { label: 'Active',             color: 'bg-cyan-100 text-cyan-700' },
   completed:         { label: 'Completed',          color: 'bg-slate-100 text-slate-700' },
@@ -361,6 +362,327 @@ export function LifeStatusModal({ enrollment, onClose, onSuccess }) {
   );
 }
 
+// ── Assign Section Modal ──────────────────────────────────────────────────────
+export function AssignSectionModal({ enrollment, onClose, onSuccess }) {
+  const [sections, setSections] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedSectionId, setSelectedSectionId] = useState(enrollment?.sectionId ? String(enrollment.sectionId) : '');
+  const [submitting, setSubmitting] = useState(false);
+  const [unassigning, setUnassigning] = useState(false);
+  const [showAll, setShowAll] = useState(false);
+  const [search, setSearch] = useState('');
+
+  const displayName = (enrollment.firstName || enrollment.familyName)
+    ? `${enrollment.firstName || ''} ${enrollment.familyName || ''}`.trim()
+    : (enrollment.user_name || `Student #${enrollment.id}`);
+
+  const studentGrade = parseInt((enrollment.gradeLevel || '').replace(/\D/g, '')) || null;
+  const course = (enrollment.educationLevel || '').toUpperCase();
+  const strand = enrollment.strand || null;
+  const isSSC = enrollment.sscClass === 'SSC' || (Number(enrollment.sscApplied) === 1 && enrollment.sscQualified && enrollment.sscResult !== 'failed');
+  const currentSectionId = enrollment.sectionId ? Number(enrollment.sectionId) : null;
+  const currentSectionName = enrollment.sectionName || null;
+  const previousSection = enrollment.previousSection || null;
+  const previousDetails = enrollment.previousSectionDetails || null;
+
+  useEffect(() => {
+    let isMounted = true;
+    setLoading(true);
+    fetch(`${API}/admin/sections`, { headers: tok() })
+      .then(res => {
+        if (!res.ok) throw new Error('Failed to load sections');
+        return res.json();
+      })
+      .then(data => {
+        if (isMounted) {
+          setSections(Array.isArray(data) ? data : []);
+        }
+      })
+      .catch(err => {
+        console.error('Error fetching sections:', err);
+        toast.error('Could not load sections: ' + err.message);
+      })
+      .finally(() => {
+        if (isMounted) setLoading(false);
+      });
+
+    return () => { isMounted = false; };
+  }, []);
+
+  // Filter sections
+  const filteredSections = sections.filter(sec => {
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      const matchSearch = (sec.code && sec.code.toLowerCase().includes(q)) ||
+        (sec.instructor && sec.instructor.toLowerCase().includes(q)) ||
+        (sec.room && sec.room.toLowerCase().includes(q)) ||
+        (sec.strand && sec.strand.toLowerCase().includes(q));
+      if (!matchSearch) return false;
+    }
+
+    if (showAll) return true;
+
+    // Course match (JHS / SHS)
+    if (course && sec.course && sec.course.toUpperCase() !== course) return false;
+
+    // Year level match
+    if (studentGrade && Number(sec.yearLevel) !== studentGrade) return false;
+
+    // Strand or SSC match
+    if (course === 'SHS' && strand) {
+      if (sec.strand && sec.strand !== strand && sec.strand !== 'Regular') return false;
+    } else if (course === 'JHS') {
+      if (isSSC && sec.strand !== 'SSC') return false;
+      if (!isSSC && sec.strand === 'SSC') return false;
+    }
+
+    return true;
+  });
+
+  async function handleAssign(e) {
+    e.preventDefault();
+    if (!selectedSectionId) {
+      toast.error('Please select a section');
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const res = await fetch(`${API}/registrar/enrollments/${enrollment.id}/assign-section`, {
+        method: 'POST',
+        headers: tok(),
+        body: JSON.stringify({ sectionId: Number(selectedSectionId) }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || data.message || 'Failed to assign section');
+
+      toast.success(data.message || `Assigned to section successfully`);
+      onSuccess();
+    } catch (err) {
+      toast.error(err.message);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleUnassign() {
+    if (!window.confirm(`Are you sure you want to remove ${displayName} from section ${currentSectionName}?`)) {
+      return;
+    }
+
+    setUnassigning(true);
+    try {
+      const res = await fetch(`${API}/registrar/enrollments/${enrollment.id}/assign-section`, {
+        method: 'DELETE',
+        headers: tok(),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || data.message || 'Failed to remove section');
+
+      toast.success(data.message || 'Student removed from section');
+      onSuccess();
+    } catch (err) {
+      toast.error(err.message);
+    } finally {
+      setUnassigning(false);
+    }
+  }
+
+  return (
+    <Modal title={currentSectionId ? "Change Section" : "Assign Section"} onClose={onClose}>
+      <form onSubmit={handleAssign} className="space-y-4">
+        {/* Student & Academic Context Card */}
+        <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-3.5 space-y-2">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="font-semibold text-sm text-[#001840]">{displayName}</p>
+              <p className="text-xs text-gray-500">
+                {course} {enrollment.gradeLevel || (studentGrade ? `Grade ${studentGrade}` : '')}
+                {strand ? ` • ${strand}` : isSSC ? ' • SSC Class' : ' • Regular'}
+                {enrollment.academicYear ? ` • S.Y. ${enrollment.academicYear}` : ''}
+              </p>
+            </div>
+            <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800">
+              {enrollment.status}
+            </span>
+          </div>
+
+          <div className="pt-2 border-t border-slate-200/60 flex flex-wrap items-center gap-3 text-xs">
+            {/* Current Section */}
+            <div className="flex items-center gap-1.5">
+              <span className="text-gray-400">Current Section:</span>
+              {currentSectionName ? (
+                <span className="font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                  {currentSectionName}
+                </span>
+              ) : (
+                <span className="font-medium text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                  Unassigned
+                </span>
+              )}
+            </div>
+
+            {/* Previous Section */}
+            {previousSection && (
+              <div className="flex items-center gap-1.5">
+                <span className="text-gray-400">Previous Section:</span>
+                <span className="font-medium text-amber-900 bg-[#FFFDF0] px-2 py-0.5 rounded border border-[#F5C400]/40">
+                  {previousSection} {previousDetails?.gradeLevel ? `(${previousDetails.gradeLevel})` : ''}
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Filter and Search Bar */}
+        <div className="flex items-center gap-2">
+          <div className="relative flex-1">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+            <input
+              type="text"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Search section name, adviser, room..."
+              className="w-full pl-9 pr-3 py-1.5 border border-gray-200 rounded-lg text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-[#001840]/20 focus:border-[#001840]"
+            />
+          </div>
+          <label className="inline-flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer shrink-0 select-none">
+            <input
+              type="checkbox"
+              checked={showAll}
+              onChange={e => setShowAll(e.target.checked)}
+              className="rounded border-gray-300 text-[#001840] focus:ring-[#001840]"
+            />
+            <span>Show all</span>
+          </label>
+        </div>
+
+        {/* Section List */}
+        <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+          {loading ? (
+            <div className="flex items-center justify-center py-8 gap-2 text-gray-400 text-xs">
+              <RefreshCw size={14} className="animate-spin text-[#001840]" /> Loading sections...
+            </div>
+          ) : filteredSections.length === 0 ? (
+            <div className="p-6 text-center text-gray-400 border border-dashed border-gray-200 rounded-xl">
+              <p className="text-xs font-medium text-gray-600">No matching sections found</p>
+              <p className="text-[11px] mt-1 text-gray-400">
+                {showAll ? 'No sections created in the system.' : 'Try enabling "Show all" or check if sections are created for this grade.'}
+              </p>
+            </div>
+          ) : (
+            filteredSections.map(sec => {
+              const isSelected = String(selectedSectionId) === String(sec.id);
+              const isCurrent = currentSectionId === Number(sec.id);
+              const cap = Number(sec.capacity) || 40;
+              const cur = Number(sec.currentEnrollment) || 0;
+              const isFull = cur >= cap && !isCurrent;
+              const pct = Math.min(100, Math.round((cur / cap) * 100));
+
+              return (
+                <div
+                  key={sec.id}
+                  onClick={() => { if (!isFull) setSelectedSectionId(String(sec.id)); }}
+                  className={`p-3 rounded-xl border-2 transition-all cursor-pointer ${
+                    isSelected
+                      ? 'border-[#102A71] bg-[#102A71]/5 shadow-xs'
+                      : isCurrent
+                      ? 'border-emerald-300 bg-emerald-50/50'
+                      : isFull
+                      ? 'border-gray-200 bg-gray-50/70 opacity-60 cursor-not-allowed'
+                      : 'border-gray-200 hover:border-gray-300 bg-white'
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="radio"
+                        name="sectionSelection"
+                        checked={isSelected}
+                        disabled={isFull}
+                        onChange={() => setSelectedSectionId(String(sec.id))}
+                        className="text-[#102A71] focus:ring-[#102A71]"
+                      />
+                      <div>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="font-semibold text-sm text-[#001840]">{sec.code}</span>
+                          {sec.strand && (
+                            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">
+                              {sec.strand}
+                            </span>
+                          )}
+                          {isCurrent && (
+                            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800">
+                              Current
+                            </span>
+                          )}
+                          {isFull && (
+                            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-red-100 text-red-700">
+                              Full
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-gray-500 mt-0.5">
+                          {sec.course} Grade {sec.yearLevel} &bull; Room: {sec.room || 'TBA'} &bull; Adviser: {sec.instructor || 'Unassigned'}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Capacity Indicator */}
+                    <div className="text-right shrink-0">
+                      <p className="text-xs font-semibold text-gray-700">
+                        {cur} / {cap}
+                      </p>
+                      <div className="w-16 h-1.5 bg-gray-200 rounded-full mt-1 overflow-hidden">
+                        <div
+                          className={`h-full rounded-full ${pct >= 100 ? 'bg-red-500' : pct >= 80 ? 'bg-amber-500' : 'bg-green-500'}`}
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        {/* Modal Actions */}
+        <div className="flex items-center justify-between gap-2 pt-2 border-t border-gray-100">
+          {currentSectionId ? (
+            <button
+              type="button"
+              onClick={handleUnassign}
+              disabled={unassigning || submitting}
+              className="px-3 py-2 border border-red-200 bg-red-50 text-red-600 rounded-lg text-xs font-medium hover:bg-red-100 transition-colors disabled:opacity-50"
+            >
+              {unassigning ? 'Removing...' : 'Unassign Section'}
+            </button>
+          ) : <div />}
+
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={submitting || unassigning}
+              className="px-4 py-2 border border-gray-200 rounded-lg text-xs sm:text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={submitting || unassigning || !selectedSectionId}
+              className="px-4 py-2 bg-[#102A71] text-white rounded-lg text-xs sm:text-sm font-semibold hover:bg-[#001840] transition-colors disabled:opacity-50 shadow-xs flex items-center gap-1.5"
+            >
+              {submitting ? 'Assigning...' : 'Assign Section'}
+            </button>
+          </div>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
 // ── Enrollment Detail Panel ───────────────────────────────────────────────────
 const BACKEND = API.replace('/api', '');
 
@@ -437,7 +759,7 @@ export function EnrollmentDetail({ enrollmentId, enrollment: rowData, onClose, o
   const isJHS = level === 'JHS';
   const isTransferee = e.enrollmentType === 'transferee';
 
-  const canApprove = ['submitted', 'returned'].includes(status);
+  const canApprove = ['submitted', 'returned', 'verified'].includes(status);
   const canReturn = ['submitted', 'verified'].includes(status);
   const canScheduleSSC = isJHS && e.sscApplied && status === 'pending_exam' && !e.sscExamDate;
   const canRecordSSC = isJHS && status === 'pending_exam' && !!e.sscExamDate && !e.sscExamScore;
@@ -475,11 +797,13 @@ export function EnrollmentDetail({ enrollmentId, enrollment: rowData, onClose, o
                 ['Enrollment Type', e.enrollmentType],
                 ['Student Status', e.studentStatus],
                 ['Date of Birth', e.dateOfBirth],
+                ['Current Section', e.sectionName || 'Unassigned (Pending)'],
+                ['Previous Section', e.previousSection ? `${e.previousSection}${e.previousSectionDetails?.gradeLevel ? ` (${e.previousSectionDetails.gradeLevel})` : ''}` : null],
                 ['SSC Applied', e.sscApplied ? 'Yes' : null],
               ].filter(([, v]) => v).map(([label, value]) => (
                 <div key={label} className="flex justify-between gap-2">
                   <dt className="text-gray-400 shrink-0">{label}</dt>
-                  <dd className="font-medium text-gray-700 text-right truncate">{value}</dd>
+                  <dd className={`font-medium text-right truncate ${label === 'Current Section' ? (e.sectionName ? 'text-emerald-700 font-semibold' : 'text-amber-600') : label === 'Previous Section' ? 'text-amber-900 font-semibold' : 'text-gray-700'}`}>{value}</dd>
                 </div>
               ))}
               {/* Life status row — shown separately so we can use the badge */}
@@ -651,6 +975,15 @@ export function EnrollmentDetail({ enrollmentId, enrollment: rowData, onClose, o
               <ClipboardCheck size={13} /> Record SSC Result
             </button>
           )}
+          {/* Section Assignment - available for pending/submitted/verified/approved/enrolled students */}
+          {['submitted', 'pending_exam', 'verified', 'returned', 'approved', 'subjects_enrolled', 'enrolled', 'active'].includes(status) && (
+            <button
+              onClick={() => setActiveModal('assign-section')}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#102A71] text-white rounded-lg text-xs font-semibold hover:bg-[#001840] transition-colors shadow-xs"
+            >
+              <BookOpen size={13} /> {e.sectionName ? 'Change Section' : 'Assign Section'}
+            </button>
+          )}
           {/* Life status — only for enrolled students not already dropped/transferred */}
           {['enrolled', 'active', 'approved', 'subjects_enrolled'].includes(status) &&
            !['dropped', 'transferred_out'].includes(e.lifeStatus) && (
@@ -668,6 +1001,7 @@ export function EnrollmentDetail({ enrollmentId, enrollment: rowData, onClose, o
 
       {activeModal === 'approve' && <ApproveModal enrollment={e} onClose={() => setActiveModal(null)} onSuccess={handleModalSuccess} />}
       {activeModal === 'return' && <ReturnModal enrollment={e} onClose={() => setActiveModal(null)} onSuccess={handleModalSuccess} />}
+      {activeModal === 'assign-section' && <AssignSectionModal enrollment={e} onClose={() => setActiveModal(null)} onSuccess={handleModalSuccess} />}
       {activeModal === 'ssc-schedule' && <SSCScheduleModal enrollment={e} onClose={() => setActiveModal(null)} onSuccess={handleModalSuccess} />}
       {activeModal === 'ssc-result' && <SSCResultModal enrollment={e} onClose={() => setActiveModal(null)} onSuccess={handleModalSuccess} />}
       {activeModal === 'life-status' && <LifeStatusModal enrollment={e} onClose={() => setActiveModal(null)} onSuccess={handleModalSuccess} />}

@@ -83,11 +83,31 @@ function GradingPeriodsPanel() {
   const [schoolYears, setSchoolYears] = useState([]);
   const [selectedYear, setSelectedYear] = useState('');
 
-  const QUARTER_CFG = {
-    Q1: { label: 'Quarter 1', color: 'blue' },
-    Q2: { label: 'Quarter 2', color: 'purple' },
-    Q3: { label: 'Quarter 3', color: 'orange' },
-    Q4: { label: 'Quarter 4', color: 'green' },
+  const TRIMESTER_CFG = {
+    Q1: {
+      code: '1st Tri',
+      label: '1st Trimester',
+      subtitle: 'First Trimester Grading Window',
+      color: 'blue',
+    },
+    Q2: {
+      code: '2nd Tri',
+      label: '2nd Trimester',
+      subtitle: 'Second Trimester Grading Window',
+      color: 'purple',
+    },
+    Q3: {
+      code: '3rd Tri',
+      label: '3rd Trimester',
+      subtitle: 'Third Trimester / Finals Grading Window',
+      color: 'amber',
+    },
+    Q4: {
+      code: '4th Term',
+      label: '4th Term',
+      subtitle: 'Extended Term Grading Window',
+      color: 'green',
+    },
   };
 
   async function loadYears() {
@@ -122,7 +142,7 @@ function GradingPeriodsPanel() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed');
-      toast.success(data.message);
+      toast.success(data.message || 'Trimesters ready');
       loadPeriods(selectedYear);
     } catch (err) { toast.error(err.message); }
     finally { setActionLoading(null); }
@@ -131,13 +151,14 @@ function GradingPeriodsPanel() {
   async function togglePeriod(period) {
     setActionLoading(period.id);
     const action = period.isOpen ? 'close' : 'open';
+    const cfg = TRIMESTER_CFG[period.quarter] || { code: period.quarter };
     try {
       const res = await fetch(`${API}/admin/grading-periods/${period.id}/${action}`, {
         method: 'PUT', headers: headers(),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed');
-      toast.success(data.message);
+      toast.success(`${cfg.code} is now ${action === 'open' ? 'open for grading' : 'closed (locked)'}`);
       loadPeriods(selectedYear);
     } catch (err) { toast.error(err.message); }
     finally { setActionLoading(null); }
@@ -147,74 +168,141 @@ function GradingPeriodsPanel() {
   useEffect(() => { if (selectedYear) loadPeriods(selectedYear); }, [selectedYear]);
 
   const colorMap = {
-    blue:   { bg: 'bg-blue-50',   openBorder: 'border-blue-400',   closedBorder: 'border-blue-200',   badge: 'bg-blue-500',   text: 'text-blue-700',   btn: 'bg-blue-600 hover:bg-blue-700'   },
-    purple: { bg: 'bg-purple-50', openBorder: 'border-purple-400', closedBorder: 'border-purple-200', badge: 'bg-purple-500', text: 'text-purple-700', btn: 'bg-purple-600 hover:bg-purple-700' },
-    orange: { bg: 'bg-orange-50', openBorder: 'border-orange-400', closedBorder: 'border-orange-200', badge: 'bg-orange-500', text: 'text-orange-700', btn: 'bg-orange-600 hover:bg-orange-700' },
-    green:  { bg: 'bg-green-50',  openBorder: 'border-green-400',  closedBorder: 'border-green-200',  badge: 'bg-green-500',  text: 'text-green-700',  btn: 'bg-green-600 hover:bg-green-700'  },
+    blue:   { bg: 'bg-blue-50/70',   openBorder: 'border-blue-500 ring-2 ring-blue-500/15',   closedBorder: 'border-blue-200/80',   badge: 'bg-blue-600',   text: 'text-blue-900',   chip: 'bg-blue-100 text-blue-700',   btn: 'bg-blue-600 hover:bg-blue-700'   },
+    purple: { bg: 'bg-purple-50/70', openBorder: 'border-purple-500 ring-2 ring-purple-500/15', closedBorder: 'border-purple-200/80', badge: 'bg-purple-600', text: 'text-purple-900', chip: 'bg-purple-100 text-purple-700', btn: 'bg-purple-600 hover:bg-purple-700' },
+    amber:  { bg: 'bg-amber-50/70',  openBorder: 'border-amber-500 ring-2 ring-amber-500/15',  closedBorder: 'border-amber-200/80',  badge: 'bg-amber-600',  text: 'text-amber-900',  chip: 'bg-amber-100 text-amber-800',  btn: 'bg-amber-600 hover:bg-amber-700'  },
+    green:  { bg: 'bg-emerald-50/70',openBorder: 'border-emerald-500 ring-2 ring-emerald-500/15', closedBorder: 'border-emerald-200/80', badge: 'bg-emerald-600', text: 'text-emerald-900', chip: 'bg-emerald-100 text-emerald-700', btn: 'bg-emerald-600 hover:bg-emerald-700' },
   };
+
+  // Sort periods logically Q1, Q2, Q3
+  const sortedPeriods = [...periods].sort((a, b) => (a.quarter || '').localeCompare(b.quarter || ''));
 
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h3 className="font-bold text-[#001840]">Grading Periods</h3>
-          <p className="text-xs text-gray-500 mt-0.5">Open or close quarters to control when teachers can enter grades</p>
+          <h3 className="font-bold text-[#001840] text-lg">Grading Periods (Trimesters)</h3>
+          <p className="text-xs text-gray-500 mt-0.5">Control when teachers can enter and modify grades for 1st Tri, 2nd Tri, and 3rd Tri</p>
         </div>
-        <div className="flex gap-2 items-center">
-          <select value={selectedYear} onChange={e => setSelectedYear(e.target.value)}
-            className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none bg-white">
+        <div className="flex gap-2 items-center flex-wrap">
+          <select
+            value={selectedYear}
+            onChange={e => setSelectedYear(e.target.value)}
+            className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none bg-white text-gray-800"
+          >
             <option value="">Select school year</option>
-            {schoolYears.map(sy => <option key={sy.id} value={sy.year}>{sy.year}{sy.isActive ? ' (Active)' : ''}</option>)}
+            {schoolYears.map(sy => (
+              <option key={sy.id} value={sy.year}>
+                SY {sy.year}{sy.isActive ? ' (Active)' : ''}
+              </option>
+            ))}
           </select>
           {selectedYear && (
-            <button onClick={setupPeriods} disabled={actionLoading === 'setup'}
-              className="px-4 py-2 bg-[#102A71] text-white rounded-lg text-sm font-semibold hover:bg-[#001840] disabled:opacity-50 transition-colors">
-              {actionLoading === 'setup' ? 'Setting up...' : 'Setup Q1–Q4'}
+            <button
+              onClick={setupPeriods}
+              disabled={actionLoading === 'setup'}
+              className="px-4 py-2 bg-[#102A71] text-white rounded-lg text-sm font-semibold hover:bg-[#001840] disabled:opacity-50 transition-colors shadow-2xs"
+            >
+              {actionLoading === 'setup' ? 'Setting up...' : 'Setup Trimesters (1st–3rd Tri)'}
             </button>
           )}
         </div>
       </div>
 
-      <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-xs text-blue-700 leading-relaxed">
-        <strong>How it works:</strong> Click <em>Setup Q1–Q4</em> to create the four quarters for the selected school year.
-        Then <strong>Open</strong> a quarter when ready for grade entry, and <strong>Close</strong> it to lock grades when the period ends.
+      <div className="bg-[#EEF2FF] border border-[#102A71]/15 rounded-xl p-4 text-xs text-[#001840] leading-relaxed flex items-start gap-3">
+        <div className="p-1.5 bg-[#102A71] text-white rounded-lg mt-0.5 shrink-0">
+          <Clock size={15} />
+        </div>
+        <div>
+          <p className="font-semibold text-sm text-[#001840] mb-0.5">Trimester Grading Structure</p>
+          <p className="text-gray-600">
+            Grading runs on a <strong>3-Trimester system</strong> (<strong className="text-[#102A71]">1st Tri</strong>, <strong className="text-purple-700">2nd Tri</strong>, and <strong className="text-amber-700">3rd Tri</strong>), aligned with student grade views and teacher grade sheets. Click <em>Setup Trimesters</em> to initialize terms for the school year. <strong>Open</strong> a trimester when teachers should enter grades, and <strong>Close</strong> it to lock submitted grades.
+          </p>
+        </div>
       </div>
 
       {!selectedYear ? (
-        <div className="bg-white rounded-xl border border-gray-200 p-8 text-center text-gray-400 text-sm">Select a school year above</div>
+        <div className="bg-white rounded-xl border border-gray-200 p-8 text-center text-gray-400 text-sm">
+          Select a school year above to manage grading periods
+        </div>
       ) : loading ? (
-        <div className="bg-white rounded-xl border border-gray-200 p-8 text-center text-gray-400 text-sm">Loading...</div>
-      ) : periods.length === 0 ? (
-        <div className="bg-white rounded-xl border border-gray-200 p-8 text-center">
-          <p className="text-gray-500 text-sm mb-3">No grading periods for {selectedYear} yet.</p>
-          <button onClick={setupPeriods} disabled={actionLoading === 'setup'}
-            className="px-4 py-2 bg-[#F5C400] text-[#001840] rounded-lg text-sm font-semibold hover:bg-[#FFDC5F] disabled:opacity-50">
-            {actionLoading === 'setup' ? 'Setting up...' : 'Setup Q1–Q4 Now'}
+        <div className="bg-white rounded-xl border border-gray-200 p-8 text-center text-gray-400 text-sm">
+          <RefreshCw size={18} className="animate-spin mx-auto mb-2 text-gray-300" />
+          Loading trimester periods for SY {selectedYear}...
+        </div>
+      ) : sortedPeriods.length === 0 ? (
+        <div className="bg-white rounded-xl border border-gray-200 p-10 text-center">
+          <Clock size={36} className="mx-auto mb-3 text-gray-300" />
+          <p className="text-gray-700 text-sm font-semibold mb-1">No trimesters set up for SY {selectedYear} yet</p>
+          <p className="text-xs text-gray-400 mb-4">Click below to generate 1st Tri, 2nd Tri, and 3rd Tri for this school year.</p>
+          <button
+            onClick={setupPeriods}
+            disabled={actionLoading === 'setup'}
+            className="px-5 py-2.5 bg-[#F5C400] text-[#001840] rounded-lg text-sm font-bold hover:bg-[#FFDC5F] disabled:opacity-50 shadow-xs"
+          >
+            {actionLoading === 'setup' ? 'Setting up...' : 'Setup 1st–3rd Tri Now'}
           </button>
         </div>
       ) : (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {periods.map(period => {
-            const cfg = QUARTER_CFG[period.quarter] || { label: period.quarter, color: 'blue' };
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {sortedPeriods.map(period => {
+            const cfg = TRIMESTER_CFG[period.quarter] || { code: period.quarter, label: period.quarter, subtitle: 'Grading Term', color: 'blue' };
             const c = colorMap[cfg.color] || colorMap.blue;
             const isActioning = actionLoading === period.id;
             return (
-              <div key={period.id}
-                className={`rounded-2xl border-2 p-5 transition-all ${c.bg} ${period.isOpen ? c.openBorder : c.closedBorder}`}>
-                <div className="flex items-center justify-between mb-3">
-                  <span className="text-lg font-bold text-[#001840]">{period.quarter}</span>
-                  <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full text-white ${period.isOpen ? c.badge : 'bg-gray-300'}`}>
-                    {period.isOpen ? 'Open' : 'Closed'}
-                  </span>
+              <div
+                key={period.id}
+                className={`rounded-2xl border-2 p-5 transition-all flex flex-col justify-between ${c.bg} ${period.isOpen ? c.openBorder : c.closedBorder} shadow-xs`}
+              >
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xl font-extrabold text-[#001840]">{cfg.code}</span>
+                      <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-md ${c.chip}`}>
+                        {period.quarter}
+                      </span>
+                    </div>
+                    <span className={`text-[11px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full text-white shadow-2xs ${period.isOpen ? 'bg-emerald-600' : 'bg-gray-400'}`}>
+                      {period.isOpen ? '● Open' : '○ Closed'}
+                    </span>
+                  </div>
+
+                  <p className={`text-sm font-bold ${c.text}`}>{cfg.label}</p>
+                  <p className="text-xs text-gray-500 mt-0.5 leading-snug">{cfg.subtitle}</p>
+
+                  <div className="my-4 pt-3 border-t border-gray-200/60 text-xs text-gray-600 space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-gray-400">Grading Status:</span>
+                      <span className={period.isOpen ? 'font-bold text-emerald-700' : 'font-medium text-gray-500'}>
+                        {period.isOpen ? 'Active (Open for Entry)' : 'Locked (Read-Only)'}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-gray-400">Timestamp:</span>
+                      <span className="font-mono text-[11px] text-gray-600">
+                        {period.isOpen && period.openedAt ? `Opened ${new Date(period.openedAt).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })}` :
+                         period.closedAt ? `Closed ${new Date(period.closedAt).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })}` : 'Not opened yet'}
+                      </span>
+                    </div>
+                  </div>
                 </div>
-                <p className={`text-xs font-medium mb-1 ${c.text}`}>{cfg.label}</p>
-                <p className="text-[10px] text-gray-400 mb-4">
-                  {period.isOpen && period.openedAt ? `Opened ${new Date(period.openedAt).toLocaleDateString('en-PH')}` :
-                   period.closedAt ? `Closed ${new Date(period.closedAt).toLocaleDateString('en-PH')}` : 'Not yet opened'}
-                </p>
-                <button onClick={() => togglePeriod(period)} disabled={isActioning}
-                  className={`w-full py-2 rounded-xl text-white text-xs font-bold transition-colors disabled:opacity-50 ${period.isOpen ? 'bg-red-500 hover:bg-red-600' : c.btn}`}>
-                  {isActioning ? '...' : period.isOpen ? 'Close Quarter' : 'Open Quarter'}
+
+                <button
+                  onClick={() => togglePeriod(period)}
+                  disabled={isActioning}
+                  className={`w-full py-2.5 rounded-xl text-xs font-bold transition-all shadow-xs disabled:opacity-50 flex items-center justify-center gap-1.5 ${
+                    period.isOpen
+                      ? 'bg-red-500 hover:bg-red-600 text-white'
+                      : `${c.btn} text-white`
+                  }`}
+                >
+                  {isActioning ? (
+                    <RefreshCw size={13} className="animate-spin" />
+                  ) : period.isOpen ? (
+                    <span>Close {cfg.code} (Lock Grades)</span>
+                  ) : (
+                    <span>Open {cfg.code} for Grading</span>
+                  )}
                 </button>
               </div>
             );
