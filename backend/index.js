@@ -42,6 +42,7 @@ import hbs from "hbs";
 import { fileURLToPath } from "url";
 import { dirname } from "path";
 import { sequelize } from "./models/db.js";
+import "./models/index.js";
 import "./models/enrollmentDocumentModel.js"; // ensure table is synced
 import "./models/gradingPeriodModel.js";       // ensure grading_periods table is synced
 import "./models/classScheduleModel.js";      // ensure class_schedules table is synced
@@ -56,7 +57,7 @@ const __dirname = dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-if (process.env.TRUST_PROXY) app.set("trust proxy", Number(process.env.TRUST_PROXY) || process.env.TRUST_PROXY);
+if (process.env.TRUST_PROXY) app.set("trust proxy", process.env.TRUST_PROXY === "true" ? true : (Number(process.env.TRUST_PROXY) || process.env.TRUST_PROXY));
 
 // CORS configuration
 const allowedOrigins = [
@@ -146,7 +147,7 @@ app.use( auditLoggerMiddleware );
 app.use("/", router);
 
 // Sync only new tables, don't alter existing ones (SQLite doesn't support ALTER well)
-const syncPromise = sequelize.sync({ alter: false }).catch(err => {
+const syncPromise = sequelize.query("SET FOREIGN_KEY_CHECKS = 0").catch(() => {}).then(() => sequelize.sync({ alter: false })).finally(() => sequelize.query("SET FOREIGN_KEY_CHECKS = 1").catch(() => {})).catch(err => {
   console.error("DB sync error:", err);
 });
 
