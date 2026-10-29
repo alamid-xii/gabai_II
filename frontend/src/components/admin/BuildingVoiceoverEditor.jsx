@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { API, BACKEND_URL } from '../../config/api';
+import { confirmAction } from '../ConfirmModal';
 
 export function BuildingVoiceoverEditor({ buildingId, script, onScriptLoaded, onRefresh }) {
   const [building, setBuilding] = useState(null);
@@ -46,8 +47,8 @@ export function BuildingVoiceoverEditor({ buildingId, script, onScriptLoaded, on
       <p className="text-gray-600">{unsaved ? 'Save the building to apply your script changes before generating.' : current ? (building?.voiceoverPublished ? 'Published: students can hear this narration.' : 'Audio ready. Preview it, then publish when approved.') : 'Voiceover needs generation for the saved script.'}</p>
       <div className="flex flex-wrap gap-2">
         <button type="button" disabled={busy || !building || !configured || unsaved || !script.trim()}
-          onClick={() => {
-            if (current && !window.confirm('Generate a new take? This uses ElevenLabs credits.')) return;
+          onClick={async () => {
+            if (current && !(await confirmAction({ title: 'Regenerate Audio', message: 'Generate a new take? This uses ElevenLabs credits.', confirmText: 'Regenerate', variant: 'warning' }))) return;
             action('generate', { regenerate: current });
           }} className="px-3 py-2 rounded-lg bg-[#001840] text-white disabled:opacity-40">
           {busy ? 'Working…' : current ? 'Regenerate audio' : 'Generate audio'}

@@ -32,6 +32,7 @@ import { TeacherSections } from "./pages/teacher/TeacherSections";
 import { TeacherClasses } from "./pages/teacher/TeacherClasses";
 import { TeacherSchedule } from "./pages/teacher/TeacherSchedule";
 import { Toaster } from "sonner";
+import { ConfirmModal } from "./components/ConfirmModal";
 
 export default function App() {
   return (
@@ -39,6 +40,7 @@ export default function App() {
       <BrowserRouter>
         <ScrollToTop />
         <Toaster richColors position="top-right" />
+        <ConfirmModal />
         <Routes>
           {/* Pages with Navbar + Footer layout */}
           <Route element={<Root />}>

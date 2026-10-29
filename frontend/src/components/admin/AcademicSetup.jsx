@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { toast } from 'sonner';
 import { Plus, Trash2, Edit, BookOpen, Check, Clock, Calendar, Search, X, RefreshCw, ChevronLeft, ChevronRight } from 'lucide-react';
 import { API } from '../../config/api';
+import { confirmAction } from '../ConfirmModal';
 
 const token = () => localStorage.getItem('token');
 const headers = () => ({ 'Authorization': `Bearer ${token()}`, 'Content-Type': 'application/json' });
@@ -396,7 +397,7 @@ export function AcademicSetup() {
   }
 
   async function deleteSubject(id) {
-    if (!confirm('Delete this subject?')) return;
+    if (!(await confirmAction('Delete this subject?'))) return;
     await fetch(`${API}/admin/academic/subjects/${id}`, { method: 'DELETE', headers: headers() });
     toast.success('Subject deleted');
     loadSubjects();

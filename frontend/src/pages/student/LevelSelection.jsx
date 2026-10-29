@@ -24,19 +24,19 @@ function UploadBox({ label, file, onFile, error }) {
     if (!f) return;
     // Check MIME type (primary check)
     if (!ALLOWED_TYPES.includes(f.type)) {
-      alert(`Invalid file type "${f.name}".\nOnly PDF, JPG, JPEG, and PNG files are allowed.`);
+      toast.error(`Invalid file type "${f.name}". Only PDF, JPG, JPEG, and PNG files are allowed.`);
       e.target.value = '';
       return;
     }
     // Check extension as secondary guard
     const ext = '.' + f.name.split('.').pop().toLowerCase();
     if (!ALLOWED_EXT.includes(ext)) {
-      alert(`Invalid file extension "${ext}".\nOnly .pdf, .jpg, .jpeg, .png files are allowed.`);
+      toast.error(`Invalid file extension "${ext}". Only .pdf, .jpg, .jpeg, .png files are allowed.`);
       e.target.value = '';
       return;
     }
     if (f.size > MAX_FILE_SIZE) {
-      alert("File exceeds 10MB limit. Please choose a smaller file.");
+      toast.error("File exceeds 10MB limit. Please choose a smaller file.");
       e.target.value = '';
       return;
     }

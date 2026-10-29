@@ -11,6 +11,7 @@ import {
 import { useAuth } from '../../contexts/AuthContext';
 import { Navbar } from '../../components/Navbar';
 import { API as CONFIG_API } from '../../config/api';
+import { confirmAction } from '../../components/ConfirmModal';
 
 export const API = CONFIG_API;
 export const tok = () => ({ Authorization: `Bearer ${localStorage.getItem('token')}`, 'Content-Type': 'application/json' });
@@ -466,7 +467,7 @@ export function AssignSectionModal({ enrollment, onClose, onSuccess }) {
   }
 
   async function handleUnassign() {
-    if (!window.confirm(`Are you sure you want to remove ${displayName} from section ${currentSectionName}?`)) {
+    if (!(await confirmAction(`Are you sure you want to remove ${displayName} from section ${currentSectionName}?`))) {
       return;
     }
 

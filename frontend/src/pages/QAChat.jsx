@@ -2,6 +2,18 @@ import { useState, useRef, useEffect, forwardRef, useImperativeHandle } from "re
 import { Send, Bot, User, Sparkles, ThumbsUp, ThumbsDown, Loader2, Copy, Check, AlertCircle } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import { API } from "../config/api";
+import { confirmAction } from "../components/ConfirmModal";
+
+function renderFormattedText(text) {
+  if (!text) return null;
+  const parts = String(text).split(/(\*\*[^*]+\*\*)/g);
+  return parts.map((part, idx) => {
+    if (part.startsWith("**") && part.endsWith("**") && part.length > 4) {
+      return <strong key={idx} className="font-semibold">{part.slice(2, -2)}</strong>;
+    }
+    return part;
+  });
+}
 
 const quickFAQs = [
   "What are the enrollment requirements for Grade 7?",
@@ -209,8 +221,8 @@ export const QAChat = forwardRef(function QAChat({ onClose, isOverlay = false },
     setTimeout(() => setCopiedId(null), 2000);
   }
 
-  function clearChat() {
-    if (confirm("Are you sure you want to clear the chat history?")) {
+  async function clearChat() {
+    if (await confirmAction({ title: "Clear Chat History", message: "Are you sure you want to clear the chat history?", confirmText: "Clear Chat", variant: "danger" })) {
       setMessages(initialMessages);
       setSuggestedQuestions([]);
       setError(null);
@@ -277,7 +289,7 @@ export const QAChat = forwardRef(function QAChat({ onClose, isOverlay = false },
                       }`}
                   >
                     <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">
-                      {msg.text}
+                      {msg.from === "bot" ? renderFormattedText(msg.text) : msg.text}
                       {msg.isTyping && <span className="inline-block w-1 h-4 bg-current ml-1 animate-pulse"></span>}
                     </p>
 

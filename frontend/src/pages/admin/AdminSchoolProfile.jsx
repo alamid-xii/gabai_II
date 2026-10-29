@@ -2,6 +2,7 @@ import { toast } from 'sonner';
 import { useEffect, useState } from 'react';
 import { API } from '../../config/api';
 import { refreshSchoolProfile } from '../../hooks/useSchoolProfile';
+import { confirmAction } from '../../components/ConfirmModal';
 
 const fields = {
   schoolName: ['School name', 200], shortName: ['Short name / abbreviation', 40], tagline: ['Footer description', 1000],
@@ -37,7 +38,7 @@ export function AdminSchoolProfile() {
   }
   return <div className="space-y-4">
     {error && <p role="alert" className="text-red-700">{error}</p>}
-    <button type="button" disabled={busy} onClick={() => { if (!document || window.confirm('Reload saved details and discard unsaved edits?')) setReload(value => value + 1); }} className="text-sm underline">Reload saved profile</button>
+    <button type="button" disabled={busy} onClick={async () => { if (!document || (await confirmAction('Reload saved details and discard unsaved edits?'))) setReload(value => value + 1); }} className="text-sm underline">Reload saved profile</button>
     {document ? <form onSubmit={save}><fieldset disabled={busy} className="rounded-xl border bg-white p-5 space-y-5">
       <div className="grid sm:grid-cols-2 gap-4">
         {Object.entries(fields).map(([key, [label, maxLength]]) => <label key={key} className={`text-sm font-medium ${['address', 'tagline'].includes(key) ? 'sm:col-span-2' : ''}`}>{label}

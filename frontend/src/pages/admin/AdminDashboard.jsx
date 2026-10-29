@@ -1,4 +1,5 @@
 import { AdminAdmissionSettings } from "./AdminAdmissionSettings";
+import { confirmAction } from "../../components/ConfirmModal";
 import { AdminSchoolProfile } from "./AdminSchoolProfile";
 import { AdminEnrollmentGuide } from "./AdminEnrollmentGuide";
 import { useState, useEffect, useCallback, useRef } from "react";
@@ -145,7 +146,7 @@ export function AdminDashboard({ initialTab = "dashboard" }) {
   }
 
   async function handleDeleteFAQ(id) {
-    if (!confirm("Are you sure you want to delete this FAQ?")) return;
+    if (!(await confirmAction("Are you sure you want to delete this FAQ?"))) return;
 
     try {
       const token = localStorage.getItem("token");

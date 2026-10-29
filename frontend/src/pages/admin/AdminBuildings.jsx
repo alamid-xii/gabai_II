@@ -13,6 +13,7 @@ import { MapContainer, TileLayer, Marker, useMapEvents } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { toast } from "sonner";
+import { confirmAction } from "../../components/ConfirmModal";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../components/ui/card";
@@ -72,10 +73,10 @@ export function AdminBuildings({ buildings, onRefresh }) {
 
   const onScriptLoaded = useCallback(script => setFormData(previous => ({ ...previous, voiceoverScript: script })), []);
 
-  function handleFileChange(e) {
+  async function handleFileChange(e) {
     const file = e.target.files[0];
     if (file) {
-      if (formData.panoramaLabels.length && !window.confirm("Replacing the panorama clears its labels. Continue?")) { e.target.value = ""; return; }
+      if (formData.panoramaLabels.length && !(await confirmAction({ title: "Replace Panorama", message: "Replacing the panorama clears its labels. Continue?", confirmText: "Continue", variant: "warning" }))) { e.target.value = ""; return; }
       setFormData(previous => ({ ...previous, panoramaLabels: [] }));
       setSelectedFile(file);
       // Create preview URL
@@ -145,7 +146,7 @@ export function AdminBuildings({ buildings, onRefresh }) {
   }
 
   async function handleDelete(id) {
-    if (!confirm("Are you sure you want to delete this building?")) return;
+    if (!(await confirmAction("Are you sure you want to delete this building?"))) return;
 
     const token = localStorage.getItem("token");
     try {

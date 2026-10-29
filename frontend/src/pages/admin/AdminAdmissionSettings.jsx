@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { API } from '../../config/api';
+import { confirmAction } from '../../components/ConfirmModal';
 import { useAdmissionSettings } from '../../hooks/useAdmissionSettings';
 
 export function AdminAdmissionSettings() {
@@ -34,7 +35,7 @@ export function AdminAdmissionSettings() {
   const input = 'rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm min-w-0';
   return <form onSubmit={save}><fieldset disabled={saving} className="space-y-5">
     <p className="text-sm text-gray-600">Changes apply to newly created applications. Saved applications retain their admission rules. Existing applications without a rules snapshot follow the previous requirements.</p>
-    <button type="button" onClick={() => { if (window.confirm('Discard unsaved changes and reload current settings?')) { setDraft(null); retry(); } }} className="text-sm underline">Reload saved settings</button>
+    <button type="button" onClick={async () => { if (await confirmAction('Discard unsaved changes and reload current settings?')) { setDraft(null); retry(); } }} className="text-sm underline">Reload saved settings</button>
     <section className="rounded-xl border bg-white p-4 sm:p-5 space-y-3">
       <h3 className="font-bold text-[#001840]">SHS strands</h3>
       {content.strands.map((strand, index) => <label key={strand.name} className="flex gap-3 items-center text-sm py-1"><input type="checkbox" checked={strand.active} onChange={event => patch({ strands: content.strands.map((item, i) => i === index ? { ...item, active: event.target.checked } : item) })} />{strand.name}</label>)}

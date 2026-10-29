@@ -1,6 +1,7 @@
 import { toast } from 'sonner';
 import { useEffect, useState } from 'react';
 import { API } from '../../config/api';
+import { confirmAction } from '../../components/ConfirmModal';
 
 const fields = {
   enrollmentPeriod: 'Enrollment period / dates', enrollmentAudience: 'Who can enroll',
@@ -42,7 +43,7 @@ export function AdminEnrollmentGuide() {
   const inputClass = 'mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm';
   return <div className="space-y-4">
     {error && <p role="alert" className="text-red-700">{error}</p>}
-    <button type="button" disabled={saving} onClick={() => { if (!guide || window.confirm('Reload the saved guide? Unsaved changes will be discarded.')) setReload(value => value + 1); }} className="text-sm underline">Reload saved guide</button>
+    <button type="button" disabled={saving} onClick={async () => { if (!guide || (await confirmAction('Reload the saved guide? Unsaved changes will be discarded.'))) setReload(value => value + 1); }} className="text-sm underline">Reload saved guide</button>
     {!guide ? <p>Loading guide…</p> : <form onSubmit={save}>
       <fieldset disabled={saving} className="space-y-5">
         <section className="grid sm:grid-cols-2 gap-4 rounded-xl bg-white border p-5">
@@ -52,7 +53,7 @@ export function AdminEnrollmentGuide() {
           <div className="flex flex-wrap items-center gap-3"><h3 className="font-bold flex-1">Step {index + 1}</h3>
             <button type="button" disabled={!index} onClick={() => move(index, -1)} className="text-sm underline disabled:opacity-30">Move up</button>
             <button type="button" disabled={index === guide.content.steps.length - 1} onClick={() => move(index, 1)} className="text-sm underline disabled:opacity-30">Move down</button>
-            <button type="button" disabled={guide.content.steps.length <= 1} onClick={() => { if (window.confirm('Remove this guide step?')) field('steps', guide.content.steps.filter(item => item.id !== step.id)); }} className="text-sm text-red-700 disabled:opacity-30">Remove</button>
+            <button type="button" disabled={guide.content.steps.length <= 1} onClick={async () => { if (await confirmAction('Remove this guide step?')) field('steps', guide.content.steps.filter(item => item.id !== step.id)); }} className="text-sm text-red-700 disabled:opacity-30">Remove</button>
           </div>
           <label className="block text-sm">Title<input required maxLength={160} value={step.title} onChange={event => stepField(index, 'title', event.target.value)} className={inputClass} /></label>
           <label className="block text-sm">Description<textarea required maxLength={3000} rows={3} value={step.description} onChange={event => stepField(index, 'description', event.target.value)} className={inputClass} /></label>

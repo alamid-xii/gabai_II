@@ -1,4 +1,6 @@
 import { useSchoolProfile } from "../hooks/useSchoolProfile";
+import { toast } from "sonner";
+import { confirmAction } from "../components/ConfirmModal";
 import { useState, useEffect } from "react";
 import {
   CheckCircle2,
@@ -65,8 +67,8 @@ export function EnrollmentGuide() {
     });
   }
 
-  function resetProgress() {
-    if (confirm("Are you sure you want to reset your enrollment progress?")) {
+  async function resetProgress() {
+    if (await confirmAction("Are you sure you want to reset your enrollment progress?")) {
       setCompleted(new Set());
       localStorage.removeItem(`enrollmentProgress_${guide.revision}`);
     }
@@ -84,7 +86,7 @@ export function EnrollmentGuide() {
         url: window.location.href
       });
     } else {
-      alert('Share link copied to clipboard!');
+      toast.success('Share link copied to clipboard!');
       navigator.clipboard.writeText(window.location.href);
     }
   }

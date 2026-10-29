@@ -8,6 +8,7 @@ import {
   Coffee, Utensils
 } from "lucide-react";
 import { API, tok } from "./RegistrarShared";
+import { confirmAction } from "../../components/ConfirmModal";
 
 // 15-minute intervals from 7:30 AM to 5:30 PM (41 slot marks, 40 intervals)
 const TIME_SLOTS = [
@@ -510,7 +511,7 @@ export function SchedulesTab() {
   // Delete a schedule
   const handleDeleteSchedule = async (id, e) => {
     if (e) e.stopPropagation();
-    if (!window.confirm("Are you sure you want to remove this scheduled class?")) return;
+    if (!(await confirmAction("Are you sure you want to remove this scheduled class?"))) return;
 
     try {
       const res = await fetch(`${API}/academic/schedules/${id}`, {

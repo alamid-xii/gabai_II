@@ -5,6 +5,7 @@ import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { API } from "../config/api";
+import { toast } from "sonner";
 
 const NAME_PATTERN = /^[\p{L}\p{M}\s'\u2019-]+$/u;
 
@@ -199,9 +200,9 @@ export function SignUp() {
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ email: registeredEmail })
                   });
-                  alert("Verification email resent!");
+                  toast.success("Verification email resent!");
                 } catch {
-                  alert("Could not resend the verification email. Please try again.");
+                  toast.error("Could not resend the verification email. Please try again.");
                 }
               }}
               className="mt-3 text-sm text-[#102A71] hover:underline"

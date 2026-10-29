@@ -677,10 +677,10 @@ export function HSEnrollmentForm({ enrollmentId: propId, readOnly = false }) {
                         const allowedExt = ['.pdf', '.jpg', '.jpeg', '.png'];
                         const ext = '.' + f.name.split('.').pop().toLowerCase();
                         if (!allowed.includes(f.type) || !allowedExt.includes(ext)) {
-                          alert(`Invalid file type "${f.name}".\nOnly PDF, JPG, JPEG, and PNG files are allowed.`);
+                          toast.error(`Invalid file type "${f.name}". Only PDF, JPG, JPEG, and PNG files are allowed.`);
                           e.target.value = ''; return;
                         }
-                        if (f.size > 10 * 1024 * 1024) { alert("File exceeds 10MB limit. Please choose a smaller file."); e.target.value = ''; return; }
+                        if (f.size > 10 * 1024 * 1024) { toast.error("File exceeds 10MB limit. Please choose a smaller file."); e.target.value = ''; return; }
                         set("docFiles", { ...form.docFiles, [cred.key]: f });
                       }} />
                     </label>

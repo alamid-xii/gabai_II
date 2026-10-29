@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 
 import { API } from '../../config/api';
+import { confirmAction } from '../../components/ConfirmModal';
 
 const tok = () => ({ Authorization: `Bearer ${localStorage.getItem('token')}`, 'Content-Type': 'application/json' });
 
@@ -91,7 +92,7 @@ function SectionStudentsPanel({ section, allSections, onClose, onChanged }) {
   }
 
   async function handleRemove(enrollmentId, name) {
-    if (!confirm(`Remove ${name} from section ${section.code}?`)) return;
+    if (!(await confirmAction(`Remove ${name} from section ${section.code}?`))) return;
     try {
       const res = await fetch(`${API}/admin/sections/students/${enrollmentId}/section`, {
         method: 'DELETE', headers: tok(),
@@ -731,7 +732,7 @@ export function SectionManagement() {
   useEffect(() => { loadSections(); }, [loadSections]);
 
   async function handleDelete(section) {
-    if (!confirm(`Delete section "${section.code}"? This cannot be undone.`)) return;
+    if (!(await confirmAction(`Delete section "${section.code}"? This cannot be undone.`))) return;
     try {
       const res = await fetch(`${API}/admin/sections/${section.id}`, {
         method: 'DELETE', headers: tok(),
