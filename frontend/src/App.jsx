@@ -1,6 +1,6 @@
 import { BrowserRouter, Routes, Route } from "react-router";
 import { AuthProvider } from "./contexts/AuthContext";
-import { ProtectedRoute } from "./components/ProtectedRoute";
+import { ProtectedRoute, PublicOnlyRoute } from "./components/ProtectedRoute";
 import { ScrollToTop } from "./components/ScrollToTop";
 import { Root } from "./Root";
 import { Home } from "./pages/Home";
@@ -117,12 +117,12 @@ export default function App() {
           </Route>
 
           {/* Standalone pages without layout */}
-          <Route path="/login" element={<Login />} />
+          <Route path="/login" element={<PublicOnlyRoute><Login /></PublicOnlyRoute>} />
           <Route path="/complete-profile" element={<ProtectedRoute allowIncompleteProfile><CompleteProfile /></ProtectedRoute>} />
-          <Route path="/forgot-password" element={<PasswordRecovery />} />
+          <Route path="/forgot-password" element={<PublicOnlyRoute><PasswordRecovery /></PublicOnlyRoute>} />
           <Route path="/reset-password" element={<PasswordRecovery reset />} />
           <Route path="/verify-email" element={<VerifyEmailPage />} />
-          <Route path="/signup" element={<SignUp />} />
+          <Route path="/signup" element={<PublicOnlyRoute><SignUp /></PublicOnlyRoute>} />
           <Route
             path="/admin"
             element={

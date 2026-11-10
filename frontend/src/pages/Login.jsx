@@ -104,13 +104,13 @@ export function Login() {
 
       // Navigate based on role
       if (data.user.role === "admin") {
-        navigate("/admin");
+        navigate("/admin", { replace: true });
       } else if (data.user.role === "registrar") {
-        navigate("/registrar");
+        navigate("/registrar", { replace: true });
       } else if (data.user.role === "teacher") {
-        navigate("/teacher");
+        navigate("/teacher", { replace: true });
       } else {
-        navigate("/my-enrollments");
+        navigate("/my-enrollments", { replace: true });
       }
     } catch (err) {
       const msg = err.message || "";

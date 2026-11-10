@@ -36,3 +36,18 @@ export function ProtectedRoute({ children, requireAdmin = false, role, allowInco
   return children;
 }
 
+export function PublicOnlyRoute({ children }) {
+  const { user, isLoggedIn, loading } = useAuth();
+
+  if (loading) {
+    return null;
+  }
+
+  if (isLoggedIn && user) {
+    const target = user.profileCompleted === false ? "/complete-profile" : roleHome(user.role);
+    return <Navigate to={target} replace />;
+  }
+
+  return children;
+}
+
