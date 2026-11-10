@@ -192,7 +192,7 @@ export function AdminDashboard({ initialTab = "dashboard" }) {
 
   return (
     <div className="min-h-screen bg-gray-100 lg:pl-65">
-      <Navbar variant="admin" activeTab={activeTab} onTabChange={(tab) => setActiveTab(tab)} />
+      <Navbar variant="admin" activeTab={activeTab} onTabChange={(tab) => { setActiveTab(tab); if (tab !== activeTab) navigate("/admin", { state: { tab } }); }} />
       <div className="flex-1 flex flex-col min-h-screen">
         <header className="bg-white border-b border-gray-100 px-6 py-4 flex items-center gap-4 sticky top-0 z-20 shadow-sm mt-16 lg:mt-0">
           <div className="flex-1">
