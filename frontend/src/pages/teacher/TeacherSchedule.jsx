@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { Navbar } from "../../components/Navbar";
-import { useAuth } from "../../contexts/AuthContext";
+import { useAuth } from "../../contexts/authState";
 import { API } from "../../config/api";
 
 const tok = () => ({

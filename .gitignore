@@ -8,3 +8,5 @@ build/
 .DS_Store
 Thumbs.db
 database.sqlite
+artifacts/
+backend/public/uploads/documents/

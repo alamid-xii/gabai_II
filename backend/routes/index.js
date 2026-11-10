@@ -1,3 +1,4 @@
+import { getYearEndSummary } from "../controllers/academicController.js";
 import { getAdmissionSettings, updateAdmissionSettings } from "../controllers/admissionSettingsController.js";
 import { getSchoolProfile, updateSchoolProfile } from "../controllers/schoolProfileController.js";
 import { getEnrollmentGuide, updateEnrollmentGuide } from "../controllers/enrollmentGuideController.js";
@@ -38,7 +39,7 @@ import { createChatLimiter } from "../services/chatGuardrails.js";
 import { sendMessage, rateFeedback } from "../controllers/chatController.js";
 import { getAllBuildings, getBuildingById, createBuilding, updateBuilding, deleteBuilding, upload } from "../controllers/buildingController.js";
 import { requireAdmin, getDashboardStats, getAllFAQs, createFAQ, updateFAQ, deleteFAQ, getAllUsers, updateUser, deleteUser, resetUserPassword, toggleUserStatus } from "../controllers/adminController.js";
-import { requireRegistrar, requireAdminOrRegistrar, authenticateToken } from "../middleware/auth.js";
+import { requireStudent, requireRegistrar, requireAdminOrRegistrar, authenticateToken } from "../middleware/auth.js";
 import { sanitizeBody, validateLogin, validateRegister, validateFAQ } from "../middleware/validate.js";
 import { getAllTeachers, createUser, assignTeacherToSection } from "../controllers/teacherController.js";
 import {
@@ -164,6 +165,7 @@ router.put("/api/admin/academic/school-years/:id/activate", requireAdmin, setAct
 router.post("/api/admin/academic/close-school-year", requireAdmin, closeSchoolYear);
 
 // ── Grading Period API (admin) ────────────────────────────────────────────────
+router.get("/api/admin/academic/year-end-summary", requireAdmin, getYearEndSummary);
 router.get("/api/admin/grading-periods", requireAdmin, getGradingPeriods);
 router.post("/api/admin/grading-periods/setup", requireAdmin, setupGradingPeriods);
 router.put("/api/admin/grading-periods/:id/open", requireAdmin, openGradingPeriod);
@@ -178,7 +180,7 @@ router.post("/api/academic/schedules", authenticateToken, requireAdminOrRegistra
 router.delete("/api/academic/schedules/:id", authenticateToken, requireAdminOrRegistrar, deleteClassSchedule);
 
 // ── Student schedule ─────────────────────────────────────────────────────────
-router.get("/api/student/my-schedule", authenticateToken, getStudentSchedule);
-router.get("/api/student/my-schedule/pdf", authenticateToken, downloadStudentSchedulePDF);
+router.get("/api/student/my-schedule", authenticateToken, requireStudent, getStudentSchedule);
+router.get("/api/student/my-schedule/pdf", authenticateToken, requireStudent, downloadStudentSchedulePDF);
 
 export default router;

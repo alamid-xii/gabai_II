@@ -82,7 +82,7 @@ test('incomplete Google accounts cannot skip completion through JWT or session e
 
 test('JWT auth permits account restoration and profile completion but blocks other authenticated routes', async t => {
   const user = { id: 88, isActive: true, authProvider: 'google', profileCompleted: 0 };
-  t.mock.method(sequelize, 'query', async () => [[user]]);
+  t.mock.method(User, 'findByPk', async () => user);
   const token = jwt.sign({ id: 88 }, process.env.JWT_SECRET || 'emc-secret-key-2025');
   for (const [url, allowed] of [['/api/auth/me', true], ['/api/auth/profile', true], ['/api/enrollments', false]]) {
     const res = response();

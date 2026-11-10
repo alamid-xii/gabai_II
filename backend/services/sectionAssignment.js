@@ -1,130 +1,79 @@
-/**
- * Auto-section assignment service
- * Matches by: educationLevel + yearLevel + strand (SHS only)
- * Requires the same grade, school year, and strand/class. Never assigns a fallback from another cohort.
- * Also auto-enrolls subjects from the curriculum after section assignment.
- */
 import { sequelize } from '../models/db.js';
 import { generateStudentNumber } from './studentNumbers.js';
+import { assertSectionCompatible, enrollmentTrack, gradeNumber } from './academicScope.js';
 
-/**
- * Resolve section course from enrollment — always JHS or SHS
- */
-function resolveSectionCourse(enrollment) {
-  return enrollment.educationLevel || null;
+const assignable = ['approved', 'subjects_enrolled', 'enrolled', 'active'];
+const occupancy = `status IN ('enrolled', 'active') AND COALESCE(lifeStatus, 'enrolled') NOT IN ('dropped', 'transferred_out', 'retained', 'completed')`;
+const transactionOptions = { isolationLevel: 'READ COMMITTED' };
+
+async function sectionCount(query, id) {
+  const [[row]] = await query(`SELECT COUNT(*) AS count FROM enrollment_records WHERE sectionId = ? AND ${occupancy}`, { replacements: [id] });
+  return Number(row.count);
 }
 
-/**
- * Resolve numeric year level from gradeLevel string (e.g. "Grade 7" → 7)
- */
-function resolveYearLevel(enrollment) {
-  const grade = parseInt((enrollment.gradeLevel || '').replace(/\D/g, ''));
-  return isNaN(grade) ? null : grade;
-}
-
-/**
- * Auto-enroll subjects from the curriculum into EnrollmentSubject table.
- * Matches subjects by programCode + gradeLevel + strand (SHS) + semester.
- */
-async function autoEnrollSubjects(enrollmentId, enrollment, section, transaction) {
+export async function autoEnrollSubjects(enrollmentId, enrollment, section, transaction) {
   const query = (sql, options = {}) => sequelize.query(sql, { ...options, transaction });
-  try {
-    const programCode = enrollment.educationLevel; // 'JHS' or 'SHS'
-    const gradeLevel = resolveYearLevel(enrollment);
-    const strand = enrollment.strand || null;
-    const semester = section?.semester?.replace(' Semester', '').replace('st', 'st').replace('nd', 'nd') || '1st';
-
-    // Build subject query
-    let subjectQuery = `
-      SELECT * FROM subjects
-      WHERE programCode = ?
-        AND gradeLevel = ?
-        AND isActive = 1
-    `;
-    const params = [programCode, gradeLevel];
-
-    // For SHS, also filter by strand if available
-    if (enrollment.educationLevel === 'SHS' && strand) {
-      subjectQuery += ` AND (strand = ? OR strand IS NULL OR strand = '')`;
-      params.push(strand);
+  const track = enrollmentTrack(enrollment);
+  const [subjects] = await query(`SELECT subjects.*, u.name AS defaultTeacherName, u.id AS defaultTeacherId,
+      a.id AS assignmentId, a.teacherId AS assignedTeacherId, au.name AS assignedTeacherName,
+      a.schedule AS assignedSchedule, a.room AS assignedRoom
+    FROM subjects
+    LEFT JOIN users u ON u.id = subjects.teacherId AND u.role = 'teacher' AND u.isActive = 1
+    LEFT JOIN section_subject_assignments a ON a.sectionId = ? AND a.subjectCode = subjects.code
+    LEFT JOIN users au ON au.id = a.teacherId AND au.role = 'teacher' AND au.isActive = 1
+    WHERE subjects.programCode = ? AND subjects.gradeLevel = ? AND subjects.isActive = 1
+      AND (subjects.strand = ? OR subjects.strand IS NULL OR subjects.strand = '')
+      AND subjects.semester = ?`, { replacements: [section.id, enrollment.educationLevel, gradeNumber(enrollment.gradeLevel), track, section.semester || '1st'] });
+  for (const subject of subjects) {
+    const teacherId = subject.assignmentId ? subject.assignedTeacherId && subject.assignedTeacherName ? subject.assignedTeacherId : null : subject.defaultTeacherId || null;
+    const instructor = subject.assignmentId ? subject.assignedTeacherName || null : subject.defaultTeacherName || null;
+    const [[existing]] = await query('SELECT id FROM enrollment_subjects WHERE enrollmentId = ? AND subjectId = ? LIMIT 1', { replacements: [enrollmentId, subject.id] });
+    if (existing) {
+      await query(`UPDATE enrollment_subjects SET sectionId = ?, sectionName = ?, instructor = ?, teacherId = ?, schedule = ?, room = ?, updatedAt = NOW() WHERE id = ?`, {
+        replacements: [section.id, section.code, instructor, teacherId, subject.assignedSchedule || null, subject.assignedRoom || null, existing.id],
+      });
+    } else {
+      await query(`INSERT INTO enrollment_subjects
+        (enrollmentId, subjectId, subjectCode, subjectDescription, units, sectionId, sectionName, schedule, instructor, teacherId, room, assignedAt, status, createdAt, updatedAt)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), 'enrolled', NOW(), NOW())`, {
+        replacements: [enrollmentId, subject.id, subject.code, subject.description, subject.units, section.id, section.code,
+          subject.assignedSchedule || null, instructor, teacherId, subject.assignedRoom || null],
+      });
     }
-
-    // Filter by semester if section has one
-    if (semester) {
-      subjectQuery += ` AND semester = ?`;
-      params.push(semester);
-    }
-
-    const [subjects] = await query(subjectQuery, { replacements: params });
-
-    if (!subjects || subjects.length === 0) {
-      return 0;
-    }
-
-    const [[existing]] = await query('SELECT COUNT(*) AS count FROM enrollment_subjects WHERE enrollmentId = ?', { replacements: [enrollmentId] });
-    if (Number(existing.count) > 0) return Number(existing.count);
-
-    // Insert each subject into enrollment_subjects
-    for (const subject of subjects) {
-      await query(
-        `INSERT INTO enrollment_subjects
-          (enrollmentId, subjectId, subjectCode, subjectDescription, units,
-           sectionId, sectionName, schedule, instructor, room,
-           assignedAt, status, createdAt, updatedAt)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), 'enrolled', NOW(), NOW())`,
-        {
-          replacements: [
-            enrollmentId,
-            subject.id,
-            subject.code,
-            subject.description,
-            subject.units,
-            section?.id || null,
-            section?.code || null,
-            null,        // schedule — set per subject by admin later
-            null,        // instructor — set per subject by admin later (not copied from section adviser)
-            null,        // room — set per subject by admin later
-          ]
-        }
-      );
-    }
-    return subjects.length;
-  } catch (error) {
-    throw error;
   }
+  return subjects.length;
 }
 
-/**
- * Auto-assign a student to the best matching section on approval.
- * Matching priority:
- *   1. SSC student (sscClass='SSC') → section with strand='SSC', same course+yearLevel
- *   2. SHS student with strand → section with matching course+yearLevel+strand
- *   3. Regular JHS or SHS fallback → section with matching course+yearLevel, strand IS NULL or empty
- *   4. course only (last resort)
- * Returns { assigned: true, section, subjectsEnrolled } or { assigned: false, reason }
- */
 export async function autoAssignSection(enrollmentId) {
   try {
-    return await sequelize.transaction(async transaction => {
+    return await sequelize.transaction(transactionOptions, async transaction => {
       const query = (sql, options = {}) => sequelize.query(sql, { ...options, transaction });
       const [[enrollment]] = await query('SELECT * FROM enrollment_records WHERE id = ? FOR UPDATE', { replacements: [enrollmentId] });
       if (!enrollment) return { assigned: false, reason: 'Enrollment not found' };
+      if (!assignable.includes(enrollment.status)) return { assigned: false, reason: 'Approve the enrollment before assigning a section.' };
       if (enrollment.sectionId) {
-        const [[existing]] = await query('SELECT * FROM sections WHERE id = ?', { replacements: [enrollment.sectionId] });
-        if (existing) return { assigned: true, section: existing, alreadyAssigned: true, subjectsEnrolled: await autoEnrollSubjects(enrollmentId, enrollment, existing, transaction) };
+        const [[section]] = await query('SELECT * FROM sections WHERE id = ? AND isActive = 1 FOR UPDATE', { replacements: [enrollment.sectionId] });
+        if (section) {
+          assertSectionCompatible(enrollment, section);
+          return { assigned: true, section, alreadyAssigned: true, subjectsEnrolled: await autoEnrollSubjects(enrollmentId, enrollment, section, transaction) };
+        }
       }
-      const course = resolveSectionCourse(enrollment), grade = resolveYearLevel(enrollment);
-      if (!course || !grade || !enrollment.academicYear) return { assigned: false, reason: 'Education level, grade, and school year are required for section assignment.' };
-      const strand = course === 'SHS' ? enrollment.strand : enrollment.sscClass === 'SSC' ? 'SSC' : null;
+      const track = enrollmentTrack(enrollment);
+      if (!enrollment.academicYear) return { assigned: false, reason: 'The school year is required for section assignment.' };
       const [sections] = await query(`SELECT * FROM sections WHERE course = ? AND yearLevel = ? AND schoolYear = ?
-        AND ${strand ? 'strand = ?' : "(strand IS NULL OR strand = '' OR strand = 'Regular')"}
-        AND isActive = 1 AND currentEnrollment < capacity ORDER BY currentEnrollment, id LIMIT 1 FOR UPDATE`, { replacements: [course, grade, enrollment.academicYear, ...(strand ? [strand] : [])] });
-      const section = sections[0];
-      if (!section) return { assigned: false, reason: `No available ${course} Grade ${grade}${strand ? ` ${strand}` : ' Regular'} section for ${enrollment.academicYear}.` };
-      await query("UPDATE enrollment_records SET sectionId = ?, sectionName = ?, status = 'enrolled', updatedAt = NOW() WHERE id = ?", { replacements: [section.id, section.code, enrollmentId] });
-      await query('UPDATE sections SET currentEnrollment = currentEnrollment + 1, updatedAt = NOW() WHERE id = ?', { replacements: [section.id] });
-      const subjectsEnrolled = await autoEnrollSubjects(enrollmentId, enrollment, section, transaction);
-      return { assigned: true, section, subjectsEnrolled };
+        AND ${track === 'Regular' ? "(strand IS NULL OR strand = '' OR strand = 'Regular')" : 'strand = ?'}
+        AND isActive = 1 ORDER BY currentEnrollment, id FOR UPDATE`, {
+        replacements: [enrollment.educationLevel, gradeNumber(enrollment.gradeLevel), enrollment.academicYear, ...(track === 'Regular' ? [] : [track])],
+      });
+      for (const section of sections) {
+        assertSectionCompatible(enrollment, section);
+        const count = await sectionCount(query, section.id);
+        if (count >= Number(section.capacity)) continue;
+        await query("UPDATE enrollment_records SET sectionId = ?, sectionName = ?, status = 'enrolled', updatedAt = NOW() WHERE id = ?", { replacements: [section.id, section.code, enrollmentId] });
+        await query('UPDATE sections SET currentEnrollment = ?, updatedAt = NOW() WHERE id = ?', { replacements: [count + 1, section.id] });
+        return { assigned: true, section, subjectsEnrolled: await autoEnrollSubjects(enrollmentId, enrollment, section, transaction) };
+      }
+      return { assigned: false, reason: `No available ${enrollment.educationLevel} Grade ${gradeNumber(enrollment.gradeLevel)} ${track} section for ${enrollment.academicYear}.` };
     });
   } catch (error) {
     console.error('Auto-assign section error:', error);
@@ -132,147 +81,57 @@ export async function autoAssignSection(enrollmentId) {
   }
 }
 
-/**
- * Remove a student from their current section
- */
 export async function removeFromSection(enrollmentId) {
   try {
-    const [[enrollment]] = await sequelize.query(
-      'SELECT * FROM enrollment_records WHERE id = ?',
-      { replacements: [enrollmentId] }
-    );
-
-    if (!enrollment || !enrollment.sectionId) {
-      return { success: false, reason: 'Student not assigned to any section' };
-    }
-
-    const oldSectionId = enrollment.sectionId;
-
-    await sequelize.query(
-      `UPDATE enrollment_records
-       SET sectionId = NULL, sectionName = NULL, status = 'approved',
-           updatedAt = NOW()
-       WHERE id = ?`,
-      { replacements: [enrollmentId] }
-    );
-
-    await sequelize.query(
-      `UPDATE sections
-       SET currentEnrollment = GREATEST(0, CAST(currentEnrollment AS SIGNED) - 1), updatedAt = NOW()
-       WHERE id = ?`,
-      { replacements: [oldSectionId] }
-    );
-
-    await sequelize.query(
-      `UPDATE enrollment_subjects
-       SET sectionId = NULL, sectionName = NULL, updatedAt = NOW()
-       WHERE enrollmentId = ?`,
-      { replacements: [enrollmentId] }
-    );
-
-    return { success: true };
+    return await sequelize.transaction(transactionOptions, async transaction => {
+      const query = (sql, options = {}) => sequelize.query(sql, { ...options, transaction });
+      const [[enrollment]] = await query('SELECT * FROM enrollment_records WHERE id = ? FOR UPDATE', { replacements: [enrollmentId] });
+      if (!enrollment?.sectionId) return { success: false, reason: 'Student not assigned to any section' };
+      if (!assignable.includes(enrollment.status)) return { success: false, reason: 'Only current approved enrollments can change section.' };
+      await query('SELECT id FROM sections WHERE id = ? FOR UPDATE', { replacements: [enrollment.sectionId] });
+      await query("UPDATE enrollment_records SET sectionId = NULL, sectionName = NULL, status = 'approved', updatedAt = NOW() WHERE id = ?", { replacements: [enrollmentId] });
+      await query('UPDATE sections SET currentEnrollment = ?, updatedAt = NOW() WHERE id = ?', { replacements: [await sectionCount(query, enrollment.sectionId), enrollment.sectionId] });
+      await query('UPDATE enrollment_subjects SET sectionId = NULL, sectionName = NULL, schedule = NULL, room = NULL, updatedAt = NOW() WHERE enrollmentId = ?', { replacements: [enrollmentId] });
+      return { success: true };
+    });
   } catch (error) {
     console.error('Remove from section error:', error);
     return { success: false, reason: error.message };
   }
 }
 
-/**
- * Move or assign a student to a section
- */
 export async function moveToSection(enrollmentId, newSectionId) {
   try {
-    const [[enrollment]] = await sequelize.query(
-      'SELECT * FROM enrollment_records WHERE id = ?',
-      { replacements: [enrollmentId] }
-    );
-    if (!enrollment) return { success: false, reason: 'Enrollment not found' };
-
-    const [[newSection]] = await sequelize.query(
-      'SELECT * FROM sections WHERE id = ? AND isActive = 1',
-      { replacements: [newSectionId] }
-    );
-    if (!newSection) return { success: false, reason: 'Target section not found' };
-
-    const oldSectionId = enrollment.sectionId ? Number(enrollment.sectionId) : null;
-    const targetSectionId = Number(newSection.id);
-
-    // If student is already in this section, ensure status and subjects are updated and return
-    if (oldSectionId === targetSectionId) {
-      await sequelize.query(
-        `UPDATE enrollment_records
-         SET sectionName = ?, status = 'enrolled', updatedAt = NOW()
-         WHERE id = ?`,
-        { replacements: [newSection.code, enrollmentId] }
-      );
-      try {
-        await autoEnrollSubjects(enrollmentId, enrollment, newSection);
-      } catch (_) {}
-      return { success: true, section: newSection };
-    }
-
-    if (newSection.currentEnrollment >= newSection.capacity) {
-      return { success: false, reason: `Section ${newSection.code} is full (${newSection.currentEnrollment}/${newSection.capacity})` };
-    }
-
-    // Ensure student has a student number if enrolled
-    let studentNumber = enrollment.studentNumber;
-    if (!studentNumber && enrollment.userId) {
-      try {
-        const [[prev]] = await sequelize.query(
-          `SELECT studentNumber FROM enrollment_records
-           WHERE userId = ? AND studentNumber IS NOT NULL AND studentNumber != ''
-           ORDER BY id DESC LIMIT 1`,
-          { replacements: [enrollment.userId] }
-        );
-        studentNumber = prev?.studentNumber || await generateStudentNumber();
-      } catch (snErr) {
-        console.warn('Student number generation error in moveToSection:', snErr.message);
+    return await sequelize.transaction(transactionOptions, async transaction => {
+      const query = (sql, options = {}) => sequelize.query(sql, { ...options, transaction });
+      const [[enrollment]] = await query('SELECT * FROM enrollment_records WHERE id = ? FOR UPDATE', { replacements: [enrollmentId] });
+      if (!enrollment) return { success: false, reason: 'Enrollment not found' };
+      if (!assignable.includes(enrollment.status)) return { success: false, reason: 'Verify and approve the enrollment before assigning a section.' };
+      const oldSectionId = Number(enrollment.sectionId) || null;
+      const targetSectionId = Number(newSectionId);
+      if (!Number.isSafeInteger(targetSectionId) || targetSectionId < 1) return { success: false, reason: 'Select a valid target section.' };
+      // Lock both section rows in a consistent order for moves in opposite directions.
+      const [sections] = await query('SELECT * FROM sections WHERE id IN (?) ORDER BY id FOR UPDATE', { replacements: [[...new Set([oldSectionId, targetSectionId].filter(Boolean))]] });
+      const section = sections.find(row => Number(row.id) === targetSectionId && row.isActive);
+      if (!section) return { success: false, reason: 'Target section not found' };
+      assertSectionCompatible(enrollment, section);
+      const count = await sectionCount(query, section.id);
+      if (oldSectionId !== targetSectionId && count >= Number(section.capacity)) return { success: false, reason: `Section ${section.code} is full (${count}/${section.capacity})` };
+      let studentNumber = enrollment.studentNumber || null;
+      if (!studentNumber && enrollment.userId) {
+        const [[previous]] = await query("SELECT studentNumber FROM enrollment_records WHERE userId = ? AND studentNumber IS NOT NULL AND studentNumber != '' ORDER BY id DESC LIMIT 1", { replacements: [enrollment.userId] });
+        studentNumber = previous?.studentNumber || await generateStudentNumber();
       }
-    }
-
-    const lifeStatus = enrollment.lifeStatus || (enrollment.enrollmentType === 'transferee' ? 'transferred_in' : 'enrolled');
-
-    await sequelize.query(
-      `UPDATE enrollment_records
-       SET sectionId = ?, sectionName = ?, status = 'enrolled',
-           studentNumber = COALESCE(?, studentNumber),
-           lifeStatus = COALESCE(lifeStatus, ?),
-           updatedAt = NOW()
-       WHERE id = ?`,
-      { replacements: [newSection.id, newSection.code, studentNumber || null, lifeStatus, enrollmentId] }
-    );
-
-    if (oldSectionId) {
-      await sequelize.query(
-        `UPDATE sections
-         SET currentEnrollment = GREATEST(0, CAST(currentEnrollment AS SIGNED) - 1), updatedAt = NOW()
-         WHERE id = ?`,
-        { replacements: [oldSectionId] }
-      );
-    }
-
-    await sequelize.query(
-      `UPDATE sections
-       SET currentEnrollment = currentEnrollment + 1, updatedAt = NOW()
-       WHERE id = ?`,
-      { replacements: [newSection.id] }
-    );
-
-    // Auto-enroll subjects for this section from the curriculum
-    try {
-      await autoEnrollSubjects(enrollmentId, { ...enrollment, studentNumber }, newSection);
-      await sequelize.query(
-        `UPDATE enrollment_subjects
-         SET sectionId = ?, sectionName = ?, updatedAt = NOW()
-         WHERE enrollmentId = ?`,
-        { replacements: [newSection.id, newSection.code, enrollmentId] }
-      );
-    } catch (subjErr) {
-      console.warn('Auto-enroll subjects in moveToSection warning:', subjErr.message);
-    }
-
-    return { success: true, section: newSection };
+      await query(`UPDATE enrollment_records SET sectionId = ?, sectionName = ?, status = 'enrolled', studentNumber = COALESCE(?, studentNumber),
+        lifeStatus = COALESCE(lifeStatus, ?), updatedAt = NOW() WHERE id = ?`, {
+        replacements: [section.id, section.code, studentNumber, enrollment.enrollmentType === 'transferee' ? 'transferred_in' : 'enrolled', enrollmentId],
+      });
+      for (const id of new Set([oldSectionId, targetSectionId].filter(Boolean))) {
+        await query('UPDATE sections SET currentEnrollment = ?, updatedAt = NOW() WHERE id = ?', { replacements: [await sectionCount(query, id), id] });
+      }
+      await autoEnrollSubjects(enrollmentId, enrollment, section, transaction);
+      return { success: true, section };
+    });
   } catch (error) {
     console.error('Move to section error:', error);
     return { success: false, reason: error.message };

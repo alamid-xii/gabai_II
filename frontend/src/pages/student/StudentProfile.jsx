@@ -16,7 +16,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { toast } from "sonner";
-import { useAuth } from "../../contexts/AuthContext";
+import { useAuth } from "../../contexts/authState";
 import { ProfileDetailsForm } from "../../components/ProfileDetailsForm";
 import { getUserEnrollments } from "../../services/enrollmentApi";
 import { API } from "../../config/api";
@@ -96,33 +96,7 @@ export function StudentProfile() {
         sorted.length > 1)
   );
 
-  // Sync local edit forms whenever currentEnrollment or user changes
-  useEffect(() => {
-    setPersonalForm({
-      firstName: currentEnrollment?.firstName || user?.firstName || "",
-      middleName: currentEnrollment?.middleName || user?.middleName || "",
-      familyName: currentEnrollment?.familyName || user?.lastName || "",
-      lrn: currentEnrollment?.lrn || "",
-      sex: currentEnrollment?.sex || "",
-      dateOfBirth: currentEnrollment?.dateOfBirth
-        ? String(currentEnrollment.dateOfBirth).slice(0, 10)
-        : "",
-      placeOfBirth: currentEnrollment?.placeOfBirth || "",
-      mobileNumber: user?.mobileNumber || currentEnrollment?.mobileNumber || "",
-    });
-
-    setFamilyForm({
-      fatherName: currentEnrollment?.fatherName || "",
-      fatherOccupation: currentEnrollment?.fatherOccupation || "",
-      motherName: currentEnrollment?.motherName || "",
-      motherOccupation: currentEnrollment?.motherOccupation || "",
-      parentsAddress: currentEnrollment?.parentsAddress || "",
-      guardianName: currentEnrollment?.guardianName || "",
-      guardianOccupation: currentEnrollment?.guardianOccupation || "",
-      guardianAddress: currentEnrollment?.guardianAddress || "",
-      guardianTelephone: currentEnrollment?.guardianTelephone || "",
-    });
-  }, [currentEnrollment, user]);
+  const canEditEnrollment = ['draft', 'returned'].includes(currentEnrollment?.status);
 
   // Identify student's previous section
   let previousSectionInfo = null;
@@ -164,7 +138,7 @@ export function StudentProfile() {
   const studentNumber = currentEnrollment?.studentNumber || null;
 
   async function handleSaveProfileSection(sectionType, payload) {
-    if (!currentEnrollment?.id) return;
+    if (!currentEnrollment?.id || !canEditEnrollment) return;
 
     if (sectionType === "personal") {
       if (!payload.firstName?.trim() || !payload.familyName?.trim()) {
@@ -290,61 +264,9 @@ export function StudentProfile() {
         )}
       </div>
 
-      {/* Info Banner explaining automatic vs optional updates */}
-      {currentEnrollment && (
-        <div
-          className={`rounded-2xl border p-4 flex items-start gap-3 ${
-            isContinuingOrEnrolled
-              ? "bg-[#EEF2FF] border-[#102A71]/20 text-[#001840]"
-              : "bg-[#FFFDF0] border-[#F5C400]/50 text-[#001840]"
-          }`}
-        >
-          <Sparkles
-            size={18}
-            className={`shrink-0 mt-0.5 ${
-              isContinuingOrEnrolled ? "text-[#102A71]" : "text-amber-600"
-            }`}
-          />
-          <div className="text-xs leading-relaxed">
-            {isContinuingOrEnrolled ? (
-              <>
-                <span className="font-bold">Continuing / Enrolled Student Profile:</span> Your{" "}
-                <strong>Personal Information</strong> and <strong>Family &amp; Guardian</strong>{" "}
-                sections below are carried over from your school record. It is completely optional to
-                update them—click <strong>Update</strong> on either section only if any of your
-                details have changed.
-              </>
-            ) : (
-              <>
-                <span className="font-bold">Automatically Synced from Enrollment:</span> As a{" "}
-                <strong className="capitalize">{currentEnrollment.enrollmentType || "new"}</strong>{" "}
-                applicant, your <strong>Personal Information</strong> (Step 2) and{" "}
-                <strong>Family &amp; Guardian</strong> (Step 3) sections are automatically populated
-                from your 5-step enrollment form.
-              </>
-            )}
-          </div>
-        </div>
-      )}
-
-      {savedBanner && (
-        <p
-          role="status"
-          className="rounded-xl bg-green-50 border border-green-200 p-4 text-sm text-green-800 flex items-center justify-between gap-2"
-        >
-          <span className="flex items-center gap-2">
-            <CheckCircle2 size={16} className="text-green-600 shrink-0" />
-            <span>{savedBanner}</span>
-          </span>
-          <button
-            type="button"
-            onClick={() => setSavedBanner("")}
-            className="text-green-700 hover:text-green-900"
-          >
-            <X size={15} />
-          </button>
-        </p>
-      )}
+      {currentEnrollment && <p className="text-xs text-gray-500">
+        {canEditEnrollment ? 'Personal and family details can be updated while your enrollment is a draft or returned for correction.' : 'Your submitted enrollment details are read only. You can edit them if the registrar returns your application.'}
+      </p>}
 
       {/* 1. Account & Academic Placement Card */}
       <section className="rounded-2xl border border-gray-200 bg-white p-5 sm:p-7 shadow-sm space-y-5">
@@ -502,12 +424,24 @@ export function StudentProfile() {
           </div>
 
           {currentEnrollment ? (
-            isContinuingOrEnrolled ? (
+            canEditEnrollment ? (
               !editingPersonal && (
                 <button
                   type="button"
                   onClick={() => {
                     setSavedBanner("");
+    setPersonalForm({
+      firstName: currentEnrollment?.firstName || user?.firstName || "",
+      middleName: currentEnrollment?.middleName || user?.middleName || "",
+      familyName: currentEnrollment?.familyName || user?.lastName || "",
+      lrn: currentEnrollment?.lrn || "",
+      sex: currentEnrollment?.sex || "",
+      dateOfBirth: currentEnrollment?.dateOfBirth
+        ? String(currentEnrollment.dateOfBirth).slice(0, 10)
+        : "",
+      placeOfBirth: currentEnrollment?.placeOfBirth || "",
+      mobileNumber: user?.mobileNumber || currentEnrollment?.mobileNumber || "",
+    });
                     setEditingPersonal(true);
                   }}
                   className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-[#102A71]/20 bg-[#EEF2FF] text-xs font-semibold text-[#102A71] hover:bg-[#102A71] hover:text-white transition-colors"
@@ -719,12 +653,23 @@ export function StudentProfile() {
           </div>
 
           {currentEnrollment ? (
-            isContinuingOrEnrolled ? (
+            canEditEnrollment ? (
               !editingFamily && (
                 <button
                   type="button"
                   onClick={() => {
                     setSavedBanner("");
+    setFamilyForm({
+      fatherName: currentEnrollment?.fatherName || "",
+      fatherOccupation: currentEnrollment?.fatherOccupation || "",
+      motherName: currentEnrollment?.motherName || "",
+      motherOccupation: currentEnrollment?.motherOccupation || "",
+      parentsAddress: currentEnrollment?.parentsAddress || "",
+      guardianName: currentEnrollment?.guardianName || "",
+      guardianOccupation: currentEnrollment?.guardianOccupation || "",
+      guardianAddress: currentEnrollment?.guardianAddress || "",
+      guardianTelephone: currentEnrollment?.guardianTelephone || "",
+    });
                     setEditingFamily(true);
                   }}
                   className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-[#102A71]/20 bg-[#EEF2FF] text-xs font-semibold text-[#102A71] hover:bg-[#102A71] hover:text-white transition-colors"

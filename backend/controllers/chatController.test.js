@@ -28,6 +28,7 @@ test('chat handlers protect ownership and preserve FAQ fallback', async () => {
     // A configured provider key must not cause this checklist to call Groq.
     process.env.GROQ_API_KEY = 'test-key-must-not-be-used';
     for (const message of ['what are the requirements for enrollment?', 'Ano ang requirements sa enrollment?', 'What documents do I need to enroll?']) {
+      if (message.startsWith('Ano')) delete process.env.GROQ_API_KEY;
       res = response();
       await sendMessage({ body: { message, sessionId: 'session_1' }, session: {} }, res);
       assert.equal(res.statusCode, 200);
@@ -48,6 +49,10 @@ test('chat handlers protect ownership and preserve FAQ fallback', async () => {
       ['Where is EMC located?', /Vicente Ylagan/],
       ['What is the school email?', /emc_1945@yahoo.com/],
       ['Paano mag enroll?', /Sign in/],
+      ['Ano ang mga papeles sa pagpapatala?', /F-138/],
+      ['Ano ang mga kursong inaalok?', /JHS/],
+      ['Nakalimutan ko ang password ko', /Forgot Password/],
+      ['Saan ang paaralan?', /Vicente Ylagan/],
       ['How do I reset my password?', /Forgot Password/],
       
       ['How can I use the virtual tour?', /360-degree/],

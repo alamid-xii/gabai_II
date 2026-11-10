@@ -1,8 +1,10 @@
+import { usePortalSlot } from '../../hooks/usePortalSlot';
 import { useState, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import { Download, RefreshCw, Search, UserX, Users, Filter, X } from "lucide-react";
-import { API, tok, LIFE_STATUS_CFG, LifeStatusBadge, StatusBadge, EnrollmentDetail, LifeStatusModal, RegistrarPagination } from "./RegistrarShared";
+import { LifeStatusBadge, StatusBadge, EnrollmentDetail, LifeStatusModal, RegistrarPagination } from "./RegistrarShared";
+import { API, tok, LIFE_STATUS_CFG } from "./registrarConfig";
 
 // ── Students Tab (life status management) ────────────────────────────────────
 const LIFE_STATUS_OPTIONS = [
@@ -26,24 +28,17 @@ export function StudentsTab() {
   const [sectionFilter, setSectionFilter] = useState('');
   const [sectionsList, setSectionsList] = useState([]);
   const [yearFilter, setYearFilter] = useState('');
-  const [schoolYears, setSchoolYears] = useState([]);
+  const [, setSchoolYears] = useState([]);
   const [activeYear, setActiveYear] = useState('');
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
+  const [pageSize] = useState(10);
   const [exporting, setExporting] = useState(false);
-  const [headerContainer, setHeaderContainer] = useState(null);
+  const headerContainer = usePortalSlot('registrar-header-slot', false, 'flex-1 flex items-center justify-end gap-2 flex-wrap ml-auto');
 
-  useEffect(() => {
-    setHeaderContainer(document.getElementById('registrar-header-slot'));
-  }, []);
 
   // Available grade levels based on selected education level
-  const availableGrades = levelFilter === 'JHS'
-    ? ['Grade 7', 'Grade 8', 'Grade 9', 'Grade 10']
-    : levelFilter === 'SHS'
-      ? ['Grade 11', 'Grade 12']
-      : ['Grade 7', 'Grade 8', 'Grade 9', 'Grade 10', 'Grade 11', 'Grade 12'];
+  
 
   // Available program / strand options based on selected education level
   const availablePrograms = levelFilter === 'JHS'
@@ -106,17 +101,9 @@ export function StudentsTab() {
       ? `LEVEL:${levelFilter}`
       : '';
 
-  const handleLevelChange = (val) => {
-    setLevelFilter(val);
-    setGradeFilter('');
-    setProgramFilter('');
-    setSectionFilter('');
-  };
+  
 
-  const handleGradeChange = (val) => {
-    setGradeFilter(val);
-    setSectionFilter('');
-  };
+  
 
   const handleProgramChange = (val) => {
     setProgramFilter(val);

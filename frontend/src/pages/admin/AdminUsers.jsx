@@ -257,7 +257,7 @@ export function AdminUsers({ users: initialUsers = [] }) {
                 <tbody className="divide-y divide-gray-100">
                   {paginated.map((u) => {
                     const initials = (u.name || u.email || 'U').substring(0, 2).toUpperCase();
-                    const isProtected = u.role === 'admin' || u.role === 'registrar';
+                    
 
                     return (
                       <tr key={u.id} className="hover:bg-gray-50/60 transition-colors">
@@ -637,10 +637,10 @@ function ResetPasswordModal({ user, onClose }) {
 
   function generatePassword() {
     const chars = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789!@#$%";
-    let pass = "";
-    for (let i = 0; i < 10; i++) {
-      pass += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
+    const bytes = crypto.getRandomValues(new Uint8Array(16));
+    // Fixed category prefixes guarantee the same password policy as manual entry.
+    let pass = 'A7!';
+    for (const byte of bytes) pass += chars[byte % chars.length];
     setNewPassword(pass);
     setCopied(false);
   }
@@ -655,8 +655,8 @@ function ResetPasswordModal({ user, onClose }) {
 
   async function handleSubmit(e) {
     e.preventDefault();
-    if (!newPassword || newPassword.length < 6) {
-      toast.error('Password must be at least 6 characters');
+    if (!newPassword || newPassword.length < 12 || !/[A-Z]/.test(newPassword) || !/[0-9]/.test(newPassword) || new TextEncoder().encode(newPassword).length > 72) {
+      toast.error('Use 12 or more characters with an uppercase letter and a number (maximum 72 bytes)');
       return;
     }
 
@@ -735,7 +735,7 @@ function ResetPasswordModal({ user, onClose }) {
               )}
             </div>
             <p className="text-xs text-gray-400 mt-1.5">
-              Minimum 6 characters. The user will use this new password to sign in.
+              At least 12 characters, an uppercase letter and a number; maximum 72 bytes. The user will use this new password to sign in.
             </p>
           </div>
 
@@ -775,7 +775,7 @@ function CreateUserModal({ onClose, onCreated }) {
     if (!form.email.trim()) errs.email = 'Email is required';
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) errs.email = 'Invalid email format';
     if (!form.password) errs.password = 'Password is required';
-    else if (form.password.length < 8) errs.password = 'Password must be at least 8 characters';
+    else if (form.password.length < 12 || !/[A-Z]/.test(form.password) || !/[0-9]/.test(form.password) || new TextEncoder().encode(form.password).length > 72) errs.password = 'Use 12 or more characters with an uppercase letter and a number (maximum 72 bytes)';
     if (Object.keys(errs).length > 0) { setErrors(errs); return; }
 
     setLoading(true);

@@ -7,7 +7,7 @@ import { Label } from "../components/ui/label";
 import { API } from "../config/api";
 import { toast } from "sonner";
 
-const NAME_PATTERN = /^[\p{L}\p{M}\s'\u2019-]+$/u;
+const NAME_PATTERN = /^[\p{L}\p{M}\s.'\u2019-]+$/u;
 
 export function SignUp() {
   const [formData, setFormData] = useState({
@@ -52,7 +52,7 @@ export function SignUp() {
       return;
     }
     if (!NAME_PATTERN.test(firstName) || !/\p{L}/u.test(firstName)) {
-      setError("First name must contain letters, spaces, apostrophes or hyphens.");
+      setError("First name must contain letters, spaces, periods, apostrophes or hyphens.");
       return;
     }
     if (firstName.length > 100) {
@@ -62,7 +62,7 @@ export function SignUp() {
 
     if (middleName) {
       if (!NAME_PATTERN.test(middleName) || !/\p{L}/u.test(middleName)) {
-        setError("Middle name must contain letters, spaces, apostrophes or hyphens.");
+        setError("Middle name must contain letters, spaces, periods, apostrophes or hyphens.");
         return;
       }
       if (middleName.length > 100) {
@@ -76,7 +76,7 @@ export function SignUp() {
       return;
     }
     if (!NAME_PATTERN.test(lastName) || !/\p{L}/u.test(lastName)) {
-      setError("Last name must contain letters, spaces, apostrophes or hyphens.");
+      setError("Last name must contain letters, spaces, periods, apostrophes or hyphens.");
       return;
     }
     if (lastName.length > 100) {

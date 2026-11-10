@@ -2,7 +2,7 @@ import { toast } from 'sonner';
 import { useEffect, useState } from 'react';
 import { API } from '../../config/api';
 import { refreshSchoolProfile } from '../../hooks/useSchoolProfile';
-import { confirmAction } from '../../components/ConfirmModal';
+import { confirmAction } from '../../utils/confirmAction';
 
 const fields = {
   schoolName: ['School name', 200], shortName: ['Short name / abbreviation', 40], tagline: ['Footer description', 1000],

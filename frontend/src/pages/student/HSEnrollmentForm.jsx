@@ -1,5 +1,9 @@
+import { Calendar as BirthdayCalendar } from "../../components/ui/calendar";
+import { Popover, PopoverTrigger, PopoverContent } from "../../components/ui/popover";
+import { CalendarDays } from "lucide-react";
+import { useAuth } from "../../contexts/authState";
 import { useAdmissionSettings, admissionChecklist } from "../../hooks/useAdmissionSettings";
-import { useState, useEffect, useRef } from "react";
+import { Fragment, useState, useEffect, useRef } from "react";
 import { useNavigate, useParams, useLocation } from "react-router";
 import { toast } from "sonner";
 import { CheckCircle2, Upload, X, Loader2, FileText, ArrowLeft } from "lucide-react";
@@ -15,9 +19,31 @@ function normalizeEnrollmentType(educationLevel, gradeLevel, enrollmentType) {
 }
 
 const onlyDigits = (e) => { if (!/[0-9]/.test(e.key) && !["Backspace", "Tab", "ArrowLeft", "ArrowRight", "Delete"].includes(e.key)) e.preventDefault(); };
-const onlyLetters = (e) => { if (e.key.length === 1 && !/[\p{L}\p{M}\s\-']/u.test(e.key)) e.preventDefault(); };
+const onlyLetters = (e) => { if (!e.ctrlKey && !e.metaKey && e.key.length === 1 && !/[\p{L}\p{M}\s.\-'\u2019]/u.test(e.key)) e.preventDefault(); };
 const keepDigits = (value, maxLength) => value.replace(/\D/g, "").slice(0, maxLength);
-const keepNameCharacters = (value, maxLength) => value.replace(/[^\p{L}\p{M}\s\-']/gu, "").slice(0, maxLength);
+const keepNameCharacters = (value, maxLength) => value.replace(/[^\p{L}\p{M}\s.\-'\u2019]/gu, "").slice(0, maxLength);
+function BirthdayPicker({ value, onChange, error }) {
+  const [open, setOpen] = useState(false);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const selected = value ? new Date(`${value.slice(0, 10)}T00:00:00`) : undefined;
+  const validSelected = selected && !Number.isNaN(selected.getTime()) ? selected : undefined;
+  return <Popover open={open} onOpenChange={setOpen}>
+    <PopoverTrigger asChild><button type="button" aria-label="Choose date of birth" aria-invalid={!!error}
+      className={`flex w-full items-center justify-between gap-2 rounded-xl border bg-white px-4 py-2.5 text-left text-sm ${error ? 'border-red-400' : 'border-gray-200'} focus:outline-none focus:ring-2 focus:ring-[#102A71]/20`}>
+      <span className={validSelected ? 'text-[#001840]' : 'text-gray-400'}>{validSelected ? validSelected.toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' }) : 'Select your birthday'}</span><CalendarDays size={18} className="shrink-0 text-[#102A71]" />
+    </button></PopoverTrigger>
+    <PopoverContent align="start" className="w-auto max-w-[calc(100vw-2rem)] rounded-xl bg-white p-1 shadow-xl">
+      <BirthdayCalendar mode="single" captionLayout="dropdown" startMonth={new Date(1900, 0)} endMonth={today}
+        defaultMonth={validSelected || new Date(today.getFullYear() - 12, 0)} selected={validSelected}
+        disabled={{ after: today }} autoFocus
+        classNames={{ dropdowns: 'flex items-center justify-center gap-2', dropdown_root: 'relative rounded-md border border-gray-200 bg-white px-2 py-1', dropdown: 'absolute inset-0 w-full cursor-pointer opacity-0', caption_label: 'flex items-center gap-1 text-sm font-semibold text-[#001840]' }}
+        onSelect={date => { if (!date) return; onChange(`${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`); setOpen(false); }} />
+      <p className="px-3 pb-3 text-center text-xs text-gray-500">Choose the year and month, then select a day.</p>
+    </PopoverContent>
+  </Popover>;
+}
+
 function F({ label, required, error, children }) { return (<div className="flex flex-col gap-1"><label className="text-sm font-semibold text-[#001840]">{label}{required && <span className="text-red-500 ml-1">*</span>}</label>{children}{error && <p className="text-xs text-red-500 mt-0.5">{error}</p>}</div>); }
 function I({ error, maxLength = 200, ...p }) { return (<input {...p} maxLength={maxLength} className={`w-full px-4 py-2.5 rounded-xl border text-sm focus:outline-none focus:ring-2 transition-all ${error ? "border-red-400 focus:ring-red-200" : "border-gray-200 focus:ring-[#102A71]/20 focus:border-[#102A71]"} bg-white text-[#001840]`} />); }
 function S({ error, children, ...p }) { return (<select {...p} className={`w-full px-4 py-2.5 rounded-xl border text-sm focus:outline-none focus:ring-2 transition-all bg-white text-[#001840] ${error ? "border-red-400 focus:ring-red-200" : "border-gray-200 focus:ring-[#102A71]/20 focus:border-[#102A71]"}`}>{children}</select>); }
@@ -26,23 +52,68 @@ const SAVE_KEY = "hs_enrollment_draft";
 export function HSEnrollmentForm({ enrollmentId: propId, readOnly = false }) {
   const { id: paramId } = useParams();
   const location = useLocation();
+  const { user } = useAuth();
   // sscEnrollmentId comes from MyEnrollments when student needs to complete SSC placeholder
   const sscEnrollmentId = location.state?.sscEnrollmentId || null;
   const prefill = location.state?.prefill || null; // carry-over pre-fill data
   const isCarryOver = !!location.state?.carryOver;
   const id = propId || paramId || sscEnrollmentId || null;
   const isEditMode = !!id;
+  const draftKey = `${SAVE_KEY}:${user?.id || 'guest'}:${id || `${location.state?.educationLevel || 'JHS'}:${location.state?.gradeLevel || ''}:${isCarryOver ? 'continuing' : 'new'}`}`;
+  const serverVersion = useRef(null);
+  const [draftSaveError, setDraftSaveError] = useState('');
+  function readDraft() {
+    if (readOnly) return null;
+    try { return JSON.parse(localStorage.getItem(draftKey) || 'null'); } catch { return null; }
+  }
   const { settings, error: settingsError, retry: retrySettings } = useAdmissionSettings(id);
   const [serverPolicy, setServerPolicy] = useState(null);
+  const [enrollmentLoadError, setEnrollmentLoadError] = useState('');
+  const [enrollmentLoading, setEnrollmentLoading] = useState(!!id);
+  const [loadRevision, setLoadRevision] = useState(0);
   const policy = serverPolicy || settings?.content;
   const savedDraftId = useRef(null);
   const [savedDocs, setSavedDocs] = useState([]);
+  const documentInputs = useRef({});
+  const checkingFile = useRef(false);
+  const [checkingDocument, setCheckingDocument] = useState(null);
+  const [documentErrors, setDocumentErrors] = useState({});
+  async function selectDocument(key, file, input) {
+    if (checkingFile.current) { input.value = ''; return; }
+    checkingFile.current = true;
+    setCheckingDocument(key);
+    setDocumentErrors(previous => ({ ...previous, [key]: '' }));
+    try {
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      for (const [otherKey, otherFile] of Object.entries(form.docFiles)) {
+        if (otherKey === key || !otherFile || otherFile.size !== file.size) continue;
+        const otherBytes = new Uint8Array(await otherFile.arrayBuffer());
+        if (bytes.every((byte, index) => byte === otherBytes[index])) {
+          const label = activeCreds.find(item => item.key === otherKey)?.label || otherKey;
+          setDocumentErrors(previous => ({ ...previous, [key]: `This file is already selected for ${label}. Choose a different document.` }));
+          input.value = '';
+          return;
+        }
+      }
+      setF(previous => ({ ...previous, docFiles: { ...previous.docFiles, [key]: file } }));
+    } catch {
+      setDocumentErrors(previous => ({ ...previous, [key]: 'Could not read this file. Please select it again.' }));
+      input.value = '';
+    } finally {
+      checkingFile.current = false;
+      setCheckingDocument(null);
+    }
+  }
   useEffect(() => {
     if (!id) return;
     getEnrollmentDocuments(id).then(docs => setSavedDocs(Array.isArray(docs) ? docs : [])).catch(() => { });
   }, [id]);
   const navigate = useNavigate();
-  const [step, setStep] = useState(1);
+  const [step, setStep] = useState(() => {
+    const draft = readDraft();
+    const limit = isCarryOver || draft?.form?.enrollmentType === 'old' || location.state?.enrollmentType === 'old' ? 3 : 5;
+    return Math.max(1, Math.min(limit, Number(draft?.step) || 1));
+  });
   const [errors, setErrors] = useState({});
   const [submitting, setSubmitting] = useState(false);
   const [showBackDialog, setShowBackDialog] = useState(false);
@@ -50,11 +121,19 @@ export function HSEnrollmentForm({ enrollmentId: propId, readOnly = false }) {
   // educationLevel passed from LevelSelection — lock it for the entire session
   const initialLevel = location.state?.educationLevel || 'JHS';
 
-  const defaultForm = { educationLevel: initialLevel, gradeLevel: "", strand: "", studentType: "New", academicYear: "2025-2026", dateEnrolled: "", studentNumber: "", lrn: "", familyName: "", firstName: "", middleName: "", sex: "", dateOfBirth: "", placeOfBirth: "", fatherName: "", fatherOccupation: "", motherName: "", motherOccupation: "", parentsAddress: "", guardianName: "", guardianOccupation: "", guardianAddress: "", guardianTelephone: "", grade6School: "", grade6SchoolAddress: "", grade6Section: "", grade6SYStart: "", grade6SYEnd: "", grade6Average: "", grade6Remarks: "", lastHSSchool: "", lastHSCurriculumYear: "", lastHSSection: "", lastHSSYStart: "", lastHSSYEnd: "", sscApplied: false, studentSignature: "", parentGuardianSignature: "", credentials: {}, docFiles: {} };
+  const defaultForm = { educationLevel: initialLevel, gradeLevel: "", strand: "", studentType: "New", academicYear: "2025-2026", dateEnrolled: "", studentNumber: "", lrn: "", familyName: user?.lastName || "", firstName: user?.firstName || "", middleName: user?.middleName || "", sex: "", dateOfBirth: "", placeOfBirth: "", fatherName: "", fatherOccupation: "", fatherMobileNumber: "", motherMobileNumber: "", motherName: "", motherOccupation: "", parentsAddress: "", guardianName: "", guardianOccupation: "", guardianAddress: "", guardianTelephone: "", grade6School: "", grade6SchoolAddress: "", grade6Section: "", grade6SYStart: "", grade6SYEnd: "", grade6Average: "", grade6Remarks: "", lastHSSchool: "", lastHSCurriculumYear: "", lastHSSection: "", lastHSSYStart: "", lastHSSYEnd: "", sscApplied: false, studentSignature: "", parentGuardianSignature: "", credentials: {}, docFiles: {} };
 
   // Load saved draft on mount — skipped in edit mode or carry-over
   const [form, setF] = useState(() => {
     if (isEditMode) return defaultForm;
+    const draft = readDraft();
+    if (draft?.form) return {
+      ...defaultForm, ...prefill, ...draft.form,
+      educationLevel: initialLevel,
+      gradeLevel: location.state?.gradeLevel || draft.form.gradeLevel,
+      ...(isCarryOver ? { sscClass: prefill?.sscClass || null, sscApplied: false, enrollmentType: 'old', studentType: 'Old', academicYear: prefill?.academicYear || draft.form.academicYear } : {}),
+      docFiles: {},
+    };
     // Carry-over: pre-fill from previous enrollment
     if (isCarryOver && prefill) {
       const educationLevel = prefill.educationLevel || initialLevel;
@@ -76,34 +155,32 @@ export function HSEnrollmentForm({ enrollmentId: propId, readOnly = false }) {
       strand: base.gradeLevel === presetGrade ? base.strand : "",
       enrollmentType: normalizeEnrollmentType(initialLevel, presetGrade, location.state?.enrollmentType),
     } : base;
-    try {
-      const saved = localStorage.getItem(SAVE_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        return applyPreset({
-          ...defaultForm,
-          ...parsed,
-          educationLevel: initialLevel,
-          enrollmentType: normalizeEnrollmentType(initialLevel, parsed.gradeLevel, parsed.enrollmentType),
-          docFiles: {},
-        });
-      }
-    } catch (_) { }
     return applyPreset(defaultForm);
   });
 
   // Detect if this is an SSC placeholder being completed (edit mode, sscApplied, no firstName loaded yet)
   const [isSSCCompletion, setIsSSCCompletion] = useState(false);
+
   const [sscChosenClass, setSscChosenClass] = useState(null); // 'SSC' | 'Regular'
 
   // Load existing enrollment when editing
   useEffect(() => {
     if (!isEditMode) return;
+    let cancelled = false;
     getEnrollmentById(id).then(data => {
+      if (cancelled) return;
+      setEnrollmentLoadError('');
       const e = data.enrollment || data;
+      serverVersion.current = e.updatedAt || null;
+      const draft = readDraft();
+      const restored = draft?.serverVersion === serverVersion.current ? draft : null;
       // Detect SSC placeholder that has actually passed the exam (sscApplied, no firstName yet, and sscResult='passed')
       // NOTE: sscApplied+!firstName alone is NOT enough — the student may have only applied and not yet taken/passed the exam
-      const sscPlaceholder = !!e.sscApplied && !e.firstName && e.sscResult === 'passed';
+      const sscPlaceholder = !!e.sscApplied && !e.firstName && ['passed', 'failed'].includes(e.sscResult);
+      if (!readOnly && !['draft', 'returned'].includes(e.status) && !sscPlaceholder) {
+        navigate(`/enrollment/${id}`, { replace: true });
+        return;
+      }
       setIsSSCCompletion(sscPlaceholder);
       if (sscPlaceholder) setSscChosenClass(e.sscClass || 'SSC'); // default SSC if somehow null
       setF(prev => ({
@@ -118,14 +195,16 @@ export function HSEnrollmentForm({ enrollmentId: propId, readOnly = false }) {
         dateEnrolled: e.dateEnrolled || '',
         studentNumber: e.studentNumber || '',
         lrn: e.lrn || '',
-        familyName: e.familyName || '',
-        firstName: e.firstName || '',
-        middleName: e.middleName || '',
+        familyName: e.familyName || (sscPlaceholder ? prev.familyName : ''),
+        firstName: e.firstName || (sscPlaceholder ? prev.firstName : ''),
+        middleName: e.middleName || (sscPlaceholder ? prev.middleName : ''),
         sex: e.sex || '',
         dateOfBirth: e.dateOfBirth || '',
         placeOfBirth: e.placeOfBirth || '',
         fatherName: e.fatherName || '',
         fatherOccupation: e.fatherOccupation || '',
+        fatherMobileNumber: e.fatherMobileNumber || '',
+        motherMobileNumber: e.motherMobileNumber || '',
         motherName: e.motherName || '',
         motherOccupation: e.motherOccupation || '',
         parentsAddress: e.parentsAddress || '',
@@ -146,27 +225,70 @@ export function HSEnrollmentForm({ enrollmentId: propId, readOnly = false }) {
         lastHSSYStart: e.lastHSSYStart || '',
         lastHSSYEnd: e.lastHSSYEnd || '',
         sscApplied: !!e.sscApplied,
+        sscClass: e.sscClass || null,
         studentSignature: e.studentSignature || '',
         parentGuardianSignature: e.parentGuardianSignature || '',
         credentials: Array.isArray(e.admissionCredentials)
           ? Object.fromEntries(e.admissionCredentials.map(k => [k, true]))
           : {},
+        ...restored?.form,
         docFiles: {},
       }));
-      setStep(1);
-    }).catch(() => toast.error('Failed to load enrollment data'));
-  }, [id]);
+      setStep(Math.max(1, Math.min(e.enrollmentType === 'old' ? 3 : 5, Number(restored?.step) || 1)));
+    }).catch(error => {
+      if (cancelled) return;
+      const message = error instanceof TypeError ? 'Cannot reach the server. Check that the backend is running, then retry.' : error.message || 'Could not load your enrollment.';
+      setEnrollmentLoadError(message);
+      toast.error(message);
+    }).finally(() => { if (!cancelled) setEnrollmentLoading(false); });
+    return () => { cancelled = true; };
+  }, [id, loadRevision]);
 
-  // Auto-save form to localStorage on every change — skip in edit mode or carry-over
-  useEffect(() => {
-    if (isEditMode || isCarryOver) return;
+  function saveDraft(nextStep = step) {
+    if (readOnly) return true;
     try {
-      const { docFiles, ...saveable } = form;
-      localStorage.setItem(SAVE_KEY, JSON.stringify(saveable));
-    } catch (_) { }
-  }, [form]);
+      const { docFiles: _files, ...saveable } = form;
+      localStorage.setItem(draftKey, JSON.stringify({ form: saveable, step: nextStep, serverVersion: serverVersion.current }));
+      setDraftSaveError('');
+      return true;
+    } catch {
+      setDraftSaveError('Your progress could not be saved in this browser. Keep this page open and try Continue again.');
+      return false;
+    }
+  }
+  // Keep typed details locally, including changes made between Continue clicks.
+  useEffect(() => {
+    if (readOnly || enrollmentLoading || enrollmentLoadError) return;
+    // Report browser storage failures while persisting the draft.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    saveDraft();
+  }, [form, step, enrollmentLoading]);
   const set = (k, v) => setF(p => ({ ...p, [k]: v }));
+  const familySections = Object.fromEntries(['father', 'mother', 'guardian'].map(key => [key, [form[`${key}Name`], form[`${key}Occupation`], form[key === 'guardian' ? 'guardianTelephone' : `${key}MobileNumber`], key === 'guardian' ? form.guardianAddress : ''].some(value => String(value || '').trim())]));
   const [previewModal, setPreviewModal] = useState(null); // { url, name, isPdf }
+  const [openingSavedDocument, setOpeningSavedDocument] = useState(null);
+  const previewRequest = useRef(0);
+  useEffect(() => () => { previewRequest.current += 1; }, []);
+  useEffect(() => () => { if (previewModal?.url) URL.revokeObjectURL(previewModal.url); }, [previewModal]);
+  async function viewSavedDocument(document) {
+    const request = ++previewRequest.current;
+    setOpeningSavedDocument(document.id);
+    setDocumentErrors(previous => ({ ...previous, [document.documentType]: '' }));
+    try {
+      const response = await fetch(`${API.replace(/\/api\/?$/, '')}${document.filePath}`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+      });
+      if (!response.ok) throw new Error('Could not open this document. Please try again.');
+      const blob = await response.blob();
+      if (!['application/pdf', 'image/jpeg', 'image/jpg', 'image/png'].includes(blob.type)) throw new Error('This document could not be previewed.');
+      if (request !== previewRequest.current) return;
+      setPreviewModal({ url: URL.createObjectURL(blob), name: document.originalName || document.documentLabel || 'Submitted document', isPdf: blob.type === 'application/pdf' });
+    } catch (error) {
+      if (request === previewRequest.current) setDocumentErrors(previous => ({ ...previous, [document.documentType]: error.message || 'Could not open this document.' }));
+    } finally {
+      if (request === previewRequest.current) setOpeningSavedDocument(null);
+    }
+  }
   const [lrnTaken, setLrnTaken] = useState(false);
   const lrnTimer = useRef(null);
   const checkLrn = (val) => {
@@ -188,18 +310,20 @@ export function HSEnrollmentForm({ enrollmentId: propId, readOnly = false }) {
     label: value === "old" ? "Old / Continuing" : ENROLLMENT_TYPE_LABELS[value],
     disabled: !form.gradeLevel || !allowedTypes.includes(value),
   }));
+  const isGrade7 = form.educationLevel === 'JHS' && form.gradeLevel === 'Grade 7';
   const isTransferee = form.enrollmentType === 'transferee';
   const grades = isSHS ? SHS_GRADES : JHS_GRADES;
   const activeCreds = admissionChecklist(policy, form.educationLevel, form.enrollmentType || 'new');
   const SHS_STRANDS = policy?.strands.filter(strand => strand.active).map(strand => strand.name) || [];
   const total = 5;
   const isContinuing = form.enrollmentType === 'old' || isCarryOver;
-  const isContinuingJhs = form.educationLevel === 'JHS'
-    && ['Grade 8', 'Grade 9', 'Grade 10'].includes(form.gradeLevel)
-    && ['old', 'returnee'].includes(form.enrollmentType);
-  const lastRequiredStep = isContinuingJhs && activeCreds.length === 0 ? 3 : total;
+  const isIncomingGrade7 = form.educationLevel === 'JHS' && form.gradeLevel === 'Grade 7' && !isContinuing;
+  const lastRequiredStep = isContinuing ? 3 : total;
+  const isContinuingSSC = isContinuing && form.educationLevel === 'JHS' && form.sscClass === 'SSC';
+  const needsReportedAverage = isContinuingSSC && !form.gradesComplete && !isEditMode;
+  const maintainingAverage = Number(policy?.ssc?.maintainingAverage ?? policy?.ssc?.minimumAverage ?? 85);
   const docStep = 5;
-  const labels = ["Grade & Type", "Personal Info", "Family", "Education", "Documents"];
+  const labels = ["Grade & Type", "Personal Info", "Family", "Education", "Documents"].slice(0, lastRequiredStep);
   // Active credential list depends on enrollment type
 
   function validate(s) {
@@ -207,24 +331,50 @@ export function HSEnrollmentForm({ enrollmentId: propId, readOnly = false }) {
     if (s === 1) {
       if (!form.gradeLevel) e.gradeLevel = "Grade level is required";
       if (isSHS && !SHS_STRANDS.includes(form.strand)) e.strand = "Please select an available strand";
+      if (needsReportedAverage && (form.previousGeneralAverage === '' || !Number.isFinite(Number(form.previousGeneralAverage)) || Number(form.previousGeneralAverage) < maintainingAverage || Number(form.previousGeneralAverage) > 100)) {
+        e.previousGeneralAverage = `Enter your previous year General Average (${maintainingAverage} to 100) to continue in SSC.`;
+      }
       // SSC completion: enrollmentType defaults to 'new', no need to force selection
       if (!isSSCCompletion && !form.enrollmentType) e.enrollmentType = "Please select an enrollment type";
       // Validate student ID only if filled (optional for new students)
       if (form.enrollmentType === 'old' && (!form.studentNumber || !form.studentNumber.trim())) {
         e.studentNumber = "Student ID is required for continuing students (e.g. A-9869 or 2025-00123)";
-      } else if (form.studentNumber && form.studentNumber.trim()) {
+      } else if (!isIncomingGrade7 && form.studentNumber && form.studentNumber.trim()) {
         const idPattern = /^([A-Z]{1,3}-\d{3,6}|\d{4}-\d{4,6})$/i;
         if (!idPattern.test(form.studentNumber.trim())) {
           e.studentNumber = "Invalid format. Use EMC ID (e.g. A-9869) or YYYY-NNNNN (e.g. 2025-00123)";
         }
       }
     }
-    if (s === 2) { if (!form.familyName.trim()) e.familyName = "Required"; else if (/\d/.test(form.familyName)) e.familyName = "No numbers"; if (!form.firstName.trim()) e.firstName = "Required"; else if (/\d/.test(form.firstName)) e.firstName = "No numbers"; if (!form.sex) e.sex = "Required"; if (!form.dateOfBirth) e.dateOfBirth = "Required"; if (form.lrn && !/^\d{12}$/.test(form.lrn)) e.lrn = "LRN must be exactly 12 digits"; if (form.guardianTelephone && !/^09\d{9}$/.test(form.guardianTelephone)) e.guardianTelephone = "Use 11 digits starting with 09"; }
+    if (s === 2) {
+      if (!form.familyName.trim()) e.familyName = "Required";
+      else if (/\d/.test(form.familyName)) e.familyName = "No numbers";
+      if (!form.firstName.trim()) e.firstName = "Required";
+      else if (/\d/.test(form.firstName)) e.firstName = "No numbers";
+      if (!form.sex) e.sex = "Required";
+      if (!form.dateOfBirth) e.dateOfBirth = "Required";
+      else if (new Date(`${form.dateOfBirth.slice(0, 10)}T00:00:00`) > new Date()) e.dateOfBirth = "Birthday cannot be in the future";
+      if (!form.placeOfBirth.trim()) e.placeOfBirth = "Required";
+      if (!form.lrn) e.lrn = "Required";
+      else if (!/^\d{12}$/.test(form.lrn)) e.lrn = "LRN must be exactly 12 digits";
+      else if (lrnTaken) e.lrn = "This LRN is already registered";
+    }
+    if (s === 3) {
+      const contacts = ['father', 'mother', 'guardian'].filter(key => familySections[key]);
+      if (!contacts.length) e.family = 'Provide details for at least one parent or guardian.';
+      for (const key of contacts) {
+        if (!form[`${key}Name`]?.trim()) e[`${key}Name`] = 'Required';
+        const phoneKey = key === 'guardian' ? 'guardianTelephone' : `${key}MobileNumber`;
+        if (!/^09\d{9}$/.test(form[phoneKey] || '')) e[phoneKey] = 'Enter 11 digits starting with 09';
+      }
+      if ((familySections.father || familySections.mother) && !form.parentsAddress.trim()) e.parentsAddress = 'Required';
+      if (familySections.guardian && !form.guardianAddress.trim()) e.guardianAddress = 'Required';
+    }
     if (s === 4) {
       if (form.grade6Average && (!Number.isFinite(Number(form.grade6Average)) || Number(form.grade6Average) < 0 || Number(form.grade6Average) > 100)) e.grade6Average = "Enter a value from 0 to 100";
-      for (const field of ["grade6SYStart", "grade6SYEnd", "lastHSSYStart", "lastHSSYEnd"]) { if (form[field] && !/^\d{4}$/.test(form[field])) e[field] = "Enter a four-digit year"; }
+      for (const field of (isGrade7 ? ["grade6SYStart", "grade6SYEnd"] : ["grade6SYStart", "grade6SYEnd", "lastHSSYStart", "lastHSSYEnd"])) { if (form[field] && !/^\d{4}$/.test(form[field])) e[field] = "Enter a four-digit year"; }
       // Transferees must fill in their last HS school info
-      if (isTransferee) {
+      if (isTransferee && !isGrade7) {
         if (!form.lastHSSchool?.trim()) e.lastHSSchool = "Required for transferees";
         if (!form.lastHSCurriculumYear?.trim()) e.lastHSCurriculumYear = "Required for transferees";
         if (!form.lastHSSYStart?.trim()) e.lastHSSYStart = "Required for transferees";
@@ -238,10 +388,10 @@ export function HSEnrollmentForm({ enrollmentId: propId, readOnly = false }) {
     return e;
   }
   function stepFill(s) {
-    if (s === 1) { const fields = [form.gradeLevel, isSHS ? form.strand : null].filter(f => f !== null); const filled = fields.filter(Boolean).length; return Math.round((filled / fields.length) * 100); }
-    if (s === 2) { const fields = [form.familyName, form.firstName, form.sex, form.dateOfBirth]; const filled = fields.filter(Boolean).length; return Math.round((filled / fields.length) * 100); }
-    if (s === 3) { const fields = [form.fatherName, form.motherName, form.parentsAddress]; const filled = fields.filter(Boolean).length; return Math.round((filled / fields.length) * 100); }
-    if (s === 4) { const fields = [form.grade6School, form.grade6Average]; const filled = fields.filter(Boolean).length; return Math.round((filled / fields.length) * 100); }
+    if (s === 1) { const fields = [form.gradeLevel, isSHS ? form.strand : null].filter(f => f !== null); const filled = fields.filter(Boolean).length; return Math.round((filled / (fields.length || 1)) * 100); }
+    if (s === 2) { const fields = [form.familyName, form.firstName, form.sex, form.dateOfBirth]; const filled = fields.filter(Boolean).length; return Math.round((filled / (fields.length || 1)) * 100); }
+    if (s === 3) { const fields = ['father', 'mother', 'guardian'].filter(key => familySections[key]).flatMap(key => [form[`${key}Name`], form[key === 'guardian' ? 'guardianTelephone' : `${key}MobileNumber`], form[key === 'guardian' ? 'guardianAddress' : 'parentsAddress']]); const filled = fields.filter(Boolean).length; return Math.round((filled / (fields.length || 1)) * 100); }
+    if (s === 4) { const fields = [form.grade6School, form.grade6Average]; const filled = fields.filter(Boolean).length; return Math.round((filled / (fields.length || 1)) * 100); }
     if (s === docStep) { const uploaded = activeCreds.filter(c => form.docFiles[c.key]).length; return activeCreds.length ? Math.round((uploaded / activeCreds.length) * 100) : 100; }
     return 0;
   }
@@ -263,12 +413,16 @@ export function HSEnrollmentForm({ enrollmentId: propId, readOnly = false }) {
   }
   function continueStage() {
     if (step >= lastRequiredStep) { submit(); return; }
+    const stageErrors = validate(step);
+    if (Object.keys(stageErrors).length) { setErrors(stageErrors); return; }
+    if (!saveDraft(step + 1)) return;
     goToStep(step + 1);
   }
   function handleBack() { setShowBackDialog(true); }
-  function clearDraft() { localStorage.removeItem(SAVE_KEY); localStorage.removeItem(SAVE_KEY + "_step"); }
-  async function submit(direct = false) {
-    const maxValidation = direct ? 1 : lastRequiredStep;
+  function clearDraft() { localStorage.removeItem(draftKey); }
+  async function submit() {
+    if (checkingFile.current) return;
+    const maxValidation = lastRequiredStep;
     for (let requiredStep = 1; requiredStep <= maxValidation; requiredStep++) {
       const stageErrors = validate(requiredStep);
       if (Object.keys(stageErrors).length > 0) { setErrors(stageErrors); setStep(requiredStep); return; }
@@ -282,7 +436,7 @@ export function HSEnrollmentForm({ enrollmentId: propId, readOnly = false }) {
         strand: form.strand || null,
         enrollmentType: form.enrollmentType || 'new',
         studentType: form.studentType,
-        studentNumber: form.studentNumber || null,
+        studentNumber: isIncomingGrade7 ? null : form.studentNumber || null,
         academicYear: form.academicYear,
         dateEnrolled: form.dateEnrolled || null,
         lrn: form.lrn,
@@ -294,6 +448,8 @@ export function HSEnrollmentForm({ enrollmentId: propId, readOnly = false }) {
         placeOfBirth: form.placeOfBirth,
         fatherName: form.fatherName,
         fatherOccupation: form.fatherOccupation,
+        fatherMobileNumber: form.fatherMobileNumber,
+        motherMobileNumber: form.motherMobileNumber,
         motherName: form.motherName,
         motherOccupation: form.motherOccupation,
         parentsAddress: form.parentsAddress,
@@ -313,7 +469,9 @@ export function HSEnrollmentForm({ enrollmentId: propId, readOnly = false }) {
         lastHSSection: form.lastHSSection,
         lastHSSYStart: form.lastHSSYStart,
         lastHSSYEnd: form.lastHSSYEnd,
-        sscApplied: form.sscApplied,
+        sscApplied: isContinuing ? false : form.sscApplied,
+        ...(isContinuing && form.educationLevel === 'JHS' && form.sscClass ? { sscClass: form.sscClass } : {}),
+        ...(isContinuingSSC && form.previousGeneralAverage !== '' && form.previousGeneralAverage != null ? { previousGeneralAverage: Number(form.previousGeneralAverage) } : {}),
         studentSignature: form.studentSignature,
         parentGuardianSignature: form.parentGuardianSignature,
         admissionCredentials: activeCreds.filter(c => form.docFiles[c.key]).map(c => c.key),
@@ -356,13 +514,22 @@ export function HSEnrollmentForm({ enrollmentId: propId, readOnly = false }) {
       const finalData = await finalized.json();
       if (!finalized.ok) throw Error(finalData.message || 'Your draft is saved, but submission could not finish. Please retry.');
       toast.success('Enrollment submitted successfully!');
-      if (!isEditMode) clearDraft();
+      clearDraft();
       navigate("/my-enrollments");
-    } catch (err) { toast.error(err.message || "Failed to submit enrollment"); }
+    } catch (err) {
+      if (err.field) {
+        setDocumentErrors(previous => ({ ...previous, [err.field]: err.message }));
+        setStep(docStep);
+      } else toast.error(err.message || "Failed to submit enrollment");
+    }
     finally { setSubmitting(false); }
   }
   if (!policy) return <div className="min-h-[60vh] p-8 text-center"><p role="status">{settingsError || 'Loading admission requirements...'}</p>{settingsError && <button onClick={retrySettings} className="mt-4 underline">Try again</button>}</div>;
   const pct = Math.round(((step - 1) / (lastRequiredStep - 1)) * 100);
+  if (isEditMode && (enrollmentLoading || enrollmentLoadError)) return <div className="mx-auto max-w-xl p-6 sm:p-10">
+    {enrollmentLoading ? <p role="status" className="text-center text-gray-500">Loading enrollment data...</p> : <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-5"><h2 className="font-semibold text-red-800">Could not load enrollment</h2><p className="mt-2 text-sm text-red-700">{enrollmentLoadError}</p><div className="mt-4 flex gap-3"><button onClick={() => { setEnrollmentLoading(true); setLoadRevision(value => value + 1); }} className="rounded-lg bg-[#102A71] px-4 py-2 text-sm font-semibold text-white">Retry</button><button onClick={() => navigate('/my-enrollments')} className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm">My Enrollments</button></div></div>}
+  </div>;
+
   return (
     <div className="min-h-screen bg-linear-to-br from-[#FFFDF0] via-[#FFF9E6] to-[#FFFDF0]">
 
@@ -395,10 +562,10 @@ export function HSEnrollmentForm({ enrollmentId: propId, readOnly = false }) {
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl p-6 max-w-sm w-full">
             <h3 className="text-lg font-bold text-[#001840] mb-2">Save your progress?</h3>
-            <p className="text-sm text-gray-600 mb-5">Your form data is automatically saved. When you come back, you can continue where you left off.</p>
+            <p className="text-sm text-gray-600 mb-5">Your details are saved in this browser. Return with the same account and browser to continue. Files must be reselected until submission.</p>
             <div className="flex gap-3">
               <button onClick={() => { clearDraft(); navigate("/enroll"); }} className="flex-1 py-2.5 border-2 border-red-300 text-red-600 rounded-xl text-sm font-semibold hover:bg-red-50 transition-all">Discard & Leave</button>
-              <button onClick={() => { setShowBackDialog(false); navigate("/enroll"); }} className="flex-1 py-2.5 bg-[#102A71] text-white rounded-xl text-sm font-semibold hover:bg-[#001840] transition-all">Save & Leave</button>
+              <button onClick={() => { if (!saveDraft()) return; setShowBackDialog(false); navigate("/enroll"); }} className="flex-1 py-2.5 bg-[#102A71] text-white rounded-xl text-sm font-semibold hover:bg-[#001840] transition-all">Save & Leave</button>
             </div>
             <button onClick={() => setShowBackDialog(false)} className="w-full mt-2 py-2 text-sm text-gray-400 hover:text-gray-600">Stay on form</button>
           </div>
@@ -446,57 +613,6 @@ export function HSEnrollmentForm({ enrollmentId: propId, readOnly = false }) {
       </div>
       <div className="max-w-4xl mx-auto px-3 sm:px-4 pt-4 pb-24 sm:pb-8">
 
-        {/* SSC Completion Banner */}
-        {isSSCCompletion && (
-          <div className={`mb-5 border-2 rounded-2xl p-4 flex items-start gap-3 ${sscChosenClass === 'Regular'
-              ? 'bg-blue-50 border-blue-200'
-              : 'bg-green-50 border-green-200'
-            }`}>
-            <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 mt-0.5 ${sscChosenClass === 'Regular' ? 'bg-blue-500' : 'bg-green-500'
-              }`}>
-              <CheckCircle2 size={16} className="text-white" />
-            </div>
-            <div>
-              <p className={`font-bold text-sm ${sscChosenClass === 'Regular' ? 'text-blue-800' : 'text-green-800'}`}>
-                {sscChosenClass === 'Regular'
-                  ? 'SSC Exam Passed — Enrolling in Regular Class'
-                  : 'SSC Application Approved — Complete Your Enrollment'}
-              </p>
-              <p className={`text-xs mt-0.5 ${sscChosenClass === 'Regular' ? 'text-blue-700' : 'text-green-700'}`}>
-                {sscChosenClass === 'Regular'
-                  ? 'You passed the SSC exam but chose the Regular class. Please fill out the enrollment form below. Your grade level is locked to Grade 7.'
-                  : 'You passed the SSC entrance exam and chose the Special Science Class. Please fill out the full enrollment form below. Your grade level is locked to Grade 7 (SSC).'}
-              </p>
-            </div>
-          </div>
-        )}
-
-        {/* Continuing Student Direct Submit Banner */}
-        {isContinuing && !isSSCCompletion && (
-          <div className="mb-5 bg-[#EEF2FF] border-2 border-[#102A71]/30 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xs">
-            <div className="flex items-start gap-3">
-              <div className="w-9 h-9 bg-[#102A71] text-white rounded-xl flex items-center justify-center shrink-0 mt-0.5">
-                <CheckCircle2 size={18} />
-              </div>
-              <div>
-                <p className="font-bold text-[#001840] text-sm">Continuing Student — Direct Submission Available</p>
-                <p className="text-xs text-gray-600 mt-0.5">
-                  Your records are already on file. You can directly submit your enrollment now without going through all 5 steps, or continue to review any section.
-                </p>
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={() => submit(true)}
-              disabled={submitting}
-              className="w-full sm:w-auto px-5 py-2.5 bg-[#102A71] text-white text-xs font-bold rounded-xl hover:bg-[#001840] transition-all flex items-center justify-center gap-2 shrink-0 shadow-sm disabled:opacity-60"
-            >
-              {submitting ? <Loader2 size={15} className="animate-spin" /> : <CheckCircle2 size={15} />}
-              Directly Submit Now
-            </button>
-          </div>
-        )}
-
         <div className="text-center mb-6">
           <h2 className="text-2xl font-bold text-[#001840]">{labels[step - 1]}</h2>
           <p className="text-sm text-gray-500 mt-1">Step {step} of {lastRequiredStep}</p>
@@ -514,9 +630,7 @@ export function HSEnrollmentForm({ enrollmentId: propId, readOnly = false }) {
                   <p className="text-sm font-bold text-[#001840]">
                     Junior High School — Grade 7 {sscChosenClass === 'SSC' ? '(SSC)' : '(Regular)'}
                   </p>
-                  <p className={`text-xs mt-0.5 ${sscChosenClass === 'Regular' ? 'text-blue-700' : 'text-yellow-700'}`}>
-                    Locked — you chose the {sscChosenClass === 'Regular' ? 'Regular' : 'Special Science'} class after passing the SSC exam
-                  </p>
+
                 </div>
               </div>
             ) : isEditMode || isCarryOver ? (
@@ -563,6 +677,7 @@ export function HSEnrollmentForm({ enrollmentId: propId, readOnly = false }) {
             )}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <F label="School Year"><I value={form.academicYear} placeholder="2025-2026" maxLength={20} onChange={e => set("academicYear", e.target.value)} /></F>
+              {!isIncomingGrade7 && (
               <F label="Student ID Number" required={form.enrollmentType === 'old'} error={errors.studentNumber}>
                 <I
                   value={form.studentNumber}
@@ -575,39 +690,43 @@ export function HSEnrollmentForm({ enrollmentId: propId, readOnly = false }) {
                   }}
                 />
                 <p className="text-[10px] text-gray-400 mt-1">Format: A-9869 or YYYY-NNNNN · Required for continuing students</p>
-                {false && (<><I
-                  maxLength={10}
-                  onChange={e => {
-                    const digits = keepDigits(e.target.value, 9);
-                    set("studentNumber", digits.length > 4 ? `${digits.slice(0, 4)}-${digits.slice(4)}` : digits);
-                  }}
-                />
-                </>)}
+
                 {errors.studentNumber && <p className="text-xs text-red-500 mt-0.5">{errors.studentNumber}</p>}
               </F>
+              )}
             </div>
+            {needsReportedAverage && <F label="Previous Year General Average" required error={errors.previousGeneralAverage}><I type="number" min={maintainingAverage} max="100" step="0.01" value={form.previousGeneralAverage ?? ''} onChange={event => set('previousGeneralAverage', event.target.value)} placeholder={`At least ${maintainingAverage}`} /></F>}
           </div>)}
           {step === 2 && (<div className="space-y-5">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <F label="Last Name" required error={errors.familyName}><I value={form.familyName} maxLength={100} error={errors.familyName} placeholder="Last Name" onKeyDown={onlyLetters} onChange={e => set("familyName", keepNameCharacters(e.target.value, 100))} /></F>
               <F label="First Name" required error={errors.firstName}><I value={form.firstName} maxLength={100} error={errors.firstName} placeholder="First Name" onKeyDown={onlyLetters} onChange={e => set("firstName", keepNameCharacters(e.target.value, 100))} /></F>
-              <F label="Middle Name"><I value={form.middleName} maxLength={100} placeholder="Middle Name" onKeyDown={onlyLetters} onChange={e => set("middleName", keepNameCharacters(e.target.value, 100))} /></F>
+              <F label="Middle Name (optional)"><I value={form.middleName} maxLength={100} placeholder="Middle Name" onKeyDown={onlyLetters} onChange={e => set("middleName", keepNameCharacters(e.target.value, 100))} /></F>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <F label="LRN" error={errors.lrn || (lrnTaken ? "This LRN is already registered" : undefined)}><I value={form.lrn} placeholder="12-digit LRN" maxLength={12} inputMode="numeric" onKeyDown={onlyDigits} error={errors.lrn || lrnTaken} onChange={e => { const lrn = keepDigits(e.target.value, 12); set("lrn", lrn); checkLrn(lrn); }} /></F>
+              <F label="LRN" required error={errors.lrn || (lrnTaken ? "This LRN is already registered" : undefined)}><I value={form.lrn} placeholder="12-digit LRN" maxLength={12} inputMode="numeric" onKeyDown={onlyDigits} error={errors.lrn || lrnTaken} onChange={e => { const lrn = keepDigits(e.target.value, 12); set("lrn", lrn); checkLrn(lrn); }} /></F>
               <F label="Sex" required error={errors.sex}><S value={form.sex} error={errors.sex} onChange={e => set("sex", e.target.value)}><option value="">Select</option><option value="Male">Male</option><option value="Female">Female</option></S></F>
-              <F label="Date of Birth" required error={errors.dateOfBirth}><I type="date" value={form.dateOfBirth} error={errors.dateOfBirth} onChange={e => set("dateOfBirth", e.target.value)} /></F>
+              <F label="Date of Birth" required error={errors.dateOfBirth}><BirthdayPicker value={form.dateOfBirth} error={errors.dateOfBirth} onChange={value => set("dateOfBirth", value)} /></F>
             </div>
-            <F label="Place of Birth"><I value={form.placeOfBirth} placeholder="Place of birth" onChange={e => set("placeOfBirth", e.target.value)} /></F>
+            <F label="Place of Birth" required error={errors.placeOfBirth}><I error={errors.placeOfBirth} value={form.placeOfBirth} placeholder="Place of birth" onChange={e => set("placeOfBirth", e.target.value)} /></F>
           </div>)}
           {step === 3 && (<div className="space-y-5">
-            <div><h3 className="text-sm font-bold text-[#001840] mb-3 pb-2 border-b border-gray-100">Father</h3><div className="grid grid-cols-1 sm:grid-cols-2 gap-4"><F label="Full Name"><I value={form.fatherName} maxLength={200} placeholder="Father name" onKeyDown={onlyLetters} onChange={e => set("fatherName", keepNameCharacters(e.target.value, 200))} /></F><F label="Occupation"><I value={form.fatherOccupation} maxLength={100} placeholder="Occupation" onChange={e => set("fatherOccupation", e.target.value)} /></F></div></div>
-            <div><h3 className="text-sm font-bold text-[#001840] mb-3 pb-2 border-b border-gray-100">Mother</h3><div className="grid grid-cols-1 sm:grid-cols-2 gap-4"><F label="Full Name"><I value={form.motherName} maxLength={200} placeholder="Mother name" onKeyDown={onlyLetters} onChange={e => set("motherName", keepNameCharacters(e.target.value, 200))} /></F><F label="Occupation"><I value={form.motherOccupation} maxLength={100} placeholder="Occupation" onChange={e => set("motherOccupation", e.target.value)} /></F></div></div>
-            <F label="Parents Address"><I value={form.parentsAddress} maxLength={500} placeholder="Complete address" onChange={e => set("parentsAddress", e.target.value)} /></F>
-            <div><h3 className="text-sm font-bold text-[#001840] mb-3 pb-2 border-b border-gray-100">Guardian (if any)</h3><div className="grid grid-cols-1 sm:grid-cols-2 gap-4"><F label="Full Name"><I value={form.guardianName} maxLength={200} placeholder="Guardian name" onKeyDown={onlyLetters} onChange={e => set("guardianName", keepNameCharacters(e.target.value, 200))} /></F><F label="Occupation"><I value={form.guardianOccupation} maxLength={100} placeholder="Occupation" onChange={e => set("guardianOccupation", e.target.value)} /></F><F label="Address"><I value={form.guardianAddress} maxLength={500} placeholder="Address" onChange={e => set("guardianAddress", e.target.value)} /></F><F label="Telephone / Mobile" error={errors.guardianTelephone}><I value={form.guardianTelephone} placeholder="09XXXXXXXXX" maxLength={11} inputMode="numeric" onKeyDown={onlyDigits} error={errors.guardianTelephone} onChange={e => set("guardianTelephone", keepDigits(e.target.value, 11))} /></F></div></div>
+            {['father', 'mother', 'guardian'].map(key => {
+              const phoneKey = key === 'guardian' ? 'guardianTelephone' : `${key}MobileNumber`;
+              return <Fragment key={key}><section className="rounded-xl border border-gray-200 p-4 space-y-4"><h3 className="border-b pb-2 text-sm font-bold capitalize text-[#001840]">{key} details <span className="ml-2 text-xs font-normal normal-case text-gray-500">{familySections[key] ? 'Contact details provided' : 'Leave blank if not applicable'}</span></h3><div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <F label="Full Name" required={familySections[key]} error={errors[`${key}Name`]}><I value={form[`${key}Name`]} error={errors[`${key}Name`]} maxLength={200} onKeyDown={onlyLetters} onChange={event => set(`${key}Name`, keepNameCharacters(event.target.value, 200))} /></F>
+                <F label="Mobile Number" required={familySections[key]} error={errors[phoneKey]}><I value={form[phoneKey] || ''} error={errors[phoneKey]} placeholder="09XXXXXXXXX" maxLength={11} inputMode="numeric" onKeyDown={onlyDigits} onChange={event => set(phoneKey, keepDigits(event.target.value, 11))} /></F>
+                <F label="Occupation (optional)"><I value={form[`${key}Occupation`]} maxLength={100} onChange={event => set(`${key}Occupation`, event.target.value)} /></F>
+                {key === 'guardian' && <F label="Guardian Address" required={familySections.guardian} error={errors.guardianAddress}><I value={form.guardianAddress} error={errors.guardianAddress} maxLength={500} onChange={event => set('guardianAddress', event.target.value)} /></F>}
+              </div></section>
+              {key === 'mother' && (<F label="Parent Address" required={familySections.father || familySections.mother} error={errors.parentsAddress}><I value={form.parentsAddress} error={errors.parentsAddress} maxLength={500} placeholder="Complete address" onChange={event => set('parentsAddress', event.target.value)} /></F>)}
+              </Fragment>;
+            })}
+
           </div>)}
           {step === 4 && (<div className="space-y-5">
             <div><h3 className="text-sm font-bold text-[#001840] mb-3 pb-2 border-b border-gray-100">Grade VI School</h3><div className="grid grid-cols-1 sm:grid-cols-2 gap-4"><F label="School Name"><I value={form.grade6School} maxLength={200} placeholder="School name" onChange={e => set("grade6School", e.target.value)} /></F><F label="School Address"><I value={form.grade6SchoolAddress} maxLength={200} placeholder="Address" onChange={e => set("grade6SchoolAddress", e.target.value)} /></F><F label="Section"><I value={form.grade6Section} maxLength={50} placeholder="Section" onChange={e => set("grade6Section", e.target.value)} /></F><F label="General Average" error={errors.grade6Average}><I type="number" min="0" max="100" step="0.01" inputMode="decimal" value={form.grade6Average} placeholder="e.g. 88" error={errors.grade6Average} onChange={e => set("grade6Average", e.target.value)} /></F><F label="SY Start" error={errors.grade6SYStart}><I value={form.grade6SYStart} placeholder="2020" maxLength={4} inputMode="numeric" onKeyDown={onlyDigits} error={errors.grade6SYStart} onChange={e => set("grade6SYStart", keepDigits(e.target.value, 4))} /></F><F label="SY End" error={errors.grade6SYEnd}><I value={form.grade6SYEnd} placeholder="2021" maxLength={4} inputMode="numeric" onKeyDown={onlyDigits} error={errors.grade6SYEnd} onChange={e => set("grade6SYEnd", keepDigits(e.target.value, 4))} /></F></div></div>
+            {!isGrade7 && (
             <div>
               <h3 className="text-sm font-bold text-[#001840] mb-1 pb-2 border-b border-gray-100">
                 Last High School Attended
@@ -621,6 +740,7 @@ export function HSEnrollmentForm({ enrollmentId: propId, readOnly = false }) {
                 <F label="SY End" required={isTransferee} error={errors.lastHSSYEnd}><I value={form.lastHSSYEnd} placeholder="2024" maxLength={4} inputMode="numeric" onKeyDown={onlyDigits} error={errors.lastHSSYEnd} onChange={e => set("lastHSSYEnd", keepDigits(e.target.value, 4))} /></F>
               </div>
             </div>
+            )}
           </div>)}
           {step === docStep && (<div className="space-y-4">
             <div>
@@ -638,39 +758,34 @@ export function HSEnrollmentForm({ enrollmentId: propId, readOnly = false }) {
             </div>
             {activeCreds.map(cred => {
               const file = form.docFiles[cred.key];
-              const previewUrl = file ? URL.createObjectURL(file) : null;
+              const savedDocument = savedDocs.find(doc => doc.documentType === cred.key);
+              const hasDocument = !!file || !!savedDocument;
               return (
-                <div key={cred.key} className={`p-4 rounded-xl border-2 transition-all ${file ? "border-green-400 bg-green-50" : cred.required ? "border-red-200 bg-red-50/30" : "border-gray-200 bg-gray-50"}`}>
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-bold text-[#001840]">{cred.label}</span>
-                      {cred.required && !file && !savedDocs.some(doc => doc.documentType === cred.key) && (
-                        <span className="text-[10px] font-bold uppercase tracking-wide bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full">Required</span>
-                      )}
-                    </div>
-                    {file && <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">Uploaded ✓</span>}
+                <div key={cred.key} className={`rounded-xl border-2 p-4 transition-all ${hasDocument ? "border-green-200 bg-green-50/40" : cred.required ? "border-red-200 bg-red-50/30" : "border-gray-200 bg-gray-50"}`}>
+                  <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-sm font-bold text-[#001840]">{cred.label}</span>
+                    {!hasDocument && cred.required && <span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-red-600">Required</span>}
+                    {hasDocument && <span className="text-xs font-medium text-green-700">{file ? savedDocument ? 'Replacement selected' : 'Selected' : 'On file'}</span>}
                   </div>
-                  {!file && savedDocs.some(doc => doc.documentType === cred.key) && <p className="text-xs text-green-700 mb-2">A saved document is already on file. Upload below only to replace it.</p>}
-                  {file ? (
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-3 bg-white rounded-lg px-3 py-2 border border-green-200">
-                        <FileText size={14} className="text-green-600 shrink-0" />
-                        <span className="text-xs text-green-700 truncate flex-1">{file.name}</span>
-                        <button
-                          type="button"
-                          onClick={() => setPreviewModal({ url: previewUrl, name: file.name, isPdf: file.type === "application/pdf" })}
-                          className="text-xs text-[#102A71] hover:text-[#001840] font-semibold shrink-0 flex items-center gap-1 px-2 py-1 rounded-lg border border-[#102A71]/30 hover:bg-[#EEF2FF] transition-all"
-                        >
-                          View
-                        </button>
-                        <button type="button" onClick={() => set("docFiles", { ...form.docFiles, [cred.key]: null })} className="text-red-400 hover:text-red-600 shrink-0"><X size={14} /></button>
-                      </div>
+                  <div className="flex flex-wrap items-center gap-3 rounded-lg border border-gray-200 bg-white px-3 py-2.5">
+                    <FileText size={16} className="shrink-0 text-[#102A71]" />
+                    <span className="min-w-0 flex-1 break-all text-xs text-gray-600">{file?.name || savedDocument?.originalName || savedDocument?.documentLabel || 'No file selected'}</span>
+                    <div className="ml-auto flex shrink-0 items-center gap-2">
+                      {hasDocument && <button type="button" aria-label={`View ${cred.label}`} disabled={!file && openingSavedDocument === savedDocument?.id}
+                        onClick={() => file ? setPreviewModal({ url: URL.createObjectURL(file), name: file.name, isPdf: file.type === 'application/pdf' }) : viewSavedDocument(savedDocument)}
+                        className="flex items-center gap-1 rounded-lg border border-[#102A71]/30 px-3 py-1.5 text-xs font-semibold text-[#102A71] hover:bg-[#EEF2FF] disabled:opacity-50">
+                        {!file && openingSavedDocument === savedDocument?.id && <Loader2 size={12} className="animate-spin" />} View
+                      </button>}
+                      <button type="button" aria-label={`${hasDocument ? 'Replace' : 'Upload'} ${cred.label}`} disabled={checkingDocument !== null || submitting} onClick={() => documentInputs.current[cred.key]?.click()}
+                        className="flex items-center gap-1.5 rounded-lg bg-[#102A71] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#001840] disabled:opacity-50">
+                        <Upload size={13} /> {hasDocument ? 'Replace' : 'Upload'}
+                      </button>
+                      {file && <button type="button" aria-label={savedDocument ? `Undo replacement for ${cred.label}` : `Remove selected ${cred.label}`} disabled={checkingDocument !== null || submitting}
+                        onClick={() => { set('docFiles', { ...form.docFiles, [cred.key]: null }); if (documentInputs.current[cred.key]) documentInputs.current[cred.key].value = ''; setDocumentErrors(previous => ({ ...previous, [cred.key]: '' })); }}
+                        className="rounded-lg p-1.5 text-red-500 hover:bg-red-50 disabled:opacity-50"><X size={14} /></button>}
                     </div>
-                  ) : (
-                    <label className="flex items-center justify-between gap-2 cursor-pointer border border-gray-200 rounded-lg px-3 py-2.5 bg-white hover:bg-gray-50 transition-all">
-                      <span className="text-sm text-gray-500">Drag and Drop or Upload File</span>
-                      <Upload size={16} className="text-gray-400 shrink-0" />
-                      <input type="file" accept=".pdf,.jpg,.jpeg,.png" className="hidden" onChange={e => {
+                  </div>
+                      <input type="file" accept=".pdf,.jpg,.jpeg,.png" disabled={checkingDocument !== null || submitting} ref={node => { documentInputs.current[cred.key] = node; }} aria-label={`Upload ${cred.label}`} className="hidden" onChange={e => {
                         const f = e.target.files[0];
                         if (!f) return;
                         const allowed = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png'];
@@ -681,10 +796,10 @@ export function HSEnrollmentForm({ enrollmentId: propId, readOnly = false }) {
                           e.target.value = ''; return;
                         }
                         if (f.size > 10 * 1024 * 1024) { toast.error("File exceeds 10MB limit. Please choose a smaller file."); e.target.value = ''; return; }
-                        set("docFiles", { ...form.docFiles, [cred.key]: f });
+                        selectDocument(cred.key, f, e.target);
                       }} />
-                    </label>
-                  )}
+                  {checkingDocument === cred.key && <p role="status" className="mt-2 text-xs text-gray-500">Checking file...</p>}
+                  {documentErrors[cred.key] && <p role="alert" className="mt-2 text-xs text-red-600">{documentErrors[cred.key]}</p>}
                   <p className="text-[10px] text-gray-400 mt-2 italic">Formats: PDF, JPG, JPEG, PNG · Max file size: 10 MB</p>
                 </div>
               );
@@ -694,28 +809,22 @@ export function HSEnrollmentForm({ enrollmentId: propId, readOnly = false }) {
           </div>)}
         </div>
         {!readOnly && (
-          <div className="flex flex-wrap gap-3 justify-between items-center mt-6">
+          <div className="mt-6">
+            {draftSaveError && <p role="alert" className="mb-3 text-sm text-red-600">{draftSaveError}</p>}
+            {step === 3 && <p role={errors.family ? 'alert' : undefined} className={`mb-3 text-sm font-semibold sm:text-right ${errors.family ? 'text-red-600' : 'text-[#001840]'}`}>Provide details for at least one parent or guardian.</p>}
+          <div className="flex flex-wrap gap-3 justify-between items-center">
             {step > 1 ? <button type="button" onClick={() => goToStep(step - 1)} className="px-4 sm:px-6 py-3 border border-gray-300 text-gray-700 rounded-xl font-semibold hover:bg-gray-50">Previous</button> : <span />}
             <div className="flex flex-wrap gap-3 items-center">
-              {isContinuing && step < lastRequiredStep && (
-                <button
-                  type="button"
-                  onClick={() => submit(true)}
-                  disabled={submitting}
-                  className="flex items-center gap-2 px-6 py-3 bg-[#102A71] text-white rounded-xl font-bold hover:bg-[#001840] transition-all shadow-md disabled:opacity-60"
-                >
-                  {submitting ? <><Loader2 size={18} className="animate-spin" /> Submitting...</> : <><CheckCircle2 size={18} /> Directly Submit Enrollment</>}
-                </button>
-              )}
-              <button type="button" onClick={continueStage} disabled={submitting} className="flex items-center gap-2 px-8 py-3 bg-[#F5C400] text-[#001840] rounded-xl font-bold hover:bg-[#FFDC5F] transition-all shadow-md disabled:opacity-60 disabled:cursor-not-allowed">
+              <button type="button" onClick={continueStage} disabled={submitting || checkingDocument !== null} className="flex items-center gap-2 px-8 py-3 bg-[#F5C400] text-[#001840] rounded-xl font-bold hover:bg-[#FFDC5F] transition-all shadow-md disabled:opacity-60 disabled:cursor-not-allowed">
                 {submitting
-                  ? <><Loader2 size={18} className="animate-spin" /> {isEditMode ? 'Saving...' : 'Submitting...'}</>
+                  ? <><Loader2 size={18} className="animate-spin" /> Submitting...</>
                   : step === lastRequiredStep
-                    ? <><CheckCircle2 size={18} /> {isEditMode ? 'Save Changes' : 'Submit Enrollment'}</>
+                    ? <><CheckCircle2 size={18} /> Submit Enrollment</>
                     : 'Continue'
                 }
               </button>
             </div>
+          </div>
           </div>
         )}
       </div>

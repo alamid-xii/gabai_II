@@ -1,7 +1,7 @@
 import { toast } from 'sonner';
 import { useEffect, useState } from 'react';
 import { API } from '../../config/api';
-import { confirmAction } from '../../components/ConfirmModal';
+import { confirmAction } from '../../utils/confirmAction';
 
 const fields = {
   enrollmentPeriod: 'Enrollment period / dates', enrollmentAudience: 'Who can enroll',

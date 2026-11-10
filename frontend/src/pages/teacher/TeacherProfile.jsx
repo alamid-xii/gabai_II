@@ -1,6 +1,6 @@
 import { Link, useNavigate } from "react-router";
 import { User, Mail, ShieldCheck } from "lucide-react";
-import { useAuth } from "../../contexts/AuthContext";
+import { useAuth } from "../../contexts/authState";
 import { Navbar } from "../../components/Navbar";
 
 export function TeacherProfile() {

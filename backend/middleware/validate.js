@@ -1,3 +1,4 @@
+import { validateProgramGrade } from '../services/academicScope.js';
 /**
  * Shared validation & sanitization helpers
  * Used across enrollment, auth, admin, registrar, and section controllers.
@@ -308,13 +309,12 @@ export function validateSection(req, res, next) {
   if (!course?.trim())     errors.push({ field: 'course',     message: 'Course is required' });
   if (!['JHS', 'SHS'].includes(course)) errors.push({ field: 'course', message: 'Course must be JHS or SHS' });
   if (!yearLevel)          errors.push({ field: 'yearLevel',  message: 'Year level is required' });
-  const yl = parseInt(yearLevel);
-  if (isNaN(yl) || yl < 7 || yl > 12) errors.push({ field: 'yearLevel', message: 'Year level must be between 7 and 12' });
+  try { validateProgramGrade(course, yearLevel); } catch (error) { errors.push({ field: 'yearLevel', message: error.message }); }
   if (!semester?.trim())   errors.push({ field: 'semester',   message: 'Semester is required' });
   if (!schoolYear?.trim()) errors.push({ field: 'schoolYear', message: 'School year is required' });
   if (capacity !== undefined) {
-    const cap = parseInt(capacity);
-    if (isNaN(cap) || cap < 1 || cap > 100) errors.push({ field: 'capacity', message: 'Capacity must be between 1 and 100' });
+    const cap = Number(capacity);
+    if (!Number.isInteger(cap) || cap < 1 || cap > 100) errors.push({ field: 'capacity', message: 'Capacity must be between 1 and 100' });
   }
 
   if (errors.length > 0) {

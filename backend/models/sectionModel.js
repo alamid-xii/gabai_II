@@ -1,3 +1,4 @@
+import { ACADEMIC_TERMS } from "../services/academicTerms.js";
 import { DataTypes } from "sequelize";
 import { sequelize } from "./db.js";
 
@@ -23,7 +24,8 @@ export const Section = sequelize.define("Section", {
     comment: 'SHS strand (STEM, ABM, HUMSS, TVL, Sports, Arts and Design)'
   },
   semester: { 
-    type: DataTypes.ENUM('1st', '2nd', 'Summer'), 
+    type: DataTypes.ENUM(...ACADEMIC_TERMS),
+    validate: { isIn: { args: [ACADEMIC_TERMS], msg: "Select a valid semester or trimester" } },
     allowNull: false,
     comment: 'Semester when section is offered'
   },

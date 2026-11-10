@@ -5,6 +5,7 @@ import { EnrollmentGuide } from "../models/enrollmentGuideModel.js";
 import { FAQ } from '../models/faqModel.js';
 import { sequelize } from '../models/db.js';
 import { PORTAL_FAQS } from './chatKnowledge.js';
+import { normalizeSchoolQuery } from './chatLanguage.js';
 
 const STOP = new Set('a an the is are was were be been i you we they it my your our what how when where who which why do does did can could would should will to of in on at for with about by from and or but if so this that please tell me give show need want know po ko ba ang ng na sa ay mo nang ano paano mga meron mayroon emc school eastern mindoro college ask tanong magtanong yung yun yon lang sana kaya dito diyan doon pwede puwede paki'.split(' '));
 const ALIASES = { enrolment: 'enroll', enrollment: 'enroll', enrolling: 'enroll', admission: 'enroll', admissions: 'enroll', requirements: 'requirement', documents: 'document', strands: 'strand', subjects: 'subject', scholarships: 'scholarship', buildings: 'building', fees: 'fee', schedules: 'schedule', kailangan: 'requirement', lokasyon: 'location', saan: 'location', san: 'location', nasaan: 'location', matatagpuan: 'location', makikita: 'location', bayan: 'location', lugar: 'location', banda: 'location', bayad: 'payment', numero: 'phone', cellphone: 'phone', mobile: 'phone', telepono: 'phone', cp: 'phone', tawag: 'phone', matawagan: 'phone' };
@@ -15,6 +16,7 @@ function keywordList(value) {
   try { const parsed = Array.isArray(value) ? value : JSON.parse(value || '[]'); return Array.isArray(parsed) ? parsed.filter(x => typeof x === 'string') : []; } catch { return []; }
 }
 export function scoreFAQ(message, faq) {
+  message = normalizeSchoolQuery(message);
   const input = tokens(message);
   if (faq.topic === 'profile' && !input.length && /emc|eastern mindoro|school|paaralan/i.test(message)) return 1;
   if (!input.length) return 0;
@@ -54,6 +56,7 @@ const SOURCES = [
 ];
 
 export async function retrieve(message) {
+  message = normalizeSchoolQuery(message);
   let stored = [];
   try { stored = await FAQ.findAll({ where: { isActive: true } }); }
   catch { console.warn('Chat FAQ lookup unavailable; using portal references'); }

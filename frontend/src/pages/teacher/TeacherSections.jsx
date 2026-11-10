@@ -3,7 +3,7 @@ import { useNavigate } from "react-router";
 import { BookOpen, FlaskConical, RefreshCw, School, Users } from "lucide-react";
 import { toast } from "sonner";
 import { Navbar } from "../../components/Navbar";
-import { useAuth } from "../../contexts/AuthContext";
+import { useAuth } from "../../contexts/authState";
 import { SectionView } from "./TeacherDashboard";
 import { API } from "../../config/api";
 

@@ -1,6 +1,5 @@
 import path from 'node:path';
-import jwt from 'jsonwebtoken';
-import { User } from '../models/userModel.js';
+import { authenticateRequest, authenticationError } from '../services/authentication.js';
 import { EnrollmentRecord } from '../models/enrollmentRecordModel.js';
 import { EnrollmentDocument } from '../models/enrollmentDocumentModel.js';
 
@@ -8,15 +7,7 @@ import { EnrollmentDocument } from '../models/enrollmentDocumentModel.js';
 export function privateDocuments(publicDirectory) {
   return async (req, res) => {
     try {
-      let userId = req.session?.userId;
-      const token = req.headers.authorization?.match(/^Bearer (.+)$/)?.[1];
-      if (token) {
-        try { const claims = jwt.verify(token, process.env.JWT_SECRET || 'emc-secret-key-2025'); userId = claims.id || claims.userId; }
-        catch { return res.status(401).json({ error: 'Sign in to view this document.' }); }
-      }
-      if (!userId) return res.status(401).json({ error: 'Sign in to view this document.' });
-      const user = await User.findByPk(userId);
-      if (!user || !user.isActive) return res.status(403).json({ error: 'Document access denied.' });
+      const user = await authenticateRequest(req, { allowSession: true });
       const match = decodeURIComponent(req.path).match(/^\/enrollment-(\d+)\/([a-zA-Z0-9_.-]+)$/);
       if (!match) return res.status(404).json({ error: 'Document not found.' });
       const enrollment = await EnrollmentRecord.findByPk(match[1]);
@@ -28,7 +19,10 @@ export function privateDocuments(publicDirectory) {
       if (!file.startsWith(root + path.sep)) return res.status(404).json({ error: 'Document not found.' });
       res.set('Cache-Control', 'private, no-store');
       return res.sendFile(file, error => { if (error && !res.headersSent) res.status(404).json({ error: 'Document not found.' }); });
-    } catch { return res.status(500).json({ error: 'Could not load document.' }); }
+    } catch (error) {
+      if (error.status) return authenticationError(res, error);
+      return res.status(500).json({ error: 'Could not load document.' });
+    }
   };
 }
 

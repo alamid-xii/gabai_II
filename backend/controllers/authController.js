@@ -1,15 +1,15 @@
 import bcrypt from "bcrypt";
-import jwt from "jsonwebtoken";
 import crypto from "crypto";
 import { OAuth2Client } from "google-auth-library";
 import { User, sequelize } from "../models/userModel.js";
 import { PendingRegistration } from "../models/pendingRegistrationModel.js";
 import { sendWelcomeEmail, sendOtpEmail } from "../services/emailService.js";
 import { newGoogleProfile, profileUpdates, serializeUser } from "../services/userProfile.js";
+import { authenticateRequest, createAccessToken } from "../services/authentication.js";
+import { isValidPassword, normalizeAccountEmail, PASSWORD_POLICY_MESSAGE } from "../services/accountValidation.js";
 
 try { await sequelize.authenticate(); } catch (err) { console.warn("DB unavailable at import (authController):", err.message); }
 
-const JWT_SECRET = process.env.JWT_SECRET || "emc-secret-key-2025";
 const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:5173";
 const googleCallbackUrl = () => process.env.GOOGLE_CALLBACK_URL || "http://localhost:3000/api/auth/google/callback";
 const googleLoginUrl = (params) => `${FRONTEND_URL.replace(/\/+$/, "")}/login?${new URLSearchParams(params)}`;
@@ -23,9 +23,11 @@ const createGoogleOAuthClient = () => new OAuth2Client(
 export const loginPage = (req, res) => res.render("login", { title: "Login" });
 export const registerPage = (req, res) => res.render("register", { title: "Register" });
 export const forgotPasswordPage = (req, res) => res.render("forgotpassword", { title: "Forgot Password" });
-export const dashboardPage = (req, res) => {
-  if (!req.session.userId) return res.redirect("/login");
-  res.render("dashboard", { title: "Dashboard" });
+export const dashboardPage = async (req, res) => {
+  try {
+    await authenticateRequest(req, { allowSession: true });
+    res.render("dashboard", { title: "Dashboard" });
+  } catch { res.redirect('/login'); }
 };
 
 export const loginUser = async (req, res) => {
@@ -56,8 +58,9 @@ export const loginUser = async (req, res) => {
       });
     }
 
-    const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: "7d" });
+    const token = createAccessToken(user);
     req.session.userId = user.id;
+    req.session.tokenVersion = Number(user.tokenVersion || 0);
 
     res.json({
       message: "Login successful",
@@ -192,7 +195,7 @@ export const completeGoogleAuth = async (req, res) => {
     if (result.error) return fail(result.error);
     const user = result.user;
     const authResult = {
-      token: jwt.sign({ id: user.id, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: "7d" }),
+      token: createAccessToken(user),
       user: serializeUser(user),
     };
 
@@ -200,6 +203,7 @@ export const completeGoogleAuth = async (req, res) => {
       req.session.regenerate((error) => error ? reject(error) : resolve());
     });
     req.session.userId = user.id;
+    req.session.tokenVersion = Number(user.tokenVersion || 0);
     req.session.googleAuth = authResult;
     await new Promise((resolve, reject) => {
       req.session.save((error) => error ? reject(error) : resolve());
@@ -212,10 +216,11 @@ export const completeGoogleAuth = async (req, res) => {
   }
 };
 
-export const consumeGoogleAuth = (req, res) => {
+export const consumeGoogleAuth = async (req, res) => {
   const authResult = req.session?.googleAuth;
   if (!authResult) return res.status(401).json({ message: "No Google sign-in is waiting to be completed." });
-
+  try { await authenticateRequest(req, { allowSession: true }); }
+  catch { return res.status(401).json({ message: 'Your session has expired. Please sign in again.' }); }
   delete req.session.googleAuth;
   req.session.save((error) => {
     if (error) return res.status(500).json({ message: "Could not complete Google sign-in." });
@@ -225,7 +230,10 @@ export const consumeGoogleAuth = (req, res) => {
 
 export const registerUser = async (req, res) => {
   try {
-    const { name, email, password } = req.body;
+    const { name, password } = req.body;
+    const email = normalizeAccountEmail(req.body.email);
+    if (!email) return res.status(400).json({ message: 'Enter a valid email address.' });
+    if (!isValidPassword(password)) return res.status(400).json({ message: PASSWORD_POLICY_MESSAGE });
 
     const existingUser = await User.findOne({ where: { email } });
     if (existingUser) return res.status(400).json({ message: "Email already registered" });
@@ -357,17 +365,32 @@ export const resendVerification = async (req, res) => {
   }
 };
 
-export const logoutUser = (req, res) => {
-  req.session.destroy((err) => {
-    if (err) return res.status(500).json({ message: "Logout failed" });
-    res.clearCookie("connect.sid");
-    res.json({ message: "Logout successful" });
-  });
+// Logout revokes this account's existing bearer tokens and sessions, including other devices.
+export const logoutUser = async (req, res) => {
+  try {
+    let user;
+    try { user = await authenticateRequest(req, { allowSession: true }); }
+    catch (error) { if (!error.status) throw error; }
+    if (user) await User.increment('tokenVersion', { where: { id: user.id } });
+    const finish = err => {
+      if (err) return res.status(500).json({ message: 'Logout failed' });
+      res.clearCookie('connect.sid');
+      return res.json({ message: 'Logout successful' });
+    };
+    if (req.session?.destroy) req.session.destroy(finish);
+    else finish();
+  } catch (error) {
+    console.error('Logout error:', error);
+    res.status(500).json({ message: 'Logout failed' });
+  }
 };
 
 // GET /api/auth/me — validate the saved access token and return the current user
 export const getCurrentUser = (req, res) => {
-  if (req.session) req.session.userId = req.user.id;
+  if (req.session) {
+    req.session.userId = req.user.id;
+    req.session.tokenVersion = Number(req.user.tokenVersion || 0);
+  }
   res.json({
     user: serializeUser(req.user),
   });
@@ -377,35 +400,32 @@ export const getCurrentUser = (req, res) => {
 export const updateProfile = async (req, res) => {
   try {
     const userId = req.user?.id;
-    if (!userId) return res.status(401).json({ error: "Unauthorized" });
-
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
     const { currentPassword, newPassword } = req.body;
-    const user = await User.findByPk(userId);
-    if (!user) return res.status(404).json({ error: "User not found" });
-
+    let user = await User.findByPk(userId);
+    if (!user) return res.status(404).json({ error: 'User not found' });
     const updates = profileUpdates(req.body, user);
-
-    // Change password
     if (newPassword !== undefined) {
-      if (!currentPassword) return res.status(400).json({ error: "Current password is required" });
-      const match = await bcrypt.compare(currentPassword, user.password);
-      if (!match) return res.status(400).json({ error: "Current password is incorrect" });
-      if (newPassword.length < 8) return res.status(400).json({ error: "New password must be at least 8 characters" });
-      updates.password = await bcrypt.hash(newPassword, 10);
+      if (typeof currentPassword !== 'string' || !currentPassword) return res.status(400).json({ error: 'Current password is required' });
+      if (!isValidPassword(newPassword)) return res.status(400).json({ error: PASSWORD_POLICY_MESSAGE });
+      const passwordHash = await bcrypt.hash(newPassword, 10);
+      user = await sequelize.transaction(async transaction => {
+        const current = await User.findByPk(userId, { transaction, lock: transaction.LOCK.UPDATE });
+        if (!current || !await bcrypt.compare(currentPassword, current.password)) throw Object.assign(new Error('Current password is incorrect'), { status: 400 });
+        await current.update({ ...updates, password: passwordHash, tokenVersion: Number(current.tokenVersion || 0) + 1 }, { transaction });
+        return current;
+      });
+      if (req.session) {
+        req.session.userId = user.id;
+        req.session.tokenVersion = Number(user.tokenVersion || 0);
+      }
+    } else {
+      if (Object.keys(updates).length === 0) return res.status(400).json({ error: 'Nothing to update' });
+      await user.update(updates);
     }
-
-    if (Object.keys(updates).length === 0) {
-      return res.status(400).json({ error: "Nothing to update" });
-    }
-
-    await user.update(updates);
-
-    res.json({
-      message: "Profile updated successfully",
-      user: serializeUser(user),
-    });
+    res.json({ message: 'Profile updated successfully', user: serializeUser(user), ...(newPassword !== undefined ? { token: createAccessToken(user) } : {}) });
   } catch (error) {
-    if (!error.status) console.error("updateProfile error:", error);
-    res.status(error.status || 500).json({ error: error.status ? error.message : "Failed to update profile" });
+    if (!error.status) console.error('updateProfile error:', error);
+    res.status(error.status || 500).json({ error: error.status ? error.message : 'Failed to update profile' });
   }
 };

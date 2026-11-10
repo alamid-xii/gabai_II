@@ -1,10 +1,15 @@
-import { Outlet, useLocation } from "react-router";
+import { useAuth } from "./contexts/authState";
+import { roleHome } from "./utils/roleHome";
+import { Navigate, Outlet, useLocation } from "react-router";
 import { Navbar } from "./components/Navbar";
 import { Footer } from "./components/Footer";
 import { FloatingChat } from "./components/FloatingChat";
 
 export function Root() {
   const location = useLocation();
+  const { user, loading } = useAuth();
+  if (loading) return <div role="status" className="min-h-screen bg-[#001840] text-white flex items-center justify-center">Loading...</div>;
+  if (user && user.role !== "student") return <Navigate to={roleHome(user.role)} replace />;
   const isChatPage = location.pathname === "/qa";
   const isTourPage = location.pathname === "/ar-navigation";
   const isNoScrollPage = isChatPage;

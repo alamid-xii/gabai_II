@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback, useRef } from "react";
-import { Link, useNavigate, useLocation } from "react-router";
+import { useState, useEffect } from "react";
+import { Link } from "react-router";
 import {
   MapPin, Users, MessageSquare, FileText, BarChart3, Settings, LogOut,
   Bell, Search, TrendingUp, AlertCircle, CheckCircle2, Clock, Menu, X,
@@ -7,7 +7,7 @@ import {
   CheckCircle, XCircle, Download, Calendar, Filter, ChevronLeft, ChevronRight,
   UserPlus, Archive
 } from "lucide-react";
-import { MapContainer, TileLayer, Marker, useMapEvents } from "react-leaflet";
+import { MapContainer, TileLayer, Marker } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { toast } from "sonner";
@@ -17,7 +17,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../..
 import { Badge } from "../../components/ui/badge";
 import { AcademicSetup } from "../../components/admin/AcademicSetup";
 import { SectionManagement } from "./SectionManagement";
-import { useAuth } from "../../contexts/AuthContext";
+
 import { AdminStatusBadge } from "./AdminShared";
 import { API } from "../../config/api";
 
@@ -29,7 +29,7 @@ export function AdminArchives() {
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
 
-  const tok = () => ({ Authorization: `Bearer ${localStorage.getItem('token')}`, 'Content-Type': 'application/json' });
+  
 
   useEffect(() => {
     fetch(`${API}/academic/school-years`)

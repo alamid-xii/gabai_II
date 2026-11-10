@@ -1,7 +1,6 @@
-import { SchoolName } from "../components/SchoolName";
 import { useState } from "react";
 import { Link, useSearchParams } from "react-router";
-import { MapPin, Loader2, Eye, EyeOff, Lock, Check, X } from "lucide-react";
+import { Loader2, Eye, EyeOff, Lock, Check, X } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
@@ -60,8 +59,19 @@ export function PasswordRecovery({ reset = false }) {
       <div className="w-full max-w-md">
         <div className="text-center mb-6">
           <Link to="/" className="inline-flex items-center gap-2 mb-3">
-            <div className="bg-[#F5C400] w-12 h-12 rounded-xl flex items-center justify-center shadow-lg"><MapPin className="w-7 h-7 text-[#001840]" /></div>
-            <div className="text-left"><span className="font-bold text-2xl tracking-wide text-white">GabAI</span><p className="text-xs text-[#FFDC5F]"><SchoolName /></p></div>
+            <img
+              src="/GabAi_Logo.png"
+              alt="GabAI Logo"
+              className="w-12 h-12 rounded-xl object-contain shadow-lg"
+            />
+            <div className="text-left">
+              <span className="font-bold text-2xl tracking-wide text-white">
+                GabAI
+              </span>
+              <p className="text-xs text-[#FFDC5F] leading-none tracking-wider">
+                Eastern Mindoro College, Inc.
+              </p>
+            </div>
           </Link>
         </div>
         <div className="bg-[#FFFDF0] rounded-2xl shadow-2xl p-6 sm:p-8 border-2 border-[#F5C400]/20">

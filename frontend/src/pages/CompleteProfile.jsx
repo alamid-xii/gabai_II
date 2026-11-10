@@ -1,6 +1,6 @@
 import { Navigate, useNavigate } from "react-router";
 import { LogOut, UserRound } from "lucide-react";
-import { useAuth } from "../contexts/AuthContext";
+import { useAuth } from "../contexts/authState";
 import { ProfileDetailsForm } from "../components/ProfileDetailsForm";
 import { SchoolName } from "../components/SchoolName";
 

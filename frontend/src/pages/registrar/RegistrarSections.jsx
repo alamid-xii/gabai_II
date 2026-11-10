@@ -1,3 +1,4 @@
+import { usePortalSlot } from '../../hooks/usePortalSlot';
 import { useEffect, useState, useMemo, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { useSearchParams } from "react-router";
@@ -7,7 +8,8 @@ import {
   Users, Filter, X, Download, School, CheckCircle2, AlertCircle,
   ArrowLeft, Clock, GraduationCap
 } from "lucide-react";
-import { API, tok, LifeStatusBadge, RegistrarPagination } from "./RegistrarShared";
+import { LifeStatusBadge, RegistrarPagination } from "./RegistrarShared";
+import { API, tok } from "./registrarConfig";
 
 // ── Sections Tab ──────────────────────────────────────────────────────────────
 export function SectionsTab() {
@@ -23,38 +25,13 @@ export function SectionsTab() {
   const [programFilter, setProgramFilter] = useState(() => linkedLevel === 'jhs_ssc' ? 'SSC' : linkedLevel === 'jhs_regular' ? 'Regular' : '');
   const [capacityFilter, setCapacityFilter] = useState('all');
   const [schoolYearFilter, setSchoolYearFilter] = useState(linkedYear);
-  const [schoolYears, setSchoolYears] = useState([]);
-  const [activeYear, setActiveYear] = useState('');
+  const [, setSchoolYears] = useState([]);
+  const [, setActiveYear] = useState('');
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
+  const [pageSize] = useState(10);
   const [exporting, setExporting] = useState(false);
-  const [headerContainer, setHeaderContainer] = useState(null);
+  const headerContainer = usePortalSlot('registrar-header-slot', true, 'flex-1 flex items-center justify-end gap-2 flex-wrap ml-auto');
 
-  useEffect(() => {
-    // Find the dashboard <header> containing the tab title
-    const titleEl = document.querySelector("header h1");
-    const header = titleEl ? titleEl.closest("header") : document.querySelector("header");
-    if (!header) return;
-
-    let slot = header.querySelector("#registrar-header-slot");
-    let created = false;
-    if (!slot) {
-      slot = document.createElement("div");
-      slot.id = "registrar-header-slot";
-      slot.className = "flex-1 flex items-center justify-end gap-2 flex-wrap ml-auto";
-      header.appendChild(slot);
-      created = true;
-    } else {
-      slot.className = "flex-1 flex items-center justify-end gap-2 flex-wrap ml-auto";
-    }
-    setHeaderContainer(slot);
-
-    return () => {
-      if (created && slot && slot.parentNode) {
-        slot.parentNode.removeChild(slot);
-      }
-    };
-  }, []);
 
   // Available grade levels based on selected level
   const availableGrades = levelFilter === 'JHS'
@@ -108,28 +85,7 @@ export function SectionsTab() {
       }).catch(() => {});
   }, [loadSections]);
 
-  async function toggleSection(sectionId) {
-    if (expandedId === sectionId) {
-      setExpandedId(null);
-      return;
-    }
-    setExpandedId(sectionId);
-    if (sectionStudents[sectionId]) return; // already cached
-    setStudentsLoading(prev => ({ ...prev, [sectionId]: true }));
-    try {
-      const res = await fetch(`${API}/admin/sections/${sectionId}/students`, { headers: tok() });
-      if (!res.ok) throw new Error('Failed');
-      const data = await res.json();
-      setSectionStudents(prev => ({
-        ...prev,
-        [sectionId]: Array.isArray(data) ? data : (data.students || [])
-      }));
-    } catch {
-      toast.error('Failed to load students for this section');
-    } finally {
-      setStudentsLoading(prev => ({ ...prev, [sectionId]: false }));
-    }
-  }
+  
 
   const handleLevelChange = (val) => {
     setLevelFilter(val);
@@ -609,7 +565,7 @@ function SectionDetailView({ section, onBack }) {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
+  const [pageSize] = useState(10);
   const [exporting, setExporting] = useState(false);
   const [showSubjects, setShowSubjects] = useState(true);
 

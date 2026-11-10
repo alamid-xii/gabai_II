@@ -96,7 +96,7 @@ export const getRegistrarEnrollments = async (req, res) => {
     }
 
     let query = `
-      SELECT er.*, u.name as user_name, u.email as user_email
+      SELECT er.*, u.name as user_name, u.email as user_email, u.mobileNumber as user_mobileNumber
       FROM enrollment_records er
       LEFT JOIN users u ON er.userId = u.id
       WHERE 1=1
@@ -166,7 +166,7 @@ export const verifyEnrollment = async (req, res) => {
 
     if (!enrollment) return res.status(404).json({ error: 'Enrollment not found' });
 
-    if (!['submitted', 'returned'].includes(enrollment.status)) {
+    if (!['submitted'].includes(enrollment.status)) {
       return res.status(400).json({ error: `Cannot verify enrollment with status: ${enrollment.status}` });
     }
 
@@ -215,11 +215,13 @@ export const approveEnrollment = async (req, res) => {
 
     if (!enrollment) return res.status(404).json({ error: 'Enrollment not found' });
     if (['enrolled','active','subjects_enrolled'].includes(enrollment.status)) return res.json({ message: 'Enrollment is already approved.', enrollment });
-    await validateForReview(enrollment);
-
-    if (!['verified', 'submitted', 'returned'].includes(enrollment.status)) {
+    if (enrollment.status === 'returned' || enrollment.status === 'draft') {
+      return res.status(400).json({ error: 'Wait for the student to submit the enrollment before approving it.' });
+    }
+    if (!['verified', 'submitted'].includes(enrollment.status)) {
       return res.status(400).json({ error: `Cannot approve enrollment with status: ${enrollment.status}` });
     }
+    await validateForReview(enrollment);
 
     // Generate student number if not already assigned, preserving any existing number from previous years
     let studentNumber = enrollment.studentNumber;
@@ -432,62 +434,36 @@ export const bulkScheduleSSCExam = async (req, res) => {
 };
 
 // ── Record SSC exam result ────────────────────────────────────────────────────
-export const recordSSCResult = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { examScore } = req.body;
-
-    if (examScore === undefined || examScore === null) {
-      return res.status(400).json({ error: 'Exam score is required' });
-    }
-
-    const [[enrollment]] = await sequelize.query(
-      'SELECT * FROM enrollment_records WHERE id = ?',
-      { replacements: [id] }
-    );
-
-    if (!enrollment) return res.status(404).json({ error: 'Enrollment not found' });
-    if (enrollment.status !== 'pending_exam') return res.status(400).json({ error: 'Enrollment is not pending an SSC exam' });
-
-    const score = parseFloat(examScore);
-    const passing = parseFloat(enrollment.sscPassingScore) || 75;
-    const passed = score >= passing;
-
-    await sequelize.query(
-      `UPDATE enrollment_records
-       SET sscExamScore = ?,
-           sscResult = ?,
-           sscClass = ?,
-           status = 'submitted',
-           updatedAt = NOW()
-       WHERE id = ?`,
-      { replacements: [score, passed ? 'passed' : 'failed', passed ? 'SSC' : 'Regular', id] }
-    );
-
-    const [[updated]] = await sequelize.query(
-      'SELECT * FROM enrollment_records WHERE id = ?',
-      { replacements: [id] }
-    );
-
-    // Send SSC result email
+export function createSSCResultHandler({ notify = sendSSCResultEmail } = {}) {
+  return async (req, res) => {
     try {
-      const [[user]] = await sequelize.query('SELECT * FROM users WHERE id = ?', { replacements: [updated.userId] });
-      if (user) await sendSSCResultEmail(user, updated);
-    } catch (_) {}
-
-    res.json({
-      message: passed
-        ? 'Passed! Student is eligible for the Special Science Class.'
-        : 'Did not pass. Student will be enrolled in the Regular class.',
-      sscResult: passed ? 'passed' : 'failed',
-      sscClass: passed ? 'SSC' : 'Regular',
-      enrollment: updated
-    });
-  } catch (error) {
-    console.error('Record SSC result error:', error);
-    res.status(500).json({ error: 'Failed to record SSC result' });
-  }
-};
+      const { examScore } = req.body;
+      const score = Number(examScore);
+      if (!['string', 'number'].includes(typeof examScore) || String(examScore).trim() === '' || !Number.isFinite(score) || score < 0 || score > 100) return res.status(400).json({ error: 'Enter an exam score between 0 and 100.' });
+      const updated = await sequelize.transaction(async transaction => {
+        const [[enrollment]] = await sequelize.query('SELECT * FROM enrollment_records WHERE id = ? FOR UPDATE', { replacements: [req.params.id], transaction });
+        if (!enrollment) throw Object.assign(Error('Enrollment not found'), { status: 404 });
+        if (enrollment.educationLevel !== 'JHS' || !enrollment.sscApplied || enrollment.status !== 'pending_exam' || !enrollment.sscExamDate || enrollment.sscResult) throw Object.assign(Error('Select a scheduled SSC applicant who is awaiting an exam result.'), { status: 409 });
+        const passing = Number(enrollment.sscPassingScore ?? 75);
+        const passed = score >= passing;
+        const status = enrollment.firstName ? 'submitted' : 'draft';
+        await sequelize.query(
+          `UPDATE enrollment_records SET sscExamScore = ?, sscResult = ?, sscClass = ?, sscQualified = ?, sscChoiceMade = 1, status = ?, updatedAt = NOW() WHERE id = ?`,
+          { replacements: [score, passed ? 'passed' : 'failed', passed ? 'SSC' : 'Regular', passed ? 1 : 0, status, enrollment.id], transaction }
+        );
+        return { ...enrollment, sscExamScore: score, sscResult: passed ? 'passed' : 'failed', sscClass: passed ? 'SSC' : 'Regular', sscQualified: passed, sscChoiceMade: true, status };
+      });
+      let emailSent = false;
+      try {
+        const [[user]] = await sequelize.query('SELECT * FROM users WHERE id = ?', { replacements: [updated.userId] });
+        if (user) emailSent = await notify(user, updated) === true;
+      } catch { /* Saved results remain visible even if email is unavailable. */ }
+      const message = updated.sscResult === 'passed' ? 'Passed. The student can now complete the five-step SSC enrollment form.' : 'Did not pass. The student can continue with the Regular class enrollment form.';
+      res.json({ message: message + (emailSent ? ' Result email sent.' : ' Email could not be sent; the result is available in My Enrollments.'), sscResult: updated.sscResult, sscClass: updated.sscClass, emailSent, enrollment: updated });
+    } catch (error) { res.status(error.status || 500).json({ error: error.status ? error.message : 'Failed to record SSC result' }); }
+  };
+}
+export const recordSSCResult = createSSCResultHandler();
 
 // ── Evaluate TOR for college transferees ─────────────────────────────────────
 export const evaluateTOR = async (req, res) => {

@@ -1,3 +1,4 @@
+import { usePortalSlot } from '../../hooks/usePortalSlot';
 import { useEffect, useState, useMemo, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
@@ -7,8 +8,8 @@ import {
   Filter, Download, ChevronDown, AlertTriangle, ShieldCheck, Info,
   Coffee, Utensils
 } from "lucide-react";
-import { API, tok } from "./RegistrarShared";
-import { confirmAction } from "../../components/ConfirmModal";
+import { API, tok } from "./registrarConfig";
+import { confirmAction } from "../../utils/confirmAction";
 
 // 15-minute intervals from 7:30 AM to 5:30 PM (41 slot marks, 40 intervals)
 const TIME_SLOTS = [
@@ -56,7 +57,7 @@ export function SchedulesTab() {
   const [sections, setSections] = useState([]);
   const [teachers, setTeachers] = useState([]);
   const [schedules, setSchedules] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
   // Form states (matching image with user customizations)
@@ -100,32 +101,8 @@ export function SchedulesTab() {
   }, [sections, sectionFilter]);
 
   // Portal container for header stats
-  const [headerContainer, setHeaderContainer] = useState(null);
+  const headerContainer = usePortalSlot('registrar-header-slot', true, 'flex-1 flex items-center justify-end gap-2 flex-wrap ml-auto');
 
-  useEffect(() => {
-    const titleEl = document.querySelector("header h1");
-    const header = titleEl ? titleEl.closest("header") : document.querySelector("header");
-    if (!header) return;
-
-    let slot = header.querySelector("#registrar-header-slot");
-    let created = false;
-    if (!slot) {
-      slot = document.createElement("div");
-      slot.id = "registrar-header-slot";
-      slot.className = "flex-1 flex items-center justify-end gap-2 flex-wrap ml-auto";
-      header.appendChild(slot);
-      created = true;
-    } else {
-      slot.className = "flex-1 flex items-center justify-end gap-2 flex-wrap ml-auto";
-    }
-    setHeaderContainer(slot);
-
-    return () => {
-      if (created && slot && slot.parentNode) {
-        slot.parentNode.removeChild(slot);
-      }
-    };
-  }, []);
 
   // Fetch all saved data
   const loadAllData = useCallback(async () => {
@@ -186,7 +163,7 @@ export function SchedulesTab() {
         const d = await schedRes.json();
         setSchedules(Array.isArray(d) ? d : []);
       }
-    } catch (err) {
+    } catch  {
       toast.error("Failed to load scheduler data");
     } finally {
       setLoading(false);

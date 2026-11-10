@@ -1,6 +1,6 @@
 import { User, Mail, ShieldCheck } from "lucide-react";
 import { useNavigate } from "react-router";
-import { useAuth } from "../../contexts/AuthContext";
+import { useAuth } from "../../contexts/authState";
 import { Navbar } from "../../components/Navbar";
 
 export function AdminProfile() {

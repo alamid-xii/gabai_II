@@ -1,7 +1,9 @@
-﻿import { EnrollmentRecord } from '../models/enrollmentRecordModel.js';
+import { Op } from 'sequelize';
+import { enrollmentTrack, gradeNumber } from '../services/academicScope.js';
+import { moveToSection } from '../services/sectionAssignment.js';
+import { EnrollmentRecord } from '../models/enrollmentRecordModel.js';
 import { EnrollmentSubject } from '../models/enrollmentSubjectModel.js';
 import { Subject } from '../models/subjectModel.js';
-import { sequelize } from '../models/db.js';
 
 /**
  * Get available subjects for a student based on their enrollment
@@ -17,35 +19,16 @@ export const getAvailableSubjects = async (req, res) => {
     }
     
     // Check authorization
-    if (req.user.role !== 'admin' && enrollment.userId !== req.user.id) {
+    if (!['admin', 'registrar'].includes(req.user.role) && Number(enrollment.userId) !== Number(req.user.id)) {
       return res.status(403).json({ message: 'Not authorized' });
     }
     
-    let subjects = [];
-    
-    if (enrollment.educationLevel === 'SHS') {
-      // SHS: auto-load based on strand and grade level
-      const gradeLevel = enrollment.gradeLevel === 'Grade 11' ? 11 : 12;
-      subjects = await Subject.findAll({
-        where: {
-          programCode: 'SHS',
-          strand: enrollment.strand,
-          gradeLevel: gradeLevel,
-          semester: '1st'
-        }
-      });
-    } else if (enrollment.educationLevel === 'JHS') {
-      // JHS: load based on grade level
-      const gradeLevel = parseInt((enrollment.gradeLevel || '').replace(/\D/g, ''));
-      subjects = await Subject.findAll({
-        where: {
-          programCode: 'JHS',
-          gradeLevel: isNaN(gradeLevel) ? 7 : gradeLevel,
-          semester: '1st'
-        }
-      });
-    }
-    
+    const subjects = await Subject.findAll({ where: {
+      isActive: true, programCode: enrollment.educationLevel,
+      gradeLevel: gradeNumber(enrollment.gradeLevel), semester: '1st',
+      [Op.or]: [{ strand: enrollmentTrack(enrollment) }, { strand: null }, { strand: '' }],
+    } });
+
     res.json({
       enrollment: {
         id: enrollment.id,
@@ -74,86 +57,16 @@ export const getAvailableSubjects = async (req, res) => {
  */
 export const enrollSubjects = async (req, res) => {
   try {
-    const { id } = req.params;
-    const { subjectIds } = req.body;
-    
-    const enrollment = await EnrollmentRecord.findByPk(id);
-    if (!enrollment) {
-      return res.status(404).json({ message: 'Enrollment not found' });
-    }
-    
-    // Check authorization
-    if (req.user.role !== 'admin' && enrollment.userId !== req.user.id) {
-      return res.status(403).json({ message: 'Not authorized' });
-    }
-    
-    // Check if already enrolled in subjects
-    const existingCount = await EnrollmentSubject.count({ where: { enrollmentId: id } });
-    if (existingCount > 0) {
-      return res.status(400).json({ message: 'Student already enrolled in subjects' });
-    }
-    
-    let subjectsToEnroll = [];
-    
-    if (enrollment.studentStatus === 'irregular' && subjectIds && Array.isArray(subjectIds)) {
-      // Irregular: use provided subject IDs
-      subjectsToEnroll = await Subject.findAll({
-        where: { id: subjectIds }
-      });
-    } else {
-      // Regular: auto-enroll all available subjects
-      if (enrollment.educationLevel === 'SHS') {
-        const gradeLevel = enrollment.gradeLevel === 'Grade 11' ? 11 : 12;
-        subjectsToEnroll = await Subject.findAll({
-          where: {
-            programCode: 'SHS',
-            strand: enrollment.strand,
-            gradeLevel: gradeLevel,
-            semester: '1st'
-          }
-        });
-      } else if (enrollment.educationLevel === 'JHS') {
-        const gradeLevel = parseInt((enrollment.gradeLevel || '').replace(/\D/g, ''));
-        subjectsToEnroll = await Subject.findAll({
-          where: {
-            programCode: 'JHS',
-            gradeLevel: isNaN(gradeLevel) ? 7 : gradeLevel,
-            semester: '1st'
-          }
-        });
-      }
-    }
-    
-    if (subjectsToEnroll.length === 0) {
-      return res.status(400).json({ message: 'No subjects to enroll' });
-    }
-    
-    // Create enrollment subject records
-    const enrollmentSubjects = subjectsToEnroll.map(subject => ({
-      enrollmentId: id,
-      subjectId: subject.id,
-      subjectCode: subject.code,
-      subjectDescription: subject.description,
-      units: subject.units,
-      status: 'enrolled'
-    }));
-    
-    await EnrollmentSubject.bulkCreate(enrollmentSubjects);
-    
-    const totalUnits = subjectsToEnroll.reduce((sum, s) => sum + parseFloat(s.units || 0), 0);
-    
-    res.json({
-      message: `Successfully enrolled in ${subjectsToEnroll.length} subjects`,
-      enrollmentId: id,
-      subjectsEnrolled: subjectsToEnroll.length,
-      totalUnits: totalUnits,
-      subjects: subjectsToEnroll.map(s => ({
-        id: s.id,
-        code: s.code,
-        description: s.description,
-        units: s.units
-      }))
-    });
+    if (!['admin', 'registrar'].includes(req.user.role)) return res.status(403).json({ message: 'Subjects are assigned by the registrar after approval.' });
+    const enrollment = await EnrollmentRecord.findByPk(req.params.id);
+    if (!enrollment) return res.status(404).json({ message: 'Enrollment not found' });
+    if (!['approved', 'subjects_enrolled', 'enrolled', 'active'].includes(enrollment.status)) return res.status(409).json({ message: 'Approve the enrollment before assigning subjects.' });
+    if (!enrollment.sectionId) return res.status(409).json({ message: 'Assign a compatible section before enrolling subjects.' });
+    const result = await moveToSection(Number(enrollment.id), Number(enrollment.sectionId));
+    if (!result.success) return res.status(400).json({ message: result.reason });
+    const subjects = await EnrollmentSubject.findAll({ where: { enrollmentId: enrollment.id } });
+    res.json({ message: 'Curriculum subjects assigned.', enrollmentId: enrollment.id, subjectsEnrolled: subjects.length,
+      totalUnits: subjects.reduce((sum, subject) => sum + Number(subject.units || 0), 0) });
   } catch (error) {
     console.error('Enroll subjects error:', error);
     res.status(500).json({ message: 'Failed to enroll in subjects' });
@@ -174,7 +87,7 @@ export const getEnrolledSubjects = async (req, res) => {
     }
     
     // Check authorization
-    if (req.user.role !== 'admin' && enrollment.userId !== req.user.id) {
+    if (!['admin', 'registrar'].includes(req.user.role) && Number(enrollment.userId) !== Number(req.user.id)) {
       return res.status(403).json({ message: 'Not authorized' });
     }
     
@@ -222,43 +135,9 @@ export const getEnrolledSubjects = async (req, res) => {
  * Body: { sectionId, sectionName, schedule, instructor, room }
  */
 export const assignSection = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { sectionId, sectionName, schedule, instructor, room } = req.body;
-    
-    const enrollment = await EnrollmentRecord.findByPk(id);
-    if (!enrollment) {
-      return res.status(404).json({ message: 'Enrollment not found' });
-    }
-    
-    // Update all enrolled subjects with section info
-    const updated = await EnrollmentSubject.update(
-      {
-        sectionId: sectionId || null,
-        sectionName: sectionName || null,
-        schedule: schedule || null,
-        instructor: instructor || null,
-        room: room || null
-      },
-      { where: { enrollmentId: id } }
-    );
-    
-    res.json({
-      message: `Section assigned to ${updated[0]} subjects`,
-      enrollmentId: id,
-      subjectsUpdated: updated[0],
-      sectionInfo: {
-        sectionId,
-        sectionName,
-        schedule,
-        instructor,
-        room
-      }
-    });
-  } catch (error) {
-    console.error('Assign section error:', error);
-    res.status(500).json({ message: 'Failed to assign section' });
-  }
+  const result = await moveToSection(Number(req.params.id), Number(req.body.sectionId));
+  if (!result.success) return res.status(400).json({ message: result.reason });
+  res.json({ message: 'Section assigned.', enrollmentId: Number(req.params.id), sectionInfo: result.section });
 };
 
 /**
@@ -274,6 +153,8 @@ export const getTotalUnits = async (req, res) => {
       return res.status(404).json({ message: 'Enrollment not found' });
     }
     
+    if (!['admin', 'registrar'].includes(req.user.role) && Number(enrollment.userId) !== Number(req.user.id)) return res.status(403).json({ message: 'Not authorized' });
+
     const enrolledSubjects = await EnrollmentSubject.findAll({
       where: { enrollmentId: id }
     });

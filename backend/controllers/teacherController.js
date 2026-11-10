@@ -1,3 +1,4 @@
+import { isValidPassword, normalizeAccountEmail, PASSWORD_POLICY_MESSAGE } from "../services/accountValidation.js";
 import { sequelize } from '../models/db.js';
 
 /**
@@ -103,7 +104,7 @@ export const createUser = async (req, res) => {
   try {
     const { name, email, password, role, department } = req.body;
 
-    if (!name?.trim() || !email?.trim() || !password || !role) {
+    if (typeof name !== 'string' || !name.trim() || !normalizeAccountEmail(email) || !password || !role) {
       return res.status(400).json({ error: 'Name, email, password, and role are required' });
     }
 
@@ -116,8 +117,8 @@ export const createUser = async (req, res) => {
       return res.status(400).json({ error: 'Invalid email format' });
     }
 
-    if (password.length < 8) {
-      return res.status(400).json({ error: 'Password must be at least 8 characters' });
+    if (!isValidPassword(password)) {
+      return res.status(400).json({ error: PASSWORD_POLICY_MESSAGE });
     }
 
     // Check duplicate email

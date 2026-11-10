@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router";
 import {
   FileText, Search, RefreshCw, X, Eye, ChevronLeft, ChevronRight
@@ -20,7 +20,6 @@ export function AdminEnrollmentsView() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
-  const tok = () => ({ Authorization: `Bearer ${localStorage.getItem('token')}`, 'Content-Type': 'application/json' });
 
   // Load school years once
   useEffect(() => {
@@ -36,23 +35,22 @@ export function AdminEnrollmentsView() {
       .catch(() => {});
   }, []);
 
-  async function loadEnrollments() {
-    setLoading(true);
+  const loadEnrollments = useCallback(async () => {
     try {
       const params = new URLSearchParams();
       if (yearFilter) params.set('academicYear', yearFilter);
-      const res = await fetch(`${API}/admin/enrollments?${params}`, { headers: tok() });
+      const res = await fetch(`${API}/admin/enrollments?${params}`, { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } });
       if (!res.ok) throw new Error('Failed to load');
       const data = await res.json();
       setEnrollments(Array.isArray(data) ? data : []);
-    } catch (err) {
+    } catch  {
       toast.error('Failed to load enrollments');
     } finally {
       setLoading(false);
     }
-  }
+  }, [yearFilter]);
 
-  useEffect(() => { loadEnrollments(); }, [yearFilter]);
+  useEffect(() => { loadEnrollments(); }, [loadEnrollments]);
 
   const filtered = useMemo(() => {
     return enrollments.filter(e => {

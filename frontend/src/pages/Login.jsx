@@ -5,7 +5,7 @@ import { Eye, EyeOff, LogIn, Mail, Lock, AlertCircle, Loader2, CheckCircle } fro
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
-import { useAuth } from "../contexts/AuthContext";
+import { useAuth } from "../contexts/authState";
 import { API } from "../config/api";
 
 export function Login() {

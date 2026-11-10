@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import { BookOpen, CheckCircle, AlertCircle, Loader } from 'lucide-react';
@@ -18,13 +18,8 @@ export function SubjectSelection() {
   const [totalUnits, setTotalUnits] = useState(0);
   const [maxUnits, setMaxUnits] = useState(24);
 
-  useEffect(() => {
-    loadSubjects();
-  }, [id]);
-
-  const loadSubjects = async () => {
+  const loadSubjects = useCallback(async () => {
     try {
-      setLoading(true);
       
       // Get available subjects
       const res = await fetch(`${API}/enrollments/${id}/available-subjects`, {
@@ -58,7 +53,9 @@ export function SubjectSelection() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [id]);
+
+  useEffect(() => { loadSubjects(); }, [loadSubjects]);
 
   const handleSubjectToggle = (subjectId, units) => {
     const newSelected = new Set(selectedSubjects);
@@ -142,7 +139,7 @@ export function SubjectSelection() {
   // Regular = auto subjects, no manual selection
   // Irregular OR transferee = manual selection
   const isManualSelection = enrollment.studentStatus === 'irregular' || enrollment.enrollmentType === 'transferee';
-  const isRegular = !isManualSelection;
+  
 
   const enrollmentTypeLabel = enrollment.educationLevel === 'SHS'
     ? `${enrollment.gradeLevel} - ${enrollment.strand}`

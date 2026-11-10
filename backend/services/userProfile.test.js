@@ -56,3 +56,9 @@ test('display-name edits remain available to legacy accounts but cannot desynchr
   assert.throws(() => profileUpdates({ name: 'Other Name' }, { firstName: 'Maria' }), error => error.status === 400);
   assert.throws(() => profileUpdates({ name: 'Other Name' }, { authProvider: 'google', profileCompleted: false }), error => error.status === 400);
 });
+
+test('account names accept initials and customary suffixes without allowing punctuation-only names', () => {
+  const updates = profileUpdates({ ...valid, firstName: 'Ma. Elena', middleName: 'D.', lastName: 'Santos Jr.' });
+  assert.equal(updates.name, 'Ma. Elena D. Santos Jr.');
+  assert.throws(() => profileUpdates({ ...valid, firstName: '...' }), error => error.status === 400);
+});

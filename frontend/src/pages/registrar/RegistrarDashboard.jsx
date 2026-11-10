@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { RefreshCw } from "lucide-react";
 import { Navbar } from "../../components/Navbar";
-import { useAuth } from "../../contexts/AuthContext";
+import { useAuth } from "../../contexts/authState";
 import { EnrollmentsTab } from "./RegistrarEnrollments";
 import { OverviewTab } from "./RegistrarOverview";
 import { SectionsTab } from "./RegistrarSections";
@@ -14,7 +14,7 @@ const TAB_LABELS = {
   overview: "Registrar Dashboard",
   enrollments: "Enrollments",
   students: "Students",
-  ssc: "SSC Scheduling",
+  ssc: "SSC Admission",
   schedules: "Schedules",
   sections: "Sections",
 };

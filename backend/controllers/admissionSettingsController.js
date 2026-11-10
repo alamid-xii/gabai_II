@@ -1,3 +1,4 @@
+import { validateFamilyContact } from "../services/familyContact.js";
 import { AdmissionSettings } from '../models/admissionSettingsModel.js';
 import { EnrollmentRecord } from '../models/enrollmentRecordModel.js';
 import { EnrollmentDocument } from '../models/enrollmentDocumentModel.js';
@@ -40,7 +41,9 @@ return async function submitApplication(req, res) {
         throw Object.assign(Error('This application cannot be submitted in its current status.'), { status: 409 });
       }
       const { policy, revision } = await policyFor(enrollment);
-      for (const key of ['familyName', 'firstName', 'sex', 'dateOfBirth']) if (!enrollment[key]) throw Object.assign(Error('Complete the required personal information before submitting.'), { status: 400 });
+      for (const key of ['familyName', 'firstName', 'sex', 'dateOfBirth', 'placeOfBirth', 'lrn']) if (!enrollment[key]) throw Object.assign(Error('Complete the required personal information before submitting.'), { status: 400 });
+      if (!/^\d{12}$/.test(enrollment.lrn || '')) throw Object.assign(Error('LRN must be exactly 12 digits.'), { status: 400 });
+      validateFamilyContact(enrollment);
       validateSelection(policy, enrollment, { sscPlaceholder: Boolean(enrollment.sscResult) });
       const docs = await EnrollmentDocument.findAll({ where: { enrollmentId: enrollment.id }, transaction });
       validateDocuments(policy, enrollment, docs);

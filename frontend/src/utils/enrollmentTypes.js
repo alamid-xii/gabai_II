@@ -7,23 +7,8 @@ export const ENROLLMENT_TYPE_LABELS = {
   returnee: "Returnee",
 };
 
-export const ENROLLMENT_TYPES_BY_GRADE = {
-  "Grade 7": ["new", "transferee"],
-  "Grade 8": ["old", "transferee", "returnee"],
-  "Grade 9": ["old", "transferee", "returnee"],
-  "Grade 10": ["old", "transferee", "returnee"],
-  "Grade 11": ["new", "old", "transferee"],
-  "Grade 12": ["old", "transferee", "returnee"],
-};
-
-export const GRADES_BY_LEVEL = {
-  JHS: ["Grade 7", "Grade 8", "Grade 9", "Grade 10"],
-  SHS: ["Grade 11", "Grade 12"],
-};
-
-export function allowedEnrollmentTypes(gradeLevel) {
-  return ENROLLMENT_TYPES_BY_GRADE[gradeLevel] || [];
-}
+import { allowedEnrollmentTypes } from '../../../shared/enrollmentRules.mjs';
+export { ENROLLMENT_TYPES_BY_GRADE, GRADES_BY_LEVEL, allowedEnrollmentTypes } from '../../../shared/enrollmentRules.mjs';
 
 // Keeps the chosen type if it is valid for the grade; otherwise falls back to the grade's first allowed type.
 export function normalizeEnrollmentType(gradeLevel, enrollmentType) {

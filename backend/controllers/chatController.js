@@ -4,8 +4,9 @@ import dotenv from 'dotenv';
 import { ChatLog } from '../models/chatLogModel.js';
 import { FAQ } from '../models/faqModel.js';
 import { retrieve } from '../services/chatRetrieval.js';
+import { prefersFilipino } from '../services/chatLanguage.js';
 import { validateChat, guardInput, safeOutput, UNKNOWN, SYSTEM_RULES } from '../services/chatGuardrails.js';
-dotenv.config();
+dotenv.config({ quiet: true });
 let client;
 
 export async function sendMessage(req, res) {
@@ -21,8 +22,10 @@ export async function sendMessage(req, res) {
   let suggestedQuestions = [];
   let mode = 'guardrail';
   try {
-    if (!response && /^(hi|hello|hey|kumusta|kamusta|good morning|good afternoon)[!.? ]*$/i.test(message)) {
-      response = "Hello! I'm GabAI, your school admissions assistant. Ask me about enrollment, requirements, programs, or campus facilities. Please avoid sharing personal information.";
+    if (!response && /^(hi|hello|hey|kumusta|kamusta|magandang umaga|magandang hapon|magandang gabi|good morning|good afternoon)( po)?[!.? ]*$/i.test(message)) {
+      response = /kumusta|kamusta|magandang/i.test(message)
+        ? 'Kumusta! Ako si GabAI, ang inyong katuwang sa pag-enroll. Maaari kayong magtanong tungkol sa enrollment, mga kailangan, programa, o pasilidad ng paaralan. Iwasang magbahagi ng personal na impormasyon.'
+        : "Hello! I'm GabAI, your school admissions assistant. Ask me about enrollment, requirements, programs, or campus facilities. Please avoid sharing personal information.";
       mode = 'greeting';
     }
     if (!response) {
@@ -51,7 +54,7 @@ export async function sendMessage(req, res) {
       suggestedQuestions = topFAQs.slice(1, 4).map(({ faq }) => faq.question);
       // Exact local answers work without a provider. Synthesize broader questions
       // and active records when a provider is available, retaining local fallback.
-      if (process.env.GROQ_API_KEY && (bestMatch || liveContext) && (bestMatch?.faq.source !== 'portal' || liveContext || compound || bestMatch.score < 0.75)) {
+      if (process.env.GROQ_API_KEY && (bestMatch || liveContext) && (prefersFilipino(message) || bestMatch?.faq.source !== 'portal' || liveContext || compound || bestMatch.score < 0.75)) {
         try {
           client ||= new Groq({ apiKey: process.env.GROQ_API_KEY, timeout: 15000, maxRetries: 0 });
           const completion = await client.chat.completions.create({

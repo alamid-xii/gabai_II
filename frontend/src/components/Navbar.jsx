@@ -1,8 +1,8 @@
 import { SchoolName } from "./SchoolName";
 import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
-import { MapPin, Menu, X, ArrowRight, LogIn, LogOut, User, ChevronDown, BookOpen, ClipboardList, GraduationCap, LayoutDashboard, Calendar, Users, BarChart3, FileText, Archive, MessageSquare, Building2, Settings, Clock, Activity } from "lucide-react";
-import { useAuth } from "../contexts/AuthContext";
+import { Menu, X, ArrowRight, LogIn, LogOut, User, ChevronDown, BookOpen, ClipboardList, GraduationCap, LayoutDashboard, Calendar, Users, BarChart3, FileText, Archive, MessageSquare, Building2, Settings, Clock, Activity } from "lucide-react";
+import { useAuth } from "../contexts/authState";
 
 const navLinks = [
   { label: "Home", to: "/" },
@@ -38,7 +38,7 @@ function TeacherNavbar({ activeView, onViewChange }) {
   const [open, setOpen] = useState(false);
   const { user, logout } = useAuth();
   const location = useLocation();
-  const navigate = useNavigate();
+  
   const isProfileActive = location.pathname === getProfileLink(user?.role);
   const viewButtons = [
     { id: "sections", label: "My Sections", icon: BookOpen },
@@ -105,13 +105,13 @@ function RegistrarNavbar({ activeTab, onTabChange }) {
   const [open, setOpen] = useState(false);
   const { user, logout } = useAuth();
   const location = useLocation();
-  const navigate = useNavigate();
+  
   const isProfileActive = location.pathname === getProfileLink(user?.role);
   const navItems = [
     { id: "overview", label: "Overview", icon: LayoutDashboard },
     { id: "enrollments", label: "Enrollments", icon: ClipboardList },
     { id: "students", label: "Students", icon: Users },
-    { id: "ssc", label: "SSC Scheduling", icon: Calendar },
+    { id: "ssc", label: "SSC Admission", icon: Calendar },
     { id: "schedules", label: "Schedules", icon: Clock },
     { id: "sections", label: "Sections", icon: BookOpen },
   ];
@@ -320,11 +320,14 @@ export function Navbar({ variant = "public", activeView, onViewChange, activeTab
   if (variant === "teacher") return <TeacherNavbar activeView={activeView} onViewChange={onViewChange} />;
   if (variant === "registrar") return <RegistrarNavbar activeTab={activeTab} onTabChange={onTabChange} />;
   if (variant === "admin") return <AdminNavbar activeTab={activeTab} onTabChange={onTabChange} />;
+  return <PublicNavbar />;
+}
 
+function PublicNavbar() {
   const [open, setOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const location = useLocation();
-  const navigate = useNavigate();
+  
   const { user, isLoggedIn, logout } = useAuth();
 
   function handleLogout() {

@@ -27,7 +27,7 @@ export const router = createBrowserRouter([
   { path: "/reset-password", Component: () => <PasswordRecovery reset /> },
   { path: "/signup", Component: SignUp },
   { path: "/admin", Component: AdminDashboard },
-  { path: "/registrar", Component: RegistrarOverview },
+  { path: "/registrar", Component: RegistrarDashboard },
   { path: "/registrar/enrollments", Component: () => <RegistrarDashboard initialTab="enrollments" /> },
   { path: "/registrar/students", Component: () => <RegistrarDashboard initialTab="students" /> },
   { path: "/registrar/scheduling", Component: () => <RegistrarDashboard initialTab="ssc" /> },

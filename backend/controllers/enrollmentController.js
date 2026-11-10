@@ -1,4 +1,4 @@
-import { currentAdmission, policyFor, validateSelection } from "../services/admissionPolicy.js";
+import { currentAdmission, policyFor, validateSelection, validateBirthDate, sscContinuationEligibility } from "../services/admissionPolicy.js";
 import { needsProfileCompletion, serializeUser } from "../services/userProfile.js";
 /*
 MIT License
@@ -30,118 +30,29 @@ import { EnrollmentSubject } from "../models/enrollmentSubjectModel.js";
 import { EnrollmentDocument } from "../models/enrollmentDocumentModel.js";
 import { User } from "../models/userModel.js";
 import { sequelize } from "../models/db.js";
-import jwt from "jsonwebtoken";
+import { authenticateRequest } from "../services/authentication.js";
+import { assertEnrollmentEditable } from "../services/enrollmentEditing.js";
 import { generateEnrollmentPDF, formatEnrollmentData } from "../services/pdfGenerator.js";
 
 try { await sequelize.authenticate(); } catch (err) { console.warn("DB unavailable at import (enrollmentController):", err.message); }
 
-const JWT_SECRET = process.env.JWT_SECRET || "emc-secret-key-2025";
-
-// Authentication Middleware
-
-/**
- * Middleware to verify JWT token and authenticate user
- * Requirements: 20.3
- */
+// All enrollment routes share active-account and credential revocation checks.
 export const requireAuth = async (req, res, next) => {
   try {
-    // Check for JWT token in Authorization header
-    const authHeader = req.headers.authorization;
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      const token = authHeader.substring(7);
-
-      try {
-        const decoded = jwt.verify(token, JWT_SECRET);
-        const user = await User.findByPk(decoded.id);
-
-        if (!user) {
-          return res.status(401).json({ message: 'User not found' });
-        }
-
-        if (user.isActive === false || user.isActive === 0 || user.isActive === '0') {
-          return res.status(403).json({ message: 'Your account has been suspended or deactivated. Please contact an administrator.', isSuspended: true });
-        }
-
-        if (needsProfileCompletion(user)) {
-          return res.status(403).json({ message: 'Complete your profile before continuing.', needsProfileCompletion: true });
-        }
-
-        req.user = user;
-        return next();
-      } catch (jwtError) {
-        return res.status(401).json({ message: 'Invalid or expired token' });
-      }
-    }
-
-    // Fallback to session-based auth
-    if (!req.session.userId) {
-      return res.status(401).json({ message: 'Authentication required' });
-    }
-
-    const user = await User.findByPk(req.session.userId);
-    if (!user) {
-      return res.status(401).json({ message: 'User not found' });
-    }
-
-    if (user.isActive === false || user.isActive === 0 || user.isActive === '0') {
-      return res.status(403).json({ message: 'Your account has been suspended or deactivated. Please contact an administrator.', isSuspended: true });
-    }
-
-    if (needsProfileCompletion(user)) {
-      return res.status(403).json({ message: 'Complete your profile before continuing.', needsProfileCompletion: true });
-    }
-
+    const user = await authenticateRequest(req, { allowSession: true });
+    if (needsProfileCompletion(user)) return res.status(403).json({ message: 'Complete your profile before continuing.', needsProfileCompletion: true });
     req.user = user;
-    next();
-  } catch (err) {
-    console.error("Auth error:", err);
-    res.status(500).json({ message: 'Authentication error' });
+    return next();
+  } catch (error) {
+    if (!error.status) console.error('Enrollment authentication error:', error);
+    return res.status(error.status || 500).json({ message: error.status ? error.message : 'Authentication error', ...(error.isSuspended ? { isSuspended: true } : {}) });
   }
 };
 
-/**
- * Middleware to check admin role
- * Requirements: 16.1, 18.2
- */
-export const requireAdmin = async (req, res, next) => {
-  try {
-    // Check for JWT token in Authorization header
-    const authHeader = req.headers.authorization;
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      const token = authHeader.substring(7);
-
-      try {
-        const decoded = jwt.verify(token, JWT_SECRET);
-        const user = await User.findByPk(decoded.id);
-
-        if (!user || user.role !== 'admin') {
-          return res.status(403).json({ message: 'Admin access required' });
-        }
-
-        req.user = user;
-        return next();
-      } catch (jwtError) {
-        return res.status(401).json({ message: 'Invalid or expired token' });
-      }
-    }
-
-    // Fallback to session-based auth
-    if (!req.session.userId) {
-      return res.status(401).json({ message: 'Authentication required' });
-    }
-
-    const user = await User.findByPk(req.session.userId);
-    if (!user || user.role !== 'admin') {
-      return res.status(403).json({ message: 'Admin access required' });
-    }
-
-    req.user = user;
-    next();
-  } catch (err) {
-    console.error("Auth error:", err);
-    res.status(500).json({ message: 'Authentication error' });
-  }
-};
+export const requireAdmin = async (req, res, next) => requireAuth(req, res, () => {
+  if (req.user.role !== 'admin') return res.status(403).json({ message: 'Admin access required' });
+  return next();
+});
 
 // Validation Middleware
 
@@ -258,10 +169,7 @@ export const computeEnrollmentGradesSummary = async (enrollmentId) => {
       return { computedGwa: null, gradesComplete: false, hasFailedSubject: false, totalSubjects: 0, completedSubjects: 0 };
     }
     const processed = list.map(g => {
-      const isFourTerms = g.q4 !== null && g.q4 !== undefined && g.q4 !== '';
-      const isComplete = isFourTerms
-        ? (g.q1 != null && g.q1 !== '' && g.q2 != null && g.q2 !== '' && g.q3 != null && g.q3 !== '' && g.q4 != null && g.q4 !== '')
-        : (g.q1 != null && g.q1 !== '' && g.q2 != null && g.q2 !== '' && g.q3 != null && g.q3 !== '');
+      const isComplete = g.finalGrade != null && g.finalGrade !== '';
       const numFinal = g.finalGrade != null && g.finalGrade !== '' ? parseFloat(g.finalGrade) : null;
       return {
         isComplete: Boolean(isComplete && Number.isFinite(numFinal)),
@@ -321,13 +229,10 @@ export const createEnrollment = async (req, res) => {
         : { computedGwa: null, gradesComplete: false, hasFailedSubject: false };
 
       if (gradeSummary.gradesComplete && gradeSummary.computedGwa !== null) {
-        if (gradeSummary.computedGwa < maintainingAverage || gradeSummary.hasFailedSubject) {
+        if (!sscContinuationEligibility(gradeSummary, policy)) {
           return res.status(400).json({
-            message: gradeSummary.hasFailedSubject
-              ? `Your previous record has a failing subject grade (GWA: ${gradeSummary.computedGwa}). You did not meet the SSC maintaining grade requirement (${maintainingAverage}) and are only eligible to enroll in the Regular Class.`
-              : `Your previous General Average (${gradeSummary.computedGwa}) did not meet the SSC maintaining grade of ${maintainingAverage}. You are only eligible to enroll in the Regular Class.`,
+            message: 'Your previous academic record does not meet SSC eligibility. Please contact the registrar.',
             sscDisqualified: true,
-            computedGwa: gradeSummary.computedGwa,
             maintainingAverage,
           });
         }
@@ -366,7 +271,7 @@ export const createEnrollment = async (req, res) => {
 
     // Allow if the only existing record for this year is an SSC-only placeholder (no firstName yet)
     const [existing] = await sequelize.query(
-      `SELECT id, status, firstName, sscApplied, academicYear, lifeStatus, admissionPolicy, admissionRevision
+      `SELECT id, status, firstName, sscApplied, sscResult, academicYear, lifeStatus, admissionPolicy, admissionRevision
        FROM enrollment_records
        WHERE userId = ?
          AND status NOT IN ('rejected', 'completed')
@@ -387,11 +292,12 @@ export const createEnrollment = async (req, res) => {
       }
       // If it's an SSC placeholder (sscApplied=1 and no name filled), update it with full form data
       if (existingRecord.sscApplied && !existingRecord.firstName) {
+        if (!existingRecord.sscResult) return res.status(409).json({ message: 'Wait for your SSC exam result before completing the enrollment form.' });
         validateSelection(policy, { ...body, sscApplied: false });
         body.admissionPolicy = policy; body.admissionRevision = revision;
         const safeFields = ['admissionPolicy','admissionRevision','educationLevel','gradeLevel','strand','studentType','academicYear','dateEnrolled',
           'lrn','familyName','firstName','middleName','sex','dateOfBirth','placeOfBirth',
-          'fatherName','fatherOccupation','motherName','motherOccupation','parentsAddress',
+          'fatherMobileNumber','motherMobileNumber','fatherName','fatherOccupation','motherName','motherOccupation','parentsAddress',
           'guardianName','guardianOccupation','guardianAddress','guardianTelephone',
           'grade6School','grade6SchoolAddress','grade6Section','grade6SYStart','grade6SYEnd',
           'grade6Average','grade6Remarks','lastHSSchool','lastHSCurriculumYear','lastHSSection',
@@ -799,12 +705,7 @@ export const updateEnrollment = async (req, res) => {
       return res.status(403).json({ message: 'You do not have permission to update this enrollment' });
     }
 
-    // Allow editing when: draft, submitted, returned, OR it's an SSC placeholder (sscApplied but no firstName yet)
-    const isSSCPlaceholder = enrollment.sscApplied && !enrollment.firstName;
-    const editableStatuses = ['draft', 'submitted', 'returned'];
-    if (!editableStatuses.includes(enrollment.status) && !isSSCPlaceholder) {
-      return res.status(400).json({ message: `Enrollment cannot be edited with status: ${enrollment.status}` });
-    }
+    assertEnrollmentEditable(enrollment);
 
     // Explicit whitelist — never allow status, userId, ssc results, or section fields
     const ALLOWED = [
@@ -812,7 +713,7 @@ export const updateEnrollment = async (req, res) => {
       'academicYear', 'dateEnrolled', 'lrn',
       'familyName', 'firstName', 'middleName', 'sex', 'dateOfBirth', 'placeOfBirth',
       'email', 'mobileNumber',
-      'fatherName', 'fatherOccupation', 'fatherAddress',
+      'fatherMobileNumber', 'motherMobileNumber', 'fatherName', 'fatherOccupation', 'fatherAddress',
       'motherName', 'motherOccupation', 'motherAddress',
       'guardianName', 'guardianOccupation', 'guardianAddress', 'guardianTelephone',
       'parentsAddress',
@@ -833,7 +734,7 @@ export const updateEnrollment = async (req, res) => {
 
     const { policy, revision } = await policyFor(enrollment);
     validateSelection(policy, { ...enrollment.toJSON(), ...updateData }, { sscPlaceholder: Boolean(enrollment.sscApplied && enrollment.sscResult) });
-    updateData.status = 'draft';
+    updateData.status = enrollment.status === 'returned' ? 'returned' : 'draft';
     updateData.admissionPolicy = policy;
     updateData.admissionRevision = revision;
 
@@ -911,15 +812,17 @@ export const getUserEnrollments = async (req, res) => {
       order: [['createdAt', 'DESC']]
     });
 
+    const { policy } = await currentAdmission();
     const enriched = await Promise.all(
       enrollments.map(async (enrollment) => {
         const plain = typeof enrollment.toJSON === 'function' ? enrollment.toJSON() : { ...enrollment };
         const summary = await computeEnrollmentGradesSummary(plain.id);
         return {
           ...plain,
-          computedGwa: summary.computedGwa,
+          computedGwa: req.user.role === 'student' ? undefined : summary.computedGwa,
           gradesComplete: summary.gradesComplete,
-          hasFailedSubject: summary.hasFailedSubject,
+          sscEligible: sscContinuationEligibility(summary, policy),
+          hasFailedSubject: req.user.role === 'student' ? undefined : summary.hasFailedSubject,
         };
       })
     );
@@ -1045,8 +948,7 @@ export const downloadEnrollmentPDF = async (req, res) => {
 /**
  * Update Student Profile Sections (Step 2 Personal Info & Step 3 Family/Guardian Info)
  * PUT /api/enrollments/:id/profile-sections
- * Allows continuing/enrolled students to update their personal and family details
- * from the Student Profile page without resetting their enrollment status.
+ * Updates editable application details only; submitted enrollment snapshots stay locked.
  */
 export const updateStudentProfileSections = async (req, res) => {
   try {
@@ -1059,10 +961,12 @@ export const updateStudentProfileSections = async (req, res) => {
       return res.status(403).json({ message: 'You can only update your own profile sections' });
     }
 
+    assertEnrollmentEditable(enrollment);
+
     const PERSONAL_AND_FAMILY_FIELDS = [
       'familyName', 'firstName', 'middleName', 'lrn', 'sex', 'dateOfBirth', 'placeOfBirth',
       'mobileNumber',
-      'fatherName', 'fatherOccupation', 'fatherAddress',
+      'fatherMobileNumber', 'motherMobileNumber', 'fatherName', 'fatherOccupation', 'fatherAddress',
       'motherName', 'motherOccupation', 'motherAddress',
       'parentsAddress',
       'guardianName', 'guardianOccupation', 'guardianAddress', 'guardianTelephone',
@@ -1100,6 +1004,8 @@ export const updateStudentProfileSections = async (req, res) => {
       return res.status(400).json({ message: 'Guardian telephone/mobile must be 11 digits starting with 09' });
     }
 
+    if (updates.dateOfBirth) validateBirthDate(updates.dateOfBirth);
+
     await enrollment.update(updates);
 
     // Sync updated personal info back to User account
@@ -1128,7 +1034,7 @@ export const updateStudentProfileSections = async (req, res) => {
       user: serializeUser(req.user),
     });
   } catch (error) {
-    console.error('Error updating student profile sections:', error);
-    res.status(500).json({ message: 'Failed to update profile details' });
+    if (!error.status) console.error('Error updating student profile sections:', error);
+    res.status(error.status || 500).json({ message: error.status ? error.message : 'Failed to update profile details' });
   }
 };

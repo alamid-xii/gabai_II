@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router';
 import { toast } from 'sonner';
 import { BookOpen, Clock, MapPin, User, Loader, AlertCircle, ArrowLeft, Award, CheckCircle, XCircle } from 'lucide-react';
 import { API } from '../../config/api';
-import { useAuth } from '../../contexts/AuthContext';
+import { useAuth } from '../../contexts/authState';
 
 const getToken = () => localStorage.getItem('token');
 
@@ -16,18 +16,11 @@ export function StudentDashboard() {
   const [enrollment, setEnrollment] = useState(null);
   const [enrolledSubjects, setEnrolledSubjects] = useState([]);
   const [adviserName, setAdviserName] = useState(null);
-  const [grades, setGrades] = useState([]);
-  const [gradesSummary, setGradesSummary] = useState(null);
 
   const [userEnrollments, setUserEnrollments] = useState([]);
 
-  useEffect(() => {
-    loadDashboard();
-  }, [id, user?.id]);
-
-  const loadDashboard = async () => {
+  const loadDashboard = useCallback(async () => {
     try {
-      setLoading(true);
 
       let targetId = id;
 
@@ -42,7 +35,7 @@ export function StudentDashboard() {
             list = await userEnrollRes.json();
             if (Array.isArray(list)) setUserEnrollments(list);
           }
-        } catch (_) { }
+        } catch { /* Optional summary information is unavailable. */ }
       }
 
       // If no id param is provided, resolve the student's active/latest enrollment
@@ -54,7 +47,7 @@ export function StudentDashboard() {
             const syData = await syRes.json();
             activeSY = syData?.year || null;
           }
-        } catch (_) { }
+        } catch { /* Optional summary information is unavailable. */ }
 
         // Prioritize active/enrolled in active school year
         const activeInSY = activeSY
@@ -92,24 +85,15 @@ export function StudentDashboard() {
         setEnrolledSubjects(subjectsData.subjects || []);
       }
 
-      // Get grades
-      try {
-        const gradesRes = await fetch(`${API}/enrollments/${targetId}/grades`, {
-          headers: { 'Authorization': `Bearer ${getToken()}` }
-        });
-        if (gradesRes.ok) {
-          const gradesData = await gradesRes.json();
-          setGrades(gradesData.grades || []);
-          setGradesSummary(gradesData.summary || null);
-        }
-      } catch (_) { } // grades are optional — don't fail the whole dashboard
     } catch (error) {
       console.error('Load dashboard error:', error);
       toast.error('Failed to load dashboard');
     } finally {
       setLoading(false);
     }
-  };
+  }, [id, user]);
+
+  useEffect(() => { loadDashboard(); }, [loadDashboard]);
 
   if (loading) {
     return (
@@ -153,11 +137,6 @@ export function StudentDashboard() {
     return `${enrollment.course || ''}${enrollment.major ? ` (${enrollment.major})` : ''}`;
   })();
 
-  const formatWholeGrade = (val) => {
-    if (val === null || val === undefined || val === '') return '—';
-    const num = parseFloat(val);
-    return isNaN(num) ? '—' : Math.round(num);
-  };
 
   return (
     <div className="min-h-[calc(100svh-4rem)] lg:min-h-[calc(100svh-5rem)] bg-linear-to-br from-[#FFFDF0] via-[#FFF9E6] to-[#FFFDF0] py-4 sm:py-8">
@@ -373,166 +352,6 @@ export function StudentDashboard() {
           )}
         </div>
 
-        {/* ── Grades Section ── */}
-        <div className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden mt-6">
-          <div className="bg-[#FFFDF0] border-b border-gray-200 p-4 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <Award className="w-5 h-5 text-[#F5C400]" />
-              <h2 className="text-lg font-semibold text-[#001840]">
-                {enrollment.status === 'completed' ? 'Final Report & Grades' : 'My Grades'}
-              </h2>
-            </div>
-            {gradesSummary && gradesSummary.gwa !== null && (
-              <div className="text-right">
-                <p className="text-xs text-gray-500">General Weighted Average</p>
-                <p className={`text-xl font-bold ${parseFloat(gradesSummary.gwa) >= 75 ? 'text-emerald-600' : 'text-red-500'}`}>
-                  {formatWholeGrade(gradesSummary.gwa)}
-                </p>
-              </div>
-            )}
-          </div>
-
-          {grades.length === 0 ? (
-            <div className="p-8 text-center">
-              <Award className="w-10 h-10 text-gray-300 mx-auto mb-2" />
-              <p className="text-sm text-gray-500 font-medium">No official grades recorded yet for this school year.</p>
-              <p className="text-xs text-gray-400 mt-1">Grades will appear here once submitted and finalized by your teachers.</p>
-            </div>
-          ) : (
-            <>
-
-              {/* Mobile Cards for Grades (block md:hidden) */}
-              <div className="block md:hidden divide-y divide-gray-100">
-                {grades.map(g => {
-                  const hasAllTris = g.q1 !== null && g.q1 !== undefined && g.q1 !== '' &&
-                    g.q2 !== null && g.q2 !== undefined && g.q2 !== '' &&
-                    g.q3 !== null && g.q3 !== undefined && g.q3 !== '';
-                  const showFinal = hasAllTris && g.finalGrade !== null && g.finalGrade !== undefined && g.finalGrade !== '';
-
-                  return (
-                    <div key={g.id} className="p-4 space-y-3 hover:bg-[#FFFDF0] transition-colors">
-                      <div className="flex items-start justify-between gap-2">
-                        <div>
-                          <span className="font-mono text-xs font-bold text-[#102A71] bg-[#EEF2FF] border border-[#102A71]/20 px-2 py-0.5 rounded">
-                            {g.subjectCode}
-                          </span>
-                          <h4 className="text-sm font-bold text-gray-900 mt-1">
-                            {g.subjectDescription}
-                          </h4>
-                        </div>
-                        <div>
-                          {!showFinal || !g.remarks || g.remarks === 'Incomplete' ? (
-                            <span className="text-xs text-gray-400 italic">Incomplete</span>
-                          ) : g.remarks === 'Passed' ? (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-100 text-emerald-700 text-xs font-bold rounded-full">
-                              <CheckCircle className="w-3 h-3" /> Passed
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-red-100 text-red-600 text-xs font-bold rounded-full">
-                              <XCircle className="w-3 h-3" /> Failed
-                            </span>
-                          )}
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-4 gap-2 pt-2 border-t border-gray-100 text-center">
-                        <div className="bg-gray-50 p-2 rounded-lg">
-                          <p className="text-[10px] text-gray-500 uppercase font-semibold">1st Tri</p>
-                          <p className={`text-xs font-bold mt-0.5 ${g.q1 === null || g.q1 === undefined ? 'text-gray-300' : parseFloat(g.q1) >= 75 ? 'text-emerald-600' : 'text-red-500'}`}>
-                            {formatWholeGrade(g.q1)}
-                          </p>
-                        </div>
-                        <div className="bg-gray-50 p-2 rounded-lg">
-                          <p className="text-[10px] text-gray-500 uppercase font-semibold">2nd Tri</p>
-                          <p className={`text-xs font-bold mt-0.5 ${g.q2 === null || g.q2 === undefined ? 'text-gray-300' : parseFloat(g.q2) >= 75 ? 'text-emerald-600' : 'text-red-500'}`}>
-                            {formatWholeGrade(g.q2)}
-                          </p>
-                        </div>
-                        <div className="bg-gray-50 p-2 rounded-lg">
-                          <p className="text-[10px] text-gray-500 uppercase font-semibold">3rd Tri</p>
-                          <p className={`text-xs font-bold mt-0.5 ${g.q3 === null || g.q3 === undefined ? 'text-gray-300' : parseFloat(g.q3) >= 75 ? 'text-emerald-600' : 'text-red-500'}`}>
-                            {formatWholeGrade(g.q3)}
-                          </p>
-                        </div>
-                        <div className="bg-blue-50/70 border border-blue-100 p-2 rounded-lg">
-                          <p className="text-[10px] text-[#102A71] uppercase font-bold">Final</p>
-                          <p className={`text-xs font-extrabold mt-0.5 ${!showFinal ? 'text-gray-300' : parseFloat(g.finalGrade) >= 75 ? 'text-emerald-700' : 'text-red-600'}`}>
-                            {showFinal ? formatWholeGrade(g.finalGrade) : '—'}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-
-              {/* Desktop Table for Grades (hidden md:block) */}
-              <div className="hidden md:block overflow-x-auto">
-                <table className="w-full">
-                  <thead className="bg-gray-50 border-b border-gray-200">
-                    <tr>
-                      <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Subject</th>
-                      <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">1st Tri</th>
-                      <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">2nd Tri</th>
-                      <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">3rd Tri</th>
-                      <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">Final</th>
-                      <th className="px-4 py-3 text-center text-sm font-semibold text-gray-700">Remarks</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200">
-                    {grades.map(g => {
-                      const hasAllTris = g.q1 !== null && g.q1 !== undefined && g.q1 !== '' &&
-                        g.q2 !== null && g.q2 !== undefined && g.q2 !== '' &&
-                        g.q3 !== null && g.q3 !== undefined && g.q3 !== '';
-                      const showFinal = hasAllTris && g.finalGrade !== null && g.finalGrade !== undefined && g.finalGrade !== '';
-
-                      return (
-                        <tr key={g.id} className="hover:bg-[#FFFDF0] transition-colors">
-                          <td className="px-4 py-3">
-                            <p className="font-mono text-sm font-semibold text-[#102A71]">{g.subjectCode}</p>
-                            <p className="text-xs text-gray-500 mt-0.5">{g.subjectDescription}</p>
-                          </td>
-                          {['q1', 'q2', 'q3'].map(q => (
-                            <td key={q} className="px-4 py-3 text-center">
-                              <span className={`text-sm font-semibold ${g[q] === null || g[q] === undefined ? 'text-gray-300' :
-                                parseFloat(g[q]) >= 75 ? 'text-emerald-600' : 'text-red-500'
-                                }`}>
-                                {formatWholeGrade(g[q])}
-                              </span>
-                            </td>
-                          ))}
-                          <td className="px-4 py-3 text-center">
-                            <span className={`text-sm font-bold ${!showFinal ? 'text-gray-300' :
-                              parseFloat(g.finalGrade) >= 75 ? 'text-emerald-700' : 'text-red-600'
-                              }`}>
-                              {showFinal ? formatWholeGrade(g.finalGrade) : '—'}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 text-center">
-                            {!showFinal || !g.remarks || g.remarks === 'Incomplete' ? (
-                              <span className="text-xs text-gray-400 italic">Incomplete</span>
-                            ) : g.remarks === 'Passed' ? (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-100 text-emerald-700 text-xs font-bold rounded-full">
-                                <CheckCircle className="w-3 h-3" /> Passed
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-red-100 text-red-600 text-xs font-bold rounded-full">
-                                <XCircle className="w-3 h-3" /> Failed
-                              </span>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-              <div className="px-4 py-3 bg-gray-50/50 border-t border-gray-100 text-xs text-gray-400">
-                Grades are entered by your subject teachers. Contact the Registrar if you see any discrepancy.
-              </div>
-            </>
-          )}
-        </div>
       </div>
     </div>
   );

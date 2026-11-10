@@ -1,3 +1,4 @@
+import { isValidPassword, normalizeAccountEmail, PASSWORD_POLICY_MESSAGE } from "../services/accountValidation.js";
 import crypto from "node:crypto";
 import bcrypt from "bcrypt";
 import { Op } from "sequelize";
@@ -8,7 +9,7 @@ const digest = (token) => crypto.createHash("sha256").update(token).digest("hex"
 export function createPasswordResetHandlers({ User, PasswordReset, sequelize, sendPasswordResetEmail }) {
   return {
     async forgotPassword(req, res) {
-      const email = typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
+      const email = normalizeAccountEmail(req.body?.email);
       if (!email || email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
         return res.status(400).json({ message: "Enter a valid email address." });
       }
@@ -39,8 +40,8 @@ export function createPasswordResetHandlers({ User, PasswordReset, sequelize, se
       if (typeof token !== "string" || !/^[a-f0-9]{64}$/.test(token)) {
         return res.status(400).json({ message: "This reset link is invalid or has expired. Please request a new one." });
       }
-      if (typeof password !== "string" || password.length < 12 || !/[A-Z]/.test(password) || !/[0-9]/.test(password) || Buffer.byteLength(password, "utf8") > 72) {
-        return res.status(400).json({ message: "Use at least 12 characters, 1 uppercase letter and 1 number (maximum 72 bytes)." });
+      if (!isValidPassword(password)) {
+        return res.status(400).json({ message: PASSWORD_POLICY_MESSAGE });
       }
       try {
         const passwordHash = await bcrypt.hash(password, 10);
@@ -52,7 +53,7 @@ export function createPasswordResetHandlers({ User, PasswordReset, sequelize, se
           if (!reset) return false;
           const user = await User.findByPk(reset.userId, { transaction, lock: transaction.LOCK.UPDATE });
           if (!user || user.authProvider === "google" || !user.isActive) return false;
-          await user.update({ password: passwordHash }, { transaction });
+          await user.update({ password: passwordHash, tokenVersion: Number(user.tokenVersion || 0) + 1 }, { transaction });
           await reset.destroy({ transaction });
           return true;
         });

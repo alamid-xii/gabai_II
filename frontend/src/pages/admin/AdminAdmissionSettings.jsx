@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { API } from '../../config/api';
-import { confirmAction } from '../../components/ConfirmModal';
+import { confirmAction } from '../../utils/confirmAction';
 import { useAdmissionSettings } from '../../hooks/useAdmissionSettings';
 
 export function AdminAdmissionSettings() {

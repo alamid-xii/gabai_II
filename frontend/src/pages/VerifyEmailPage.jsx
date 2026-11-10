@@ -1,15 +1,15 @@
 import { useState, useRef, useEffect } from "react";
-import { useLocation, useNavigate, Link } from "react-router";
-import { CheckCircle2, XCircle, Loader2, Mail, MapPin, RefreshCw } from "lucide-react";
+import { useLocation, Link } from "react-router";
+import { CheckCircle2, XCircle, Loader2, Mail, RefreshCw } from "lucide-react";
 import { API } from "../config/api";
 
 export function VerifyEmailPage() {
   const location = useLocation();
-  const navigate = useNavigate();
+  
 
   // Email can be passed via navigation state (from SignUp) or query param fallback
   const emailFromState = location.state?.email || "";
-  const [email, setEmail] = useState(emailFromState);
+  const [email] = useState(emailFromState);
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
   const [status, setStatus] = useState("idle"); // idle | loading | success | error
   const [errorMsg, setErrorMsg] = useState("");
@@ -103,9 +103,11 @@ export function VerifyEmailPage() {
         {/* Logo */}
         <div className="text-center mb-6">
           <Link to="/" className="inline-flex items-center gap-2">
-            <div className="bg-[#F5C400] w-12 h-12 rounded-xl flex items-center justify-center shadow-lg">
-              <MapPin className="w-7 h-7 text-[#001840]" />
-            </div>
+            <img
+              src="/GabAi_Logo.png"
+              alt="GabAI Logo"
+              className="w-12 h-12 rounded-xl object-contain shadow-lg"
+            />
             <div className="text-left">
               <span className="font-bold text-2xl tracking-wide text-white">GabAI</span>
               <p className="text-xs text-[#FFDC5F] leading-none tracking-wider">Eastern Mindoro College</p>
@@ -206,3 +208,4 @@ export function VerifyEmailPage() {
     </div>
   );
 }
+

@@ -1,52 +1,17 @@
-import jwt from 'jsonwebtoken';
-import { sequelize } from '../models/db.js';
 import { needsProfileCompletion } from '../services/userProfile.js';
+import { authenticateRequest, authenticationError } from '../services/authentication.js';
 
-// Authenticate JWT token
+// Authenticate bearer credentials against the current account and revocation version.
 export const authenticateToken = async (req, res, next) => {
   try {
-    const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
-    
-    if (!token) {
-      return res.status(401).json({ error: 'Access token required' });
+    req.user = await authenticateRequest(req);
+    const path = (req.originalUrl || req.url || '').split('?')[0];
+    if (needsProfileCompletion(req.user) && !['/api/auth/me', '/api/auth/profile', '/api/auth/logout'].includes(path)) {
+      return res.status(403).json({ error: 'Complete your profile before continuing.', needsProfileCompletion: true });
     }
-    
-    jwt.verify(token, process.env.JWT_SECRET || 'emc-secret-key-2025', async (err, decoded) => {
-      if (err) {
-        return res.status(403).json({ error: 'Invalid or expired token' });
-      }
-      
-      // Support both 'id' and 'userId' in token for backwards compatibility
-      const userId = decoded.userId || decoded.id;
-      
-      // Fetch user from database
-      const [[user]] = await sequelize.query(
-        'SELECT id, email, name, role, isActive, authProvider, firstName, middleName, lastName, mobileNumber, profileCompleted FROM users WHERE id = ?',
-        { replacements: [userId] }
-      );
-      
-      if (!user) {
-        return res.status(404).json({ error: 'User not found' });
-      }
-
-      if (user.isActive === false || user.isActive === 0 || user.isActive === '0') {
-        return res.status(403).json({
-          error: 'Your account has been suspended or deactivated. Please contact an administrator.',
-          isSuspended: true
-        });
-      }
-      
-      req.user = user;
-      const path = (req.originalUrl || req.url || '').split('?')[0];
-      if (needsProfileCompletion(user) && !['/api/auth/me', '/api/auth/profile', '/api/auth/logout'].includes(path)) {
-        return res.status(403).json({ error: 'Complete your profile before continuing.', needsProfileCompletion: true });
-      }
-      next();
-    });
+    return next();
   } catch (error) {
-    console.error('Auth middleware error:', error);
-    res.status(500).json({ error: 'Authentication failed' });
+    return authenticationError(res, error);
   }
 };
 
@@ -94,36 +59,16 @@ export const requireTeacher = (req, res, next) => {
   next();
 };
 
-// Optional authentication (doesn't fail if no token)
+// Public endpoints may personalize only after validating current credentials.
 export const optionalAuth = async (req, res, next) => {
-  try {
-    const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1];
-    
-    if (!token) {
-      return next();
-    }
-    
-    jwt.verify(token, process.env.JWT_SECRET || 'emc-secret-key-2025', async (err, decoded) => {
-      if (err) {
-        return next();
-      }
-      
-      // Support both 'id' and 'userId' in token for backwards compatibility
-      const userId = decoded.userId || decoded.id;
-      
-      const [[user]] = await sequelize.query(
-        'SELECT id, email, name, role, isActive, authProvider, firstName, middleName, lastName, mobileNumber, profileCompleted FROM users WHERE id = ?',
-        { replacements: [userId] }
-      );
-      
-      if (user && user.isActive !== false && user.isActive !== 0 && user.isActive !== '0') {
-        req.user = user;
-      }
-      
-      next();
-    });
-  } catch (error) {
-    next();
-  }
+  try { req.user = await authenticateRequest(req); }
+  catch { delete req.user; }
+  return next();
+};
+
+// Student endpoints must reject authenticated staff accounts as well.
+export const requireStudent = (req, res, next) => {
+  if (!req.user) return res.status(401).json({ error: 'Authentication required' });
+  if (req.user.role !== 'student') return res.status(403).json({ error: 'Student access required' });
+  next();
 };

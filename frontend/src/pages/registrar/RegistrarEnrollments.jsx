@@ -1,4 +1,6 @@
-import { useState, useEffect, useCallback } from "react";
+import { usePortalSlot } from '../../hooks/usePortalSlot';
+import { availableRegistrarStatuses, matchesRegistrarStatus, WORKFLOW_FILTERS } from '../../utils/registrarEnrollmentFilters';
+import { useState, useEffect, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useSearchParams } from "react-router";
 import { toast } from "sonner";
@@ -6,18 +8,20 @@ import {
   ClipboardList, RefreshCw, Search,
   Download, X, FileText, BookOpen
 } from "lucide-react";
-import {
-  API, tok, STATUS_CFG, StatusBadge, LifeStatusBadge,
-  EnrollmentDetail, RegistrarPagination, AssignSectionModal
-} from "./RegistrarShared";
+import { StatusBadge, LifeStatusBadge, EnrollmentDetail, RegistrarPagination, AssignSectionModal } from "./RegistrarShared";
+import { API, tok, STATUS_CFG } from "./registrarConfig";
 
 export function EnrollmentsTab({ onActionSuccess }) {
   const [queryParams, setQueryParams] = useSearchParams();
-  const [enrollments, setEnrollments] = useState([]);
+  const [allEnrollments, setAllEnrollments] = useState([]);
+  const enrollmentsRequest = useRef(0);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [assigningEnrollment, setAssigningEnrollment] = useState(null);
-  const statusFilter = queryParams.get('status') || '';
+  const requestedStatus = queryParams.get('status') || '';
+  const statusFilter = (requestedStatus !== 'draft' && Object.hasOwn(STATUS_CFG, requestedStatus)) || Object.hasOwn(WORKFLOW_FILTERS, requestedStatus) ? requestedStatus : '';
+  const enrollments = allEnrollments.filter(record => matchesRegistrarStatus(record, statusFilter));
+  const availableStatuses = availableRegistrarStatuses(allEnrollments, statusFilter);
   const levelFilter = queryParams.get('schoolLevel') || '';
   const yearFilter = queryParams.get('academicYear') || ''; // '' = active year
   const typeFilter = queryParams.get('enrollmentType') || '';
@@ -38,9 +42,9 @@ export function EnrollmentsTab({ onActionSuccess }) {
   const [activeYear, setActiveYear] = useState('');
   const [reviewingEnrollment, setReviewingEnrollment] = useState(null);
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
+  const [pageSize] = useState(10);
   const [exporting, setExporting] = useState(false);
-  const [headerContainer, setHeaderContainer] = useState(null);
+  const headerContainer = usePortalSlot('registrar-header-slot', false, 'flex-1 flex items-center justify-end gap-2 flex-wrap ml-auto');
   const visibleEnrollment = applicationId && reviewingEnrollment && String(reviewingEnrollment.id) === applicationId ? reviewingEnrollment : null;
 
   function closeReview() {
@@ -65,10 +69,6 @@ export function EnrollmentsTab({ onActionSuccess }) {
       .catch(error => { if (error.name !== 'AbortError') toast.error(error.message); });
     return () => controller.abort();
   }, [applicationId]);
-
-  useEffect(() => {
-    setHeaderContainer(document.getElementById('registrar-header-slot'));
-  }, []);
 
   // Close modal on Escape key
   useEffect(() => {
@@ -103,10 +103,10 @@ export function EnrollmentsTab({ onActionSuccess }) {
   }, []);
 
   const fetchEnrollments = useCallback(async () => {
+    const request = ++enrollmentsRequest.current;
     setLoading(true);
     try {
       const params = new URLSearchParams();
-      if (statusFilter) params.set('status', statusFilter);
       if (levelFilter) params.set('schoolLevel', levelFilter);
       if (typeFilter) params.set('enrollmentType', typeFilter);
       if (search) params.set('search', search);
@@ -114,24 +114,22 @@ export function EnrollmentsTab({ onActionSuccess }) {
       const res = await fetch(`${API}/registrar/enrollments?${params}`, { headers: tok() });
       if (!res.ok) throw new Error('Failed to fetch enrollments');
       const data = await res.json();
-      setEnrollments(Array.isArray(data) ? data : data.enrollments || []);
+      if (request !== enrollmentsRequest.current) return;
+      setAllEnrollments(Array.isArray(data) ? data : data.enrollments || []);
       setPage(1);
     } catch (err) {
-      toast.error(err.message);
+      if (request === enrollmentsRequest.current) { setAllEnrollments([]); toast.error(err.message); }
     } finally {
-      setLoading(false);
+      if (request === enrollmentsRequest.current) setLoading(false);
     }
-  }, [statusFilter, levelFilter, search, yearFilter, typeFilter]);
+  }, [levelFilter, search, yearFilter, typeFilter]);
 
   useEffect(() => {
     const t = setTimeout(fetchEnrollments, 300);
-    return () => clearTimeout(t);
+    return () => { clearTimeout(t); enrollmentsRequest.current += 1; };
   }, [fetchEnrollments]);
 
-  function handleActionSuccess() {
-    fetchEnrollments();
-    if (typeof onActionSuccess === 'function') onActionSuccess();
-  }
+  
 
   const handleResetFilters = () => {
     setSearch('');
@@ -205,9 +203,9 @@ export function EnrollmentsTab({ onActionSuccess }) {
   }
 
   // Summary counts
-  const totalCount = enrollments.length;
-  const statusCounts = ['submitted', 'pending_exam', 'verified', 'returned', 'approved', 'enrolled'].reduce((acc, st) => {
-    acc[st] = enrollments.filter(e => e.status === st).length;
+  const totalCount = allEnrollments.length;
+  const statusCounts = availableStatuses.reduce((acc, st) => {
+    acc[st] = allEnrollments.filter(e => e.status === st).length;
     return acc;
   }, {});
 
@@ -228,7 +226,7 @@ export function EnrollmentsTab({ onActionSuccess }) {
         <ClipboardList size={12} /> Total: {totalCount}
       </button>
 
-      {['submitted', 'pending_exam', 'verified', 'returned', 'approved', 'enrolled'].map(st => {
+      {availableStatuses.map(st => {
         const count = statusCounts[st] || 0;
         if (count === 0) return null;
         const cfg = STATUS_CFG[st] || { label: st, color: 'bg-gray-100 text-gray-700' };
@@ -298,8 +296,9 @@ export function EnrollmentsTab({ onActionSuccess }) {
               ))}
             </select>
 
-            {/* Status */}
+            {/* Actual statuses available within the other selected filters. */}
             <select
+              aria-label="Enrollment status"
               value={statusFilter}
               onChange={e => { setStatusFilter(e.target.value); setPage(1); }}
               className={`px-2.5 sm:px-3 py-2 border rounded-lg text-xs sm:text-sm focus:outline-none transition-colors shrink-0 ${
@@ -307,11 +306,9 @@ export function EnrollmentsTab({ onActionSuccess }) {
               }`}
             >
               <option value="">All Statuses</option>
-              <option value="needs_review">Needs review</option>
-              <option value="enrolled_active">Enrolled / active</option>
-              <option value="awaiting_section">Awaiting section</option>
-              {['submitted', 'pending_exam', 'verified', 'returned', 'approved', 'subjects_enrolled', 'enrolled', 'active', 'completed', 'rejected'].map(k => (
-                <option key={k} value={k}>{STATUS_CFG[k]?.label || 'Subjects enrolled'}</option>
+              {WORKFLOW_FILTERS[statusFilter] && <option value={statusFilter}>{WORKFLOW_FILTERS[statusFilter]}</option>}
+              {availableStatuses.map(status => (
+                <option key={status} value={status}>{STATUS_CFG[status].label} ({statusCounts[status] || 0})</option>
               ))}
             </select>
 
@@ -496,6 +493,7 @@ export function EnrollmentsTab({ onActionSuccess }) {
                         {/* Actions */}
                         <td className="px-5 py-3.5 text-right whitespace-nowrap">
                           <div className="flex items-center justify-end gap-1.5">
+                            {['approved', 'subjects_enrolled', 'enrolled', 'active'].includes(enrollment.status) && (
                             <button
                               type="button"
                               onClick={(e) => {
@@ -508,6 +506,7 @@ export function EnrollmentsTab({ onActionSuccess }) {
                               <BookOpen size={12} />
                               <span>{enrollment.sectionName ? 'Section' : 'Assign'}</span>
                             </button>
+                            )}
                             <button
                               type="button"
                               onClick={(e) => {
@@ -551,9 +550,9 @@ export function EnrollmentsTab({ onActionSuccess }) {
           />
 
           {/* Modal Container */}
-          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[92vh] flex flex-col z-10 border border-gray-100 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-4xl h-[92dvh] max-h-[92dvh] flex flex-col z-10 border border-gray-100 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
             {/* Modal Body */}
-            <div className="overflow-y-auto flex-1">
+            <div className="flex min-h-0 flex-1 flex-col">
               <EnrollmentDetail
                 enrollmentId={visibleEnrollment.id}
                 enrollment={visibleEnrollment}

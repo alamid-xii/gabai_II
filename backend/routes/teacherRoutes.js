@@ -21,7 +21,7 @@ router.get('/classes', getTeacherClasses);
 // GET /api/teacher/classes/:sectionId/:subjectCode/grades — grade sheet for a subject+section
 router.get('/classes/:sectionId/:subjectCode/grades', getGradeSheet);
 
-// PUT /api/teacher/grades/:enrollmentSubjectId — save a quarterly grade
+// PUT /api/teacher/grades/:enrollmentSubjectId — submit a year-end final grade
 router.put('/grades/:enrollmentSubjectId', saveGrade);
 
 // GET /api/teacher/my-schedule — teacher's own teaching schedule

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import {
@@ -6,7 +6,7 @@ import {
   GraduationCap, Search, X, FlaskConical, School,
   ClipboardList, Save, CheckCircle, AlertCircle, Lock
 } from 'lucide-react';
-import { useAuth } from '../../contexts/AuthContext';
+import { useAuth } from '../../contexts/authState';
 import { Navbar } from '../../components/Navbar';
 import { API } from '../../config/api';
 
@@ -16,16 +16,18 @@ const tok = () => ({
 });
 
 // ── Student Detail Modal ──────────────────────────────────────────────────────
-function StudentModal({ student, onClose }) {
-  if (!student) return null;
-
-  const Field = ({ label, value }) =>
+const StudentField = ({ label, value }) =>
     value ? (
       <div>
         <p className="text-xs text-gray-500 mb-0.5">{label}</p>
         <p className="text-sm font-semibold text-[#001840]">{value}</p>
       </div>
     ) : null;
+
+function StudentModal({ student, onClose }) {
+  if (!student) return null;
+
+
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -72,12 +74,12 @@ function StudentModal({ student, onClose }) {
           <div>
             <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Enrollment Info</p>
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Grade Level" value={student.gradeLevel} />
-              <Field label="Strand" value={student.strand} />
-              <Field label="Enrollment Type" value={student.enrollmentType} />
-              <Field label="Student Number" value={student.studentNumber} />
-              <Field label="LRN" value={student.lrn} />
-              <Field label="Section" value={student.sectionName ? `Section ${student.sectionName}` : null} />
+              <StudentField label="Grade Level" value={student.gradeLevel} />
+              <StudentField label="Strand" value={student.strand} />
+              <StudentField label="Enrollment Type" value={student.enrollmentType} />
+              <StudentField label="Student Number" value={student.studentNumber} />
+              <StudentField label="LRN" value={student.lrn} />
+              <StudentField label="Section" value={student.sectionName ? `Section ${student.sectionName}` : null} />
             </div>
           </div>
 
@@ -86,11 +88,11 @@ function StudentModal({ student, onClose }) {
             <div className="bg-yellow-50 border border-yellow-100 rounded-xl p-4">
               <p className="text-xs font-bold text-yellow-700 uppercase tracking-wider mb-3">SSC Information</p>
               <div className="grid grid-cols-2 gap-3">
-                <Field label="Qualified" value={student.sscQualified ? 'Yes' : 'No'} />
-                <Field label="Class" value={student.sscClass} />
-                <Field label="Exam Date" value={student.sscExamDate ? new Date(student.sscExamDate).toLocaleDateString() : null} />
-                <Field label="Exam Score" value={student.sscExamScore ? `${student.sscExamScore} / 100` : null} />
-                <Field label="Result" value={student.sscResult} />
+                <StudentField label="Qualified" value={student.sscQualified ? 'Yes' : 'No'} />
+                <StudentField label="Class" value={student.sscClass} />
+                <StudentField label="Exam Date" value={student.sscExamDate ? new Date(student.sscExamDate).toLocaleDateString() : null} />
+                <StudentField label="Exam Score" value={student.sscExamScore ? `${student.sscExamScore} / 100` : null} />
+                <StudentField label="Result" value={student.sscResult} />
               </div>
             </div>
           ) : null}
@@ -339,370 +341,71 @@ export function SectionView({ section, onBack }) {
 // ── Grade Sheet ───────────────────────────────────────────────────────────────
 function GradeSheet({ cls, onBack }) {
   const [data, setData] = useState(null);
+  const [edits, setEdits] = useState({});
+  const [saving, setSaving] = useState({});
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState({}); // { enrollmentSubjectId_quarter: true }
-  const [edits, setEdits] = useState({});   // { `${esId}_${quarter}`: value }
-  const [search, setSearch] = useState('');
-  const [page, setPage] = useState(1);
-  const pageSize = 10;
-
-  const QUARTERS = ['Q1', 'Q2', 'Q3'];
-  const QUARTER_LABELS = { Q1: '1st Tri', Q2: '2nd Tri', Q3: '3rd Tri' };
-
-  const load = useCallback(() => {
-    setLoading(true);
+  const [error, setError] = useState('');
+  useEffect(() => {
+    let cancelled = false;
     fetch(`${API}/teacher/classes/${cls.sectionId}/${encodeURIComponent(cls.subjectCode)}/grades`, { headers: tok() })
-      .then(r => r.ok ? r.json() : Promise.reject('Failed'))
-      .then(d => { setData(d); setEdits({}); })
-      .catch(() => toast.error('Failed to load grade sheet'))
-      .finally(() => setLoading(false));
+      .then(async response => {
+        const body = await response.json();
+        if (!response.ok) throw new Error(body.error || 'Failed to load grade sheet');
+        if (!cancelled) setData(body);
+      }).catch(err => { if (!cancelled) setError(err.message); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
   }, [cls.sectionId, cls.subjectCode]);
-
-  useEffect(() => { load(); }, [load]);
-
-  const openQuarters = data?.gradingPeriods
-    ? new Set(data.gradingPeriods.filter(p => p.isOpen).map(p => p.quarter))
-    : new Set();
-
-  function editKey(esId, q) { return `${esId}_${q}`; }
-
-  function handleInput(esId, quarter, value) {
-    const k = editKey(esId, quarter);
-    // Allow empty (clear) or number 0-100
-    if (value === '' || (Number(value) >= 0 && Number(value) <= 100)) {
-      setEdits(prev => ({ ...prev, [k]: value }));
+  const isOpen = data?.gradingPeriods?.some(period => period.quarter === 'FINAL' && period.isOpen);
+  async function submit(student) {
+    const id = student.enrollmentSubjectId;
+    const raw = edits[id];
+    if (saving[id] || raw === undefined) return;
+    const grade = Number(raw);
+    if (raw.trim() === '' || !Number.isFinite(grade) || grade < 0 || grade > 100) {
+      toast.error('Enter a final grade from 0 to 100'); return;
     }
-  }
-
-  async function saveGrade(esId, quarter) {
-    const k = editKey(esId, quarter);
-    const raw = edits[k];
-    if (raw === undefined) return; // nothing changed
-    const grade = raw === '' ? null : parseFloat(raw);
-
-    setSaving(prev => ({ ...prev, [k]: true }));
+    setSaving(previous => ({ ...previous, [id]: true }));
     try {
-      const res = await fetch(`${API}/teacher/grades/${esId}`, {
-        method: 'PUT',
-        headers: tok(),
-        body: JSON.stringify({ quarter, grade }),
+      const response = await fetch(`${API}/teacher/grades/${id}`, {
+        method: 'PUT', headers: { ...tok(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ finalGrade: grade }),
       });
-      const resData = await res.json();
-      if (!res.ok) throw new Error(resData.error || 'Failed to save');
-      toast.success(`${quarter} grade saved`);
-      // Update local data optimistically
-      setData(prev => ({
-        ...prev,
-        students: prev.students.map(s =>
-          s.enrollmentSubjectId === esId
-            ? { ...s, [quarter.toLowerCase()]: grade, finalGrade: resData.finalGrade, remarks: resData.remarks }
-            : s
-        )
-      }));
-      setEdits(prev => { const n = { ...prev }; delete n[k]; return n; });
-    } catch (err) {
-      toast.error(err.message);
-    } finally {
-      setSaving(prev => { const n = { ...prev }; delete n[k]; return n; });
-    }
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error || 'Submission failed');
+      setData(previous => ({ ...previous, students: previous.students.map(row => row.enrollmentSubjectId === id ? { ...row, finalGrade: body.finalGrade, remarks: body.remarks } : row) }));
+      setEdits(previous => { const next = { ...previous }; delete next[id]; return next; });
+      toast.success('Year-end final grade submitted');
+    } catch (err) { toast.error(err.message); }
+    finally { setSaving(previous => ({ ...previous, [id]: false })); }
   }
-
-  function remarksBadge(remarks) {
-    if (!remarks || remarks === 'Incomplete') return <span className="text-xs text-gray-400 italic">Incomplete</span>;
-    if (remarks === 'Passed') return <span className="text-xs font-bold text-emerald-600">Passed</span>;
-    return <span className="text-xs font-bold text-red-500">Failed</span>;
-  }
-
-  const allStudents = data?.students || [];
-  const filteredStudents = allStudents.filter(s => {
-    if (!search.trim()) return true;
-    const q = search.toLowerCase();
-    const fullName = `${s.familyName || ''} ${s.firstName || ''} ${s.middleName || ''}`.toLowerCase();
-    const studentNum = (s.studentNumber || '').toLowerCase();
-    const lrn = (s.lrn || '').toLowerCase();
-    return fullName.includes(q) || studentNum.includes(q) || lrn.includes(q);
-  });
-
-  const totalPages = Math.ceil(filteredStudents.length / pageSize) || 1;
-  const pagedStudents = filteredStudents.slice((page - 1) * pageSize, page * pageSize);
-
-  const getPageNumbers = () => {
-    if (totalPages <= 7) return Array.from({ length: totalPages }, (_, i) => i + 1);
-    if (page <= 4) return [1, 2, 3, 4, 5, '...', totalPages];
-    if (page >= totalPages - 3) return [1, '...', totalPages - 4, totalPages - 3, totalPages - 2, totalPages - 1, totalPages];
-    return [1, '...', page - 1, page, page + 1, '...', totalPages];
-  };
-
-  const pages = getPageNumbers();
-  const startItem = filteredStudents.length === 0 ? 0 : (page - 1) * pageSize + 1;
-  const endItem = Math.min(page * pageSize, filteredStudents.length);
-
-  return (
-    <div className="space-y-4">
-      {/* Top back button */}
-      <div>
-        <button
-          type="button"
-          onClick={onBack}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs font-semibold text-[#102A71] hover:text-[#001840] hover:bg-gray-50 transition-colors shadow-2xs"
-        >
-          <ChevronLeft size={14} />
-          <span>Back to Classes</span>
-        </button>
-      </div>
-
-      {/* Header Info Card */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-        <div className="flex items-start justify-between gap-4 flex-wrap">
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <span className="font-mono text-xs font-bold text-[#102A71] bg-[#EEF2FF] border border-[#102A71]/20 px-2 py-0.5 rounded-md">
-                {cls.subjectCode}
-              </span>
-              <h2 className="text-xl font-bold text-[#001840]">{cls.subjectDescription}</h2>
-            </div>
-            <p className="text-xs text-gray-500 mt-1">
-              Section <span className="font-semibold text-gray-700">{cls.sectionName}</span> · {cls.course} Grade {cls.yearLevel}
-              {cls.strand ? ` · ${cls.strand}` : ''}
-              {cls.schoolYear ? ` · SY ${cls.schoolYear}` : ''}
-              {cls.semester ? ` · ${cls.semester}` : ''}
-            </p>
-          </div>
-          <button
-            onClick={load}
-            className="flex items-center gap-1.5 px-3 py-2 border border-gray-200 rounded-lg text-xs text-gray-600 hover:bg-gray-50 transition-colors font-medium"
-          >
-            <RefreshCw size={12} /> Refresh
-          </button>
-        </div>
-
-        {/* Quarter status chips */}
-        {data?.gradingPeriods && data.gradingPeriods.length > 0 && (
-          <div className="flex gap-2 mt-4 flex-wrap">
-            {QUARTERS.map(q => {
-              const period = data.gradingPeriods.find(p => p.quarter === q);
-              const label = QUARTER_LABELS[q] || q;
-              if (!period) return (
-                <span key={q} className="flex items-center gap-1 px-2.5 py-1 bg-gray-100 text-gray-400 text-xs rounded-full">
-                  <Lock size={9} /> {label} — Not set up
-                </span>
-              );
-              return (
-                <span key={q} className={`flex items-center gap-1 px-2.5 py-1 text-xs rounded-full font-semibold ${
-                  period.isOpen ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500'
-                }`}>
-                  {period.isOpen ? <CheckCircle size={9} /> : <Lock size={9} />}
-                  {label} — {period.isOpen ? 'Open' : 'Closed'}
-                </span>
-              );
-            })}
-          </div>
-        )}
-      </div>
-
-      {/* Search & Counter Bar */}
-      <div className="bg-white rounded-2xl border border-gray-100 p-4 shadow-xs flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-        <div className="relative flex-1 max-w-md">
-          <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
-          <input
-            type="text"
-            placeholder="Search student by name, student ID, or LRN..."
-            value={search}
-            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-            className="w-full pl-10 pr-9 py-2 text-sm bg-gray-50/60 border border-gray-200 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-[#102A71]/20 focus:border-[#102A71] transition-all text-[#001840]"
-          />
-          {search && (
-            <button
-              onClick={() => { setSearch(''); setPage(1); }}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-            >
-              <X size={14} />
-            </button>
-          )}
-        </div>
-        <div className="text-xs text-gray-500 font-medium sm:text-right">
-          Total Students: <span className="font-bold text-[#001840]">{allStudents.length}</span>
-        </div>
-      </div>
-
-      {/* Grade table */}
-      {loading ? (
-        <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center text-gray-400 text-sm">
-          <RefreshCw size={18} className="animate-spin mx-auto mb-2" /> Loading students and grades...
-        </div>
-      ) : !allStudents.length ? (
-        <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center text-gray-400 text-sm">
-          <Users size={32} className="mx-auto mb-3 opacity-40 text-gray-300" />
-          <p className="font-semibold text-gray-600">No students enrolled in this class</p>
-          <p className="text-xs text-gray-400 mt-1">Students enrolled in this section and subject will automatically appear here.</p>
-        </div>
-      ) : filteredStudents.length === 0 ? (
-        <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center">
-          <Search size={36} className="mx-auto mb-3 text-gray-300" />
-          <p className="text-sm font-semibold text-[#001840]">No students matched "{search}"</p>
-          <button
-            onClick={() => { setSearch(''); setPage(1); }}
-            className="mt-3 text-xs text-[#102A71] hover:underline font-semibold"
-          >
-            Clear search filter
-          </button>
-        </div>
-      ) : (
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-[#FFFDF0] border-b border-gray-100 text-xs font-bold text-[#001840] uppercase tracking-wider">
-                <tr>
-                  <th className="text-center px-4 py-3.5 w-12 text-gray-400">#</th>
-                  <th className="text-left px-5 py-3.5">Student</th>
-                  {QUARTERS.map(q => (
-                    <th key={q} className="text-center px-4 py-3.5 whitespace-nowrap">
-                      <span className={openQuarters.has(q) ? 'text-emerald-700' : 'text-gray-400'}>
-                        {openQuarters.has(q) ? <CheckCircle size={11} className="inline mr-1 text-emerald-600" /> : <Lock size={11} className="inline mr-1 text-gray-400" />}
-                        {QUARTER_LABELS[q] || q}
-                      </span>
-                    </th>
-                  ))}
-                  <th className="text-center px-4 py-3.5 text-gray-600">Final</th>
-                  <th className="text-center px-4 py-3.5 text-gray-600">Remarks</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50">
-                {pagedStudents.map((s, idx) => {
-                  const globalIdx = (page - 1) * pageSize + idx + 1;
-                  const name = `${s.familyName}, ${s.firstName}${s.middleName ? ` ${s.middleName[0]}.` : ''}`;
-                  return (
-                    <tr key={s.enrollmentSubjectId} className={`${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'} hover:bg-[#FFFDF0] transition-colors`}>
-                      <td className="px-4 py-3 text-center text-xs text-gray-400 font-mono">
-                        {globalIdx}
-                      </td>
-                      <td className="px-5 py-3">
-                        <p className="font-semibold text-[#001840] text-sm">{name}</p>
-                        <p className="text-xs text-gray-400">
-                          {s.studentNumber ? `ID: ${s.studentNumber}` : ''}
-                          {s.studentNumber && s.lrn ? ' · ' : ''}
-                          {s.lrn ? `LRN: ${s.lrn}` : ''}
-                        </p>
-                      </td>
-                      {QUARTERS.map(q => {
-                        const col = q.toLowerCase();
-                        const k = editKey(s.enrollmentSubjectId, q);
-                        const isOpen = openQuarters.has(q);
-                        const isSaving = saving[k];
-                        const hasEdit = edits[k] !== undefined;
-                        const displayVal = hasEdit ? edits[k] : (s[col] !== null && s[col] !== undefined ? String(s[col]) : '');
-                        return (
-                          <td key={q} className="px-4 py-3 text-center">
-                            {isOpen ? (
-                              <div className="flex items-center gap-1 justify-center">
-                                <input
-                                  type="number"
-                                  min="0" max="100" step="0.01"
-                                  value={displayVal}
-                                  onChange={e => handleInput(s.enrollmentSubjectId, q, e.target.value)}
-                                  onBlur={() => saveGrade(s.enrollmentSubjectId, q)}
-                                  onKeyDown={e => { if (e.key === 'Enter') { e.target.blur(); } }}
-                                  placeholder="—"
-                                  className={`w-16 text-center text-sm border rounded-lg py-1.5 px-1 focus:outline-hidden focus:ring-2 transition-all ${
-                                    hasEdit
-                                      ? 'border-[#F5C400] focus:ring-[#F5C400]/30 bg-[#FFFDF0]'
-                                      : 'border-gray-200 focus:ring-[#102A71]/20 focus:border-[#102A71] bg-white'
-                                  }`}
-                                />
-                                {isSaving && <RefreshCw size={11} className="animate-spin text-gray-400 shrink-0" />}
-                                {hasEdit && !isSaving && (
-                                  <button
-                                    onClick={() => saveGrade(s.enrollmentSubjectId, q)}
-                                    title="Save Grade"
-                                    className="text-emerald-600 hover:text-emerald-700"
-                                  >
-                                    <Save size={12} />
-                                  </button>
-                                )}
-                              </div>
-                            ) : (
-                              <span className={`font-semibold ${s[col] !== null && s[col] !== undefined ? 'text-[#001840]' : 'text-gray-300'}`}>
-                                {s[col] !== null && s[col] !== undefined ? s[col] : '—'}
-                              </span>
-                            )}
-                          </td>
-                        );
-                      })}
-                      <td className="px-4 py-3 text-center">
-                        <span className="font-bold text-[#001840]">
-                          {s.finalGrade !== null && s.finalGrade !== undefined ? s.finalGrade : '—'}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        {remarksBadge(s.remarks)}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Pagination Controls */}
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-6 py-4 border-t border-gray-100 bg-white">
-            <p className="text-xs text-gray-500">
-              Showing <span className="font-semibold text-gray-700">{startItem}</span> to{' '}
-              <span className="font-semibold text-gray-700">{endItem}</span> of{' '}
-              <span className="font-semibold text-gray-700">{filteredStudents.length}</span> students
-            </p>
-
-            {totalPages > 1 && (
-              <div className="flex items-center gap-1 flex-wrap justify-center sm:justify-end">
-                <button
-                  onClick={() => setPage(p => Math.max(1, p - 1))}
-                  disabled={page === 1}
-                  className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium rounded-lg border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                >
-                  <ChevronLeft size={14} />
-                  <span>Prev</span>
-                </button>
-
-                {pages.map((p, idx) =>
-                  p === '...' ? (
-                    <span key={`dots_${idx}`} className="px-2 text-xs text-gray-400">...</span>
-                  ) : (
-                    <button
-                      key={p}
-                      onClick={() => setPage(p)}
-                      className={`min-w-7 h-7 px-2 text-xs rounded-lg font-semibold transition-colors ${
-                        page === p
-                          ? 'bg-[#102A71] text-white shadow-2xs'
-                          : 'border border-gray-200 text-gray-600 hover:bg-gray-50'
-                      }`}
-                    >
-                      {p}
-                    </button>
-                  )
-                )}
-
-                <button
-                  onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                  disabled={page === totalPages}
-                  className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium rounded-lg border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                >
-                  <span>Next</span>
-                  <ChevronRight size={14} />
-                </button>
-              </div>
-            )}
-          </div>
-
-          <div className="px-5 py-3 bg-gray-50/50 border-t border-gray-50 flex items-center gap-2 text-xs text-gray-400">
-            <AlertCircle size={12} />
-            Grades auto-save on blur (click outside the field) or press Enter. Only open quarters are editable.
-          </div>
-        </div>
-      )}
-    </div>
-  );
+  return <div className="space-y-4">
+    <button onClick={onBack} className="text-sm text-[#102A71] font-semibold">Back to classes</button>
+    <div><h2 className="text-xl font-bold text-[#001840]">Year-end Final Grades</h2>
+      <p className="text-sm text-gray-500">{cls.subjectCode} - {cls.subjectDescription} | {cls.sectionName} | {cls.schoolYear}</p></div>
+    <p className="rounded-xl bg-blue-50 p-4 text-sm text-blue-900">Submit one final grade per student at the end of the school year. Admin and registrar can review submitted grades. Grades are not visible to students.</p>
+    {loading ? <p role="status">Loading grade sheet...</p> : error ? <p role="alert" className="text-red-600">{error}</p> : <>
+      <p className="text-sm font-medium">{isOpen ? 'Year-end submission is open. Submitted grades can be corrected until admin closes the window.' : 'Year-end submission is closed. Ask admin to open it when final grades are ready.'}</p>
+      <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white"><table className="w-full text-sm text-left">
+        <thead className="bg-gray-50"><tr>{['Student', 'Student number', 'Final grade', 'Result', 'Submission'].map(label => <th key={label} className="p-3">{label}</th>)}</tr></thead>
+        <tbody>{data?.students?.map(student => <tr key={student.enrollmentSubjectId} className="border-t border-gray-100">
+          <td className="p-3">{student.familyName}, {student.firstName} {student.middleName}</td>
+          <td className="p-3">{student.studentNumber || student.lrn || '-'}</td>
+          <td className="p-3"><input aria-label={`Final grade for ${student.firstName} ${student.familyName}`} type="number" min="0" max="100" step="0.01"
+            disabled={!isOpen || saving[student.enrollmentSubjectId]}
+            value={edits[student.enrollmentSubjectId] ?? student.finalGrade ?? ''}
+            onChange={event => setEdits(previous => ({ ...previous, [student.enrollmentSubjectId]: event.target.value }))}
+            className="w-24 border rounded-lg px-2 py-2 disabled:bg-gray-100" /></td>
+          <td className="p-3">{student.finalGrade == null ? 'Not submitted' : student.remarks}</td>
+          <td className="p-3"><button disabled={!isOpen || saving[student.enrollmentSubjectId] || edits[student.enrollmentSubjectId] === undefined}
+            onClick={() => submit(student)} className="rounded-lg bg-[#102A71] px-3 py-2 text-white disabled:opacity-40">
+            {saving[student.enrollmentSubjectId] ? 'Submitting...' : student.finalGrade == null ? 'Submit' : 'Update'}</button></td>
+        </tr>)}{!data?.students?.length && <tr><td colSpan="5" className="p-5 text-gray-500">No enrolled students in this class.</td></tr>}</tbody>
+      </table></div>
+    </>}
+  </div>;
 }
 
-// ── My Classes View ───────────────────────────────────────────────────────────
 export function MyClassesView() {
   const [classes, setClasses] = useState([]);
   const [loading, setLoading] = useState(true);

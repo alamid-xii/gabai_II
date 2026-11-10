@@ -1,6 +1,10 @@
 import express from 'express';
 import { authenticateToken, requireAdminOrRegistrar } from '../middleware/auth.js';
 import { sanitizeBody, validateSection } from '../middleware/validate.js';
+import { Section } from '../models/sectionModel.js';
+import { Subject } from '../models/subjectModel.js';
+import { SectionSubjectAssignment } from '../models/sectionSubjectAssignmentModel.js';
+import { subjectMatchesScope } from '../services/academicScope.js';
 import { sequelize } from '../models/db.js';
 import {
   getAllSections,
@@ -52,84 +56,74 @@ router.get('/:sectionId/available-students', getAvailableStudents);
 router.get('/:sectionId/available-subjects', getAvailableSubjects);
 router.post('/assign/:enrollmentId', assignStudentToSection);
 
-// GET /api/admin/sections/:id/subject-teachers
-// Returns distinct subjects in this section with their current instructor and teacherId
+// Section configuration exists independently of the current student roster.
 router.get('/:id/subject-teachers', async (req, res) => {
   try {
-    const sectionId = parseInt(req.params.id);
-    const [rows] = await sequelize.query(
-      `SELECT DISTINCT es.subjectCode, es.subjectDescription, es.units,
-              es.instructor, es.teacherId,
-              u.name AS teacherName, u.email AS teacherEmail
-       FROM enrollment_subjects es
-       LEFT JOIN users u ON es.teacherId = u.id
-       WHERE es.sectionId = ?
-       ORDER BY es.subjectCode ASC`,
-      { replacements: [sectionId] }
-    );
-    res.json(rows || []);
+    const section = await Section.findByPk(req.params.id);
+    if (!section) return res.status(404).json({ error: 'Section not found' });
+    const track = section.strand || (section.course === 'JHS' ? 'Regular' : '');
+    const [rows] = await sequelize.query(`SELECT s.code AS subjectCode, s.description AS subjectDescription, s.units,
+      CASE WHEN a.id IS NULL THEN du.name ELSE au.name END AS instructor,
+      CASE WHEN a.id IS NULL THEN du.id ELSE au.id END AS teacherId,
+      CASE WHEN a.id IS NULL THEN du.name ELSE au.name END AS teacherName,
+      CASE WHEN a.id IS NULL THEN du.email ELSE au.email END AS teacherEmail,
+      a.schedule, a.room
+      FROM subjects s
+      LEFT JOIN section_subject_assignments a ON a.sectionId = ? AND a.subjectCode = s.code
+      LEFT JOIN users du ON du.id = s.teacherId AND du.role = 'teacher' AND du.isActive = 1
+      LEFT JOIN users au ON au.id = a.teacherId AND au.role = 'teacher' AND au.isActive = 1
+      WHERE s.programCode = ? AND s.gradeLevel = ? AND s.semester = ? AND s.isActive = 1
+        AND (s.strand = ? OR s.strand IS NULL OR s.strand = '') ORDER BY s.code`, {
+      replacements: [section.id, section.course, section.yearLevel, section.semester, track],
+    });
+    res.json(rows);
   } catch (err) {
     console.error('Get subject teachers error:', err);
     res.status(500).json({ error: 'Failed to fetch subject teachers' });
   }
 });
 
-// PUT /api/admin/sections/:id/subject-teachers
-// Assigns instructor (by teacherId or name) to all enrollment_subjects rows for a specific subject in this section
 router.put('/:id/subject-teachers', sanitizeBody, async (req, res) => {
   try {
-    const sectionId = parseInt(req.params.id);
+    const sectionId = Number(req.params.id);
     const { subjectCode, teacherId, schedule, room } = req.body;
-    if (!subjectCode) return res.status(400).json({ error: 'subjectCode is required' });
-
-    let instructorName = null;
-    let resolvedTeacherId = teacherId ? parseInt(teacherId) : null;
-
-    if (resolvedTeacherId) {
-      // Look up teacher name from users table
-      const [[teacher]] = await sequelize.query(
-        `SELECT id, name FROM users WHERE id = ? AND role = 'teacher' AND isActive = 1 LIMIT 1`,
-        { replacements: [resolvedTeacherId] }
-      );
+    if (typeof subjectCode !== 'string' || !subjectCode.trim()) return res.status(400).json({ error: 'subjectCode is required' });
+    const section = await Section.findByPk(sectionId);
+    if (!section) return res.status(404).json({ error: 'Section not found' });
+    const subject = await Subject.findOne({ where: { code: subjectCode, isActive: true } });
+    if (!subject || !subjectMatchesScope(subject, section)) return res.status(400).json({ error: 'Choose a subject in this section curriculum.' });
+    let instructor = null;
+    const resolvedTeacherId = teacherId === '' || teacherId == null ? null : Number(teacherId);
+    if (teacherId !== undefined && resolvedTeacherId !== null) {
+      if (!Number.isSafeInteger(resolvedTeacherId) || resolvedTeacherId < 1) return res.status(400).json({ error: 'Select a valid teacher.' });
+      const [[teacher]] = await sequelize.query("SELECT id, name FROM users WHERE id = ? AND role = 'teacher' AND isActive = 1 LIMIT 1", { replacements: [resolvedTeacherId] });
       if (!teacher) return res.status(404).json({ error: 'Teacher not found or inactive' });
-      instructorName = teacher.name;
+      instructor = teacher.name;
     }
-
-    const setClauses = ['updatedAt = NOW()'];
-    const replacements = [];
-
-    if (teacherId !== undefined) {
-      setClauses.push('instructor = ?', 'teacherId = ?');
-      replacements.push(instructorName, resolvedTeacherId);
-    }
-    if (schedule !== undefined) {
-      setClauses.push('schedule = ?');
-      replacements.push(schedule || null);
-    }
-    if (room !== undefined) {
-      setClauses.push('room = ?');
-      replacements.push(room || null);
-    }
-
-    replacements.push(sectionId, subjectCode);
-
-    await sequelize.query(
-      `UPDATE enrollment_subjects
-       SET ${setClauses.join(', ')}
-       WHERE sectionId = ? AND subjectCode = ?`,
-      { replacements }
-    );
-
-    res.json({
-      message: `Subject ${subjectCode} schedule updated successfully`,
-      instructor: instructorName,
-      teacherId: resolvedTeacherId,
-      schedule: schedule || null,
-      room: room || null
+    await sequelize.transaction(async transaction => {
+      const locked = await Section.findByPk(sectionId, { transaction, lock: transaction.LOCK.UPDATE });
+      if (!locked?.isActive) throw Object.assign(new Error('Section not found or inactive'), { status: 404 });
+      const existing = await SectionSubjectAssignment.findOne({ where: { sectionId, subjectCode }, transaction });
+      const input = existing ? existing.toJSON() : { sectionId, subjectCode, teacherId: subject.teacherId || null, instructor: null, schedule: null, room: null };
+      if (teacherId !== undefined) Object.assign(input, { teacherId: resolvedTeacherId, instructor });
+      else if (!existing && subject.teacherId) {
+        const [[teacher]] = await sequelize.query("SELECT name FROM users WHERE id = ? AND role = 'teacher' AND isActive = 1 LIMIT 1", { replacements: [subject.teacherId], transaction });
+        input.instructor = teacher?.name || null;
+        if (!teacher) input.teacherId = null;
+      }
+      if (schedule !== undefined) input.schedule = schedule || null;
+      if (room !== undefined) input.room = room || null;
+      await SectionSubjectAssignment.upsert(input, { transaction });
+      const clauses = [], replacements = [];
+      if (teacherId !== undefined) { clauses.push('instructor = ?', 'teacherId = ?'); replacements.push(instructor, resolvedTeacherId); }
+      if (schedule !== undefined) { clauses.push('schedule = ?'); replacements.push(schedule || null); }
+      if (room !== undefined) { clauses.push('room = ?'); replacements.push(room || null); }
+      if (clauses.length) await sequelize.query(`UPDATE enrollment_subjects SET ${clauses.join(', ')}, updatedAt = NOW() WHERE sectionId = ? AND subjectCode = ?`, { replacements: [...replacements, sectionId, subjectCode], transaction });
     });
+    res.json({ message: `Subject ${subjectCode} assignment updated successfully`, instructor, teacherId: resolvedTeacherId, schedule: schedule || null, room: room || null });
   } catch (err) {
     console.error('Update subject teacher error:', err);
-    res.status(500).json({ error: 'Failed to update subject schedule/instructor' });
+    res.status(err.status || 500).json({ error: err.status ? err.message : 'Failed to update subject schedule/instructor' });
   }
 });
 

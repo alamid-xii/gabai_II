@@ -1,3 +1,6 @@
+import { validateSectionConfiguration, subjectMatchesScope } from '../services/academicScope.js';
+import { ACADEMIC_TERMS } from '../services/academicTerms.js';
+import { User } from '../models/userModel.js';
 import { Section } from '../models/sectionModel.js';
 import { EnrollmentRecord } from '../models/enrollmentRecordModel.js';
 import { EnrollmentSubject } from '../models/enrollmentSubjectModel.js';
@@ -34,7 +37,7 @@ export const getAllSections = async (req, res) => {
     res.json(sections || []);
   } catch (error) {
     console.error('Get sections error:', error);
-    res.status(500).json({ message: error.message });
+    res.status(error.name === 'SequelizeDatabaseError' ? 500 : 400).json({ message: error.message });
   }
 };
 
@@ -49,6 +52,15 @@ export const createSection = async (req, res) => {
       });
     }
 
+    validateSectionConfiguration({ ...req.body, capacity: capacity ?? 40 });
+    if (!ACADEMIC_TERMS.includes(semester)) return res.status(400).json({ message: 'Select a valid academic term.' });
+    let adviserId = req.body.teacherId ? Number(req.body.teacherId) : null;
+    let adviserName = instructor || null;
+    if (adviserId) {
+      const teacher = await User.findOne({ where: { id: adviserId, role: 'teacher', isActive: true } });
+      if (!teacher) return res.status(400).json({ message: 'Choose an active teacher as adviser.' });
+      adviserName = teacher.name;
+    }
     const section = await Section.create({
       code,
       course,
@@ -56,7 +68,8 @@ export const createSection = async (req, res) => {
       strand: strand || null,
       semester,
       schoolYear,
-      instructor: instructor || null,
+      instructor: adviserName,
+      teacherId: adviserId,
       schedule: schedule || null,
       room: room || null,
       capacity: capacity || 40,
@@ -66,7 +79,7 @@ export const createSection = async (req, res) => {
     res.status(201).json(section);
   } catch (error) {
     console.error('Create section error:', error);
-    res.status(500).json({ message: error.message });
+    res.status(error.name === 'SequelizeDatabaseError' ? 500 : 400).json({ message: error.message });
   }
 };
 
@@ -93,11 +106,24 @@ export const updateSection = async (req, res) => {
     if (capacity !== undefined)   updateData.capacity = Number(capacity);
     if (teacherId !== undefined)  updateData.teacherId = teacherId || null;
 
-    await section.update(updateData);
+    if (teacherId !== undefined && teacherId) {
+      const teacher = await User.findOne({ where: { id: Number(teacherId), role: 'teacher', isActive: true } });
+      if (!teacher) return res.status(400).json({ message: 'Choose an active teacher as adviser.' });
+      updateData.instructor = teacher.name;
+    }
+    validateSectionConfiguration({ ...section.toJSON(), ...updateData });
+    if (!ACADEMIC_TERMS.includes(updateData.semester ?? section.semester)) return res.status(400).json({ message: 'Select a valid academic term.' });
+    await sequelize.transaction({ isolationLevel: 'READ COMMITTED' }, async transaction => {
+      await Section.findByPk(section.id, { transaction, lock: transaction.LOCK.UPDATE });
+      const count = await EnrollmentRecord.count({ where: { sectionId: section.id, status: ['enrolled', 'active'] }, transaction });
+      if (updateData.capacity !== undefined && updateData.capacity < count) throw new Error('Capacity cannot be lower than the current number of students.');
+      if (count && ['course', 'yearLevel', 'strand', 'schoolYear', 'semester'].some(key => key in updateData && String(updateData[key] ?? '') !== String(section[key] ?? ''))) throw new Error('Move enrolled students before changing the section program, grade, class, year, or term.');
+      await section.update(updateData, { transaction });
+    });
     res.json(section);
   } catch (error) {
     console.error('Update section error:', error);
-    res.status(500).json({ message: error.message });
+    res.status(error.name === 'SequelizeDatabaseError' ? 500 : 400).json({ message: error.message });
   }
 };
 
@@ -161,11 +187,11 @@ export const getAvailableSubjects = async (req, res) => {
         isActive: true,
         programCode: section.course
       },
-      attributes: ['id', 'code', 'description', 'units'],
+      attributes: ['id', 'code', 'description', 'units', 'programCode', 'gradeLevel', 'strand', 'semester'],
       order: [['code', 'ASC']]
     });
 
-    res.json(subjects);
+    res.json(subjects.filter(subject => subjectMatchesScope(subject, section)));
   } catch (error) {
     console.error('Get available subjects error:', error);
     res.status(500).json({ message: error.message });
@@ -182,28 +208,9 @@ export const assignStudentToSection = async (req, res) => {
       return res.status(400).json({ message: 'Subject and section are required' });
     }
 
-    // Get enrollment subject record
-    const enrollmentSubject = await EnrollmentSubject.findOne({
-      where: {
-        enrollmentId,
-        subjectId
-      }
-    });
-
-    if (!enrollmentSubject) {
-      return res.status(404).json({ message: 'Enrollment subject not found' });
-    }
-
-    // Update with section assignment
-    await enrollmentSubject.update({
-      sectionId,
-      assignedAt: new Date()
-    });
-
-    res.json({
-      message: 'Student assigned to section successfully',
-      enrollmentSubject
-    });
+    const result = await moveToSection(Number(enrollmentId), Number(sectionId));
+    if (!result.success) return res.status(400).json({ message: result.reason });
+    res.json({ message: 'Student assigned to section successfully', section: result.section });
   } catch (error) {
     console.error('Assign student error:', error);
     res.status(500).json({ message: error.message });
@@ -237,20 +244,16 @@ export const getSectionStudents = async (req, res) => {
     );
 
     if (!subjects || subjects.length === 0) {
-      const gradeNum = parseInt(section.yearLevel) || 7;
-      const strandFilter = section.course === 'SHS' && section.strand ? section.strand : null;
-      let query = `
-        SELECT code, description, units, null AS schedule, ? AS instructor, ? AS room
-        FROM subjects
-        WHERE programCode = ? AND gradeLevel = ? AND isActive = 1
-      `;
-      const params = [section.instructor || null, section.room || null, section.course, gradeNum];
-      if (strandFilter) {
-        query += ` AND (strand = ? OR strand IS NULL OR strand = '')`;
-        params.push(strandFilter);
-      }
-      query += ` ORDER BY code ASC`;
-      const [curriculumSubjects] = await sequelize.query(query, { replacements: params });
+      const [curriculumSubjects] = await sequelize.query(`SELECT sub.code, sub.description, sub.units,
+        a.schedule, a.room, CASE WHEN a.id IS NULL THEN du.name ELSE au.name END AS instructor
+        FROM subjects sub
+        LEFT JOIN section_subject_assignments a ON a.sectionId = ? AND a.subjectCode = sub.code
+        LEFT JOIN users du ON du.id = sub.teacherId AND du.role = 'teacher' AND du.isActive = 1
+        LEFT JOIN users au ON au.id = a.teacherId AND au.role = 'teacher' AND au.isActive = 1
+        WHERE sub.programCode = ? AND sub.gradeLevel = ? AND sub.semester = ? AND sub.isActive = 1
+          AND (sub.strand = ? OR sub.strand IS NULL OR sub.strand = '') ORDER BY sub.code`, {
+        replacements: [section.id, section.course, section.yearLevel, section.semester, section.strand || (section.course === 'JHS' ? 'Regular' : '')],
+      });
       subjects = curriculumSubjects || [];
     }
 

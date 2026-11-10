@@ -1,45 +1,19 @@
-import { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router';
+import EnrollmentPdfButton from './EnrollmentPdfButton';
+import EnrollmentApplicationReview, { EnrollmentReviewNavigation } from './EnrollmentApplicationReview';
+import { useState, useEffect, useCallback, useRef } from 'react';
+
 import { toast } from 'sonner';
 import {
   ClipboardList, BookOpen, X,
   Search, ChevronDown, ChevronUp, FileText, CheckCircle2,
-  RotateCcw, Calendar, ClipboardCheck, Download,
+  RotateCcw, Calendar, ClipboardCheck,
   Clock, RefreshCw, Filter, Users, UserX, UserCheck, ArrowRightLeft,
   ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight
 } from 'lucide-react';
-import { useAuth } from '../../contexts/AuthContext';
+
 import { Navbar } from '../../components/Navbar';
-import { API as CONFIG_API } from '../../config/api';
-import { confirmAction } from '../../components/ConfirmModal';
-
-export const API = CONFIG_API;
-export const tok = () => ({ Authorization: `Bearer ${localStorage.getItem('token')}`, 'Content-Type': 'application/json' });
-
-// ── Application status config (enrollment pipeline) ──────────────────────────
-export const STATUS_CFG = {
-  draft:             { label: 'Draft',             color: 'bg-gray-100 text-gray-700' },
-  submitted:         { label: 'Pending',           color: 'bg-amber-100 text-amber-800' },
-  pending_exam:      { label: 'Pending Exam',       color: 'bg-yellow-100 text-yellow-700' },
-  verified:          { label: 'Verified',           color: 'bg-purple-100 text-purple-700' },
-  returned:          { label: 'Returned',           color: 'bg-orange-100 text-orange-700' },
-  approved:          { label: 'Approved',           color: 'bg-green-100 text-green-700' },
-  subjects_enrolled: { label: 'Subjects enrolled',  color: 'bg-indigo-100 text-indigo-700' },
-  enrolled:          { label: 'Enrolled',           color: 'bg-emerald-100 text-emerald-700' },
-  active:            { label: 'Active',             color: 'bg-cyan-100 text-cyan-700' },
-  completed:         { label: 'Completed',          color: 'bg-slate-100 text-slate-700' },
-  rejected:          { label: 'Rejected',           color: 'bg-red-100 text-red-700' },
-};
-
-// ── Life status config (what happened to the student after enrollment) ────────
-export const LIFE_STATUS_CFG = {
-  enrolled:         { label: 'Enrolled',          color: 'bg-emerald-100 text-emerald-700', dot: 'bg-emerald-500' },
-  dropped:          { label: 'Dropped',            color: 'bg-red-100 text-red-700',         dot: 'bg-red-500' },
-  transferred_out:  { label: 'Transferred Out',    color: 'bg-orange-100 text-orange-700',   dot: 'bg-orange-500' },
-  transferred_in:   { label: 'Transferred In',     color: 'bg-blue-100 text-blue-700',       dot: 'bg-blue-500' },
-  retained:         { label: 'Retained',           color: 'bg-yellow-100 text-yellow-700',   dot: 'bg-yellow-500' },
-  completed:        { label: 'Completed',          color: 'bg-slate-100 text-slate-600',     dot: 'bg-slate-400' },
-};
+import { API, tok, STATUS_CFG, LIFE_STATUS_CFG } from './registrarConfig';
+import { confirmAction } from '../../utils/confirmAction';
 
 export function StatusBadge({ status }) {
   const c = STATUS_CFG[status] || { label: status, color: 'bg-gray-100 text-gray-600' };
@@ -88,13 +62,13 @@ function ApproveModal({ enrollment, onClose, onSuccess }) {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || data.message || 'Failed');
-      toast.success('Enrollment verified and approved');
+      toast.success('Enrollment approved');
       onSuccess();
     } catch (err) { toast.error(err.message); }
     finally { setLoading(false); }
   }
   return (
-    <Modal title="Verify & Approve Enrollment" onClose={onClose}>
+    <Modal title="Approve Enrollment" onClose={onClose}>
       <form onSubmit={submit} className="space-y-4">
         <p className="text-sm text-gray-600">Documents reviewed and complete for <span className="font-medium text-[#001840]">{enrollment.firstName} {enrollment.familyName}</span>. This will approve the enrollment directly.</p>
         <div>
@@ -108,7 +82,7 @@ function ApproveModal({ enrollment, onClose, onSuccess }) {
         <div className="flex gap-3">
           <button type="button" onClick={onClose} className="flex-1 px-4 py-2 border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">Cancel</button>
           <button type="submit" disabled={loading} className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 transition-colors disabled:opacity-60">
-            {loading ? 'Approving...' : 'Verify & Approve'}
+            {loading ? 'Approving...' : 'Approve'}
           </button>
         </div>
       </form>
@@ -206,7 +180,7 @@ function SSCScheduleModal({ enrollment, onClose, onSuccess }) {
 }
 
 // ── SSC Result Modal ──────────────────────────────────────────────────────────
-function SSCResultModal({ enrollment, onClose, onSuccess }) {
+export function SSCResultModal({ enrollment, onClose, onSuccess }) {
   const [examScore, setExamScore] = useState('');
   const [loading, setLoading] = useState(false);
   async function submit(e) {
@@ -685,10 +659,12 @@ export function AssignSectionModal({ enrollment, onClose, onSuccess }) {
 }
 
 // ── Enrollment Detail Panel ───────────────────────────────────────────────────
-const BACKEND = API.replace('/api', '');
 
 export function EnrollmentDetail({ enrollmentId, enrollment: rowData, onClose, onActionSuccess }) {
+  const reviewSections = useRef([]);
   const [detail, setDetail] = useState(null);
+  const [detailError, setDetailError] = useState('');
+  const [documentsError, setDocumentsError] = useState('');
   const [subjects, setSubjects] = useState([]);
   const [uploadedDocs, setUploadedDocs] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -702,6 +678,8 @@ export function EnrollmentDetail({ enrollmentId, enrollment: rowData, onClose, o
         fetch(`${API}/enrollments/${enrollmentId}/subjects`, { headers: tok() }).catch(() => null),
         fetch(`${API}/enrollments/${enrollmentId}/documents`, { headers: tok() }).catch(() => null),
       ]);
+      if (!detailRes.ok) throw new Error('Could not load the complete application. Please retry before reviewing.');
+      setDetailError('');
       if (detailRes.ok) {
         const d = await detailRes.json();
         setDetail(d.enrollment || d);
@@ -713,9 +691,13 @@ export function EnrollmentDetail({ enrollmentId, enrollment: rowData, onClose, o
       if (docsRes && docsRes.ok) {
         const docs = await docsRes.json();
         setUploadedDocs(Array.isArray(docs) ? docs : []);
+        setDocumentsError('');
+      } else {
+        setUploadedDocs([]);
+        setDocumentsError('Could not load the submitted documents.');
       }
     } catch (err) {
-      toast.error('Failed to load details');
+      setDetailError(err.message || 'Failed to load details');
     } finally {
       setLoading(false);
     }
@@ -727,22 +709,6 @@ export function EnrollmentDetail({ enrollmentId, enrollment: rowData, onClose, o
     setActiveModal(null);
     fetchDetail();
     onActionSuccess();
-  }
-
-  async function handleDownloadPDF() {
-    try {
-      const res = await fetch(`${API}/enrollments/${enrollmentId}/pdf`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-      });
-      if (!res.ok) throw new Error('Failed to download PDF');
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `enrollment-${enrollmentId}.pdf`;
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch (err) { toast.error(err.message); }
   }
 
   const e = detail || rowData;
@@ -758,21 +724,20 @@ export function EnrollmentDetail({ enrollmentId, enrollment: rowData, onClose, o
   const status = e.status;
   const level = (e.educationLevel || '').toUpperCase();
   const isJHS = level === 'JHS';
-  const isTransferee = e.enrollmentType === 'transferee';
 
-  const canApprove = ['submitted', 'returned', 'verified'].includes(status);
+  const canApprove = !loading && !detailError && (e.enrollmentType === 'old' || !documentsError) && ['submitted', 'verified'].includes(status);
   const canReturn = ['submitted', 'verified'].includes(status);
   const canScheduleSSC = isJHS && e.sscApplied && status === 'pending_exam' && !e.sscExamDate;
-  const canRecordSSC = isJHS && status === 'pending_exam' && !!e.sscExamDate && !e.sscExamScore;
+  const canRecordSSC = isJHS && status === 'pending_exam' && !!e.sscExamDate && !e.sscResult;
 
   // Display name: use enrollment name fields if filled, otherwise fall back to user account name
   const displayName = (e.firstName || e.familyName)
-    ? `${e.firstName || ''} ${e.familyName || ''}`.trim()
-    : (e.user_name || e.userEmail || `Student #${e.userId || e.id}`);
+    ? [e.firstName, e.middleName, e.familyName].filter(Boolean).join(' ')
+    : (e.user?.name || e.user_name || e.userEmail || `Student #${e.userId || e.id}`);
 
   return (
-    <div className="border-t border-gray-100 bg-slate-50/70">
-      <div className="px-6 py-5 space-y-4">
+    <div className="flex min-h-0 flex-1 flex-col bg-slate-50/70">
+      <div className="shrink-0 space-y-4 border-b border-slate-200 bg-white px-4 py-4 sm:px-6">
         {/* Header */}
         <div className="flex items-start justify-between">
           <div>
@@ -781,157 +746,20 @@ export function EnrollmentDetail({ enrollmentId, enrollment: rowData, onClose, o
               {e.educationLevel} &bull; {e.course || e.gradeLevel || '—'} &bull; {e.academicYear || e.semester || '—'}
             </p>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-200 transition-colors">
+          <button onClick={onClose} aria-label="Close enrollment review" className="p-1.5 rounded-lg hover:bg-gray-200 transition-colors">
             <X size={15} className="text-gray-400" />
           </button>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Student Info */}
-          <div className="bg-white rounded-xl border border-gray-100 p-4">
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Student Info</p>
-            <dl className="space-y-2 text-sm">
-              {[
-                ['Name', displayName !== `Student #${e.userId || e.id}` ? displayName : null],
-                ['Email', e.email || e.user_email || e.userEmail],
-                ['Mobile', e.mobileNumber],
-                ['Enrollment Type', e.enrollmentType],
-                ['Student Status', e.studentStatus],
-                ['Date of Birth', e.dateOfBirth],
-                ['Current Section', e.sectionName || 'Unassigned (Pending)'],
-                ['Previous Section', e.previousSection ? `${e.previousSection}${e.previousSectionDetails?.gradeLevel ? ` (${e.previousSectionDetails.gradeLevel})` : ''}` : null],
-                ['SSC Applied', e.sscApplied ? 'Yes' : null],
-              ].filter(([, v]) => v).map(([label, value]) => (
-                <div key={label} className="flex justify-between gap-2">
-                  <dt className="text-gray-400 shrink-0">{label}</dt>
-                  <dd className={`font-medium text-right truncate ${label === 'Current Section' ? (e.sectionName ? 'text-emerald-700 font-semibold' : 'text-amber-600') : label === 'Previous Section' ? 'text-amber-900 font-semibold' : 'text-gray-700'}`}>{value}</dd>
-                </div>
-              ))}
-              {/* Life status row — shown separately so we can use the badge */}
-              {e.lifeStatus && (
-                <div className="flex justify-between gap-2 pt-1 border-t border-gray-50">
-                  <dt className="text-gray-400 shrink-0">Life Status</dt>
-                  <dd><LifeStatusBadge status={e.lifeStatus} /></dd>
-                </div>
-              )}
-              {e.lifeStatusReason && (
-                <div className="flex justify-between gap-2">
-                  <dt className="text-gray-400 shrink-0">Reason</dt>
-                  <dd className="text-gray-600 text-right text-xs max-w-45">{e.lifeStatusReason}</dd>
-                </div>
-              )}
-              {e.destinationSchool && (
-                <div className="flex justify-between gap-2">
-                  <dt className="text-gray-400 shrink-0">Transferred To</dt>
-                  <dd className="font-medium text-gray-700 text-right truncate">{e.destinationSchool}</dd>
-                </div>
-              )}
-            </dl>
-          </div>
-
-          {/* Documents */}
-          <div className="bg-white rounded-xl border border-gray-100 p-4">
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Submitted Documents</p>
-
-            {/* Checked credential list */}
-            {Array.isArray(e.admissionCredentials) && e.admissionCredentials.length > 0 ? (
-              <ul className="space-y-2">
-                {e.admissionCredentials.map((doc, i) => {
-                  const docKey = typeof doc === 'string' ? doc : (doc.key || doc.type || '');
-                  const docLabel = typeof doc === 'string' ? doc : (doc.name || doc.label || doc.type || doc);
-                  const uploaded = uploadedDocs.find(d => d.documentType === docKey);
-                  return (
-                    <li key={i} className="flex items-center justify-between gap-2 text-sm">
-                      <div className="flex items-center gap-2">
-                        <CheckCircle2 size={13} className={uploaded ? 'text-green-500' : 'text-gray-300'} />
-                        <span className="text-gray-700">{docLabel}</span>
-                      </div>
-                      {uploaded ? (
-                        <a href={`${BACKEND}${uploaded.filePath}`} target="_blank" rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 text-xs px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg font-medium transition-colors">
-                          <FileText size={11} /> View
-                        </a>
-                      ) : (
-                        <span className="text-xs text-gray-400 italic">No file</span>
-                      )}
-                    </li>
-                  );
-                })}
-              </ul>
-            ) : uploadedDocs.length > 0 ? (
-              // SSC applications: no admissionCredentials but have uploaded docs
-              <ul className="space-y-2">
-                {uploadedDocs.map(doc => (
-                  <li key={doc.id} className="flex items-center justify-between gap-2 text-sm">
-                    <div className="flex items-center gap-2">
-                      <CheckCircle2 size={13} className="text-green-500" />
-                      <span className="text-gray-700">{doc.documentLabel || doc.documentType}</span>
-                    </div>
-                    <a href={`${BACKEND}${doc.filePath}`} target="_blank" rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-xs px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg font-medium transition-colors">
-                      <FileText size={11} /> View
-                    </a>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="text-sm text-gray-400 italic">No documents on record</p>
-            )}
-
-            {/* Standalone uploaded docs not tied to a credential checkbox — only show when admissionCredentials has items */}
-            {Array.isArray(e.admissionCredentials) && e.admissionCredentials.length > 0 && uploadedDocs.filter(d => {
-              const creds = Array.isArray(e.admissionCredentials) ? e.admissionCredentials : [];
-              return !creds.some(c => (typeof c === 'string' ? c : c.key || c.type) === d.documentType);
-            }).map(doc => (
-              <div key={doc.id} className="flex items-center justify-between gap-2 text-sm mt-2">
-                <div className="flex items-center gap-2">
-                  <FileText size={13} className="text-blue-500" />
-                  <span className="text-gray-700">{doc.documentLabel || doc.documentType}</span>
-                </div>
-                <a
-                  href={`${BACKEND}${doc.filePath}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 text-xs px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg font-medium transition-colors"
-                >
-                  <FileText size={11} /> View
-                </a>
-              </div>
-            ))}
-
-          </div>
-        </div>
+        <EnrollmentReviewNavigation enrollment={e} disabled={loading || !!detailError} onJump={index => reviewSections.current[index]?.scrollIntoView({ behavior: 'smooth', block: 'start' })} />
+      </div>
+      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-4 py-5 sm:px-6" aria-label="Enrollment review details" tabIndex={0}>
+        {loading ? <p role="status" className="flex items-center gap-2 py-6 text-sm text-slate-500"><RefreshCw size={16} className="animate-spin" /> Loading complete application...</p> : detailError ? <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{detailError} <button type="button" onClick={fetchDetail} className="font-semibold underline">Retry</button></div> : <EnrollmentApplicationReview key={enrollmentId} enrollment={e} documents={uploadedDocs} documentsError={documentsError} onRetry={fetchDetail} sectionsRef={reviewSections} />}
 
         {e.registrar_remarks && (
           <div className="bg-orange-50 border border-orange-100 rounded-xl p-4">
             <p className="text-xs font-semibold text-orange-600 uppercase tracking-wider mb-1">Registrar Remarks</p>
             <p className="text-sm text-orange-800">{e.registrar_remarks}</p>
-          </div>
-        )}
-
-        {/* SSC Not Qualified Notice */}
-        {e.sscApplied == 1 && e.sscQualified == 0 && (
-          <div className="bg-red-50 border border-red-100 rounded-xl p-4">
-            <p className="text-xs font-semibold text-red-600 uppercase tracking-wider mb-1">SSC — Not Qualified</p>
-            <p className="text-sm text-red-700">
-              Student applied for Special Science Class but does not meet the requirement.
-              Grade 6 average is <span className="font-semibold">{e.grade6Average}</span> (minimum 85 required).
-              Student will be enrolled in the <span className="font-semibold">Regular class</span>.
-            </p>
-          </div>
-        )}
-
-        {/* SSC Info */}
-        {e.sscExamDate && (
-          <div className="bg-yellow-50 border border-yellow-100 rounded-xl p-4">
-            <p className="text-xs font-semibold text-yellow-700 uppercase tracking-wider mb-2">SSC Exam</p>
-            <div className="grid grid-cols-2 gap-2 text-sm">
-              <div><span className="text-gray-400">Date: </span><span className="font-medium">{new Date(e.sscExamDate).toLocaleDateString()}</span></div>
-              <div><span className="text-gray-400">Passing: </span><span className="font-medium">{e.sscPassingScore || 75}</span></div>
-              {e.sscExamScore && <div><span className="text-gray-400">Score: </span><span className="font-semibold text-[#001840]">{e.sscExamScore}</span></div>}
-              {e.sscResult && <div><span className="text-gray-400">Result: </span><span className={`font-semibold ${e.sscResult === 'passed' ? 'text-green-600' : 'text-red-500'}`}>{e.sscResult}</span></div>}
-              {e.sscClass && <div><span className="text-gray-400">Class: </span><span className="font-medium">{e.sscClass}</span></div>}
-            </div>
           </div>
         )}
 
@@ -955,7 +783,7 @@ export function EnrollmentDetail({ enrollmentId, enrollment: rowData, onClose, o
           {canApprove && (
             <button onClick={() => setActiveModal('approve')}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs font-medium hover:bg-green-700 transition-colors">
-              <CheckCircle2 size={13} /> Verify & Approve
+              <CheckCircle2 size={13} /> Approve
             </button>
           )}
           {canReturn && (
@@ -976,15 +804,6 @@ export function EnrollmentDetail({ enrollmentId, enrollment: rowData, onClose, o
               <ClipboardCheck size={13} /> Record SSC Result
             </button>
           )}
-          {/* Section Assignment - available for pending/submitted/verified/approved/enrolled students */}
-          {['submitted', 'pending_exam', 'verified', 'returned', 'approved', 'subjects_enrolled', 'enrolled', 'active'].includes(status) && (
-            <button
-              onClick={() => setActiveModal('assign-section')}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#102A71] text-white rounded-lg text-xs font-semibold hover:bg-[#001840] transition-colors shadow-xs"
-            >
-              <BookOpen size={13} /> {e.sectionName ? 'Change Section' : 'Assign Section'}
-            </button>
-          )}
           {/* Life status — only for enrolled students not already dropped/transferred */}
           {['enrolled', 'active', 'approved', 'subjects_enrolled'].includes(status) &&
            !['dropped', 'transferred_out'].includes(e.lifeStatus) && (
@@ -993,16 +812,12 @@ export function EnrollmentDetail({ enrollmentId, enrollment: rowData, onClose, o
               <UserX size={13} /> Update Student Status
             </button>
           )}
-          <button onClick={handleDownloadPDF}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 text-gray-600 rounded-lg text-xs font-medium hover:bg-gray-50 transition-colors ml-auto">
-            <Download size={13} /> PDF
-          </button>
+          {e.enrollmentType !== 'old' && <EnrollmentPdfButton key={`${enrollmentId}:${e.updatedAt || ''}`} enrollmentId={enrollmentId} />}
         </div>
       </div>
 
       {activeModal === 'approve' && <ApproveModal enrollment={e} onClose={() => setActiveModal(null)} onSuccess={handleModalSuccess} />}
       {activeModal === 'return' && <ReturnModal enrollment={e} onClose={() => setActiveModal(null)} onSuccess={handleModalSuccess} />}
-      {activeModal === 'assign-section' && <AssignSectionModal enrollment={e} onClose={() => setActiveModal(null)} onSuccess={handleModalSuccess} />}
       {activeModal === 'ssc-schedule' && <SSCScheduleModal enrollment={e} onClose={() => setActiveModal(null)} onSuccess={handleModalSuccess} />}
       {activeModal === 'ssc-result' && <SSCResultModal enrollment={e} onClose={() => setActiveModal(null)} onSuccess={handleModalSuccess} />}
       {activeModal === 'life-status' && <LifeStatusModal enrollment={e} onClose={() => setActiveModal(null)} onSuccess={handleModalSuccess} />}

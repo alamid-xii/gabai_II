@@ -1,8 +1,8 @@
 import { AdminAdmissionSettings } from "./AdminAdmissionSettings";
-import { confirmAction } from "../../components/ConfirmModal";
+import { confirmAction } from "../../utils/confirmAction";
 import { AdminSchoolProfile } from "./AdminSchoolProfile";
 import { AdminEnrollmentGuide } from "./AdminEnrollmentGuide";
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Link, useNavigate, useLocation } from "react-router";
 import {
   ClipboardList, School, MapPin, Users, MessageSquare, FileText, BarChart3, Settings, LogOut,
@@ -11,17 +11,17 @@ import {
   CheckCircle, XCircle, Download, Calendar, Filter, ChevronLeft, ChevronRight,
   UserPlus, Archive, Activity
 } from "lucide-react";
-import { MapContainer, TileLayer, Marker, useMapEvents } from "react-leaflet";
+import { MapContainer, TileLayer, Marker } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { toast } from "sonner";
+
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../components/ui/card";
 import { Badge } from "../../components/ui/badge";
 import { AcademicSetup } from "../../components/admin/AcademicSetup";
 import { SectionManagement } from "./SectionManagement";
-import { useAuth } from "../../contexts/AuthContext";
+import { useAuth } from "../../contexts/authState";
 import { Navbar } from "../../components/Navbar";
 import { API } from "../../config/api";
 
@@ -35,7 +35,7 @@ import { AdminSettings } from "./AdminSettings";
 import { AdminSystemLogs } from "./AdminSystemLogs";
 
 export function AdminDashboard({ initialTab = "dashboard" }) {
-  const { user, isLoggedIn, loading: authLoading } = useAuth();
+  const { user, isLoggedIn, loading: authLoading, clearSession } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -47,25 +47,14 @@ export function AdminDashboard({ initialTab = "dashboard" }) {
   const [editingFAQ, setEditingFAQ] = useState(null);
   const [showFAQForm, setShowFAQForm] = useState(false);
 
-  useEffect(() => {
-    if (location.state?.tab) {
-      setActiveTab(location.state.tab);
-    } else if (initialTab) {
-      setActiveTab(initialTab);
-    }
-  }, [location.state, initialTab]);
+  const requestedTab = location.state?.tab || initialTab;
+  const [previousRequestedTab, setPreviousRequestedTab] = useState(requestedTab);
+  if (previousRequestedTab !== requestedTab) {
+    setPreviousRequestedTab(requestedTab);
+    setActiveTab(requestedTab);
+  }
 
-  // Auth guard — wait for auth to finish loading first
-  useEffect(() => {
-    if (authLoading) return;
-    if (!isLoggedIn || user?.role !== 'admin') {
-      navigate('/login');
-      return;
-    }
-    fetchDashboardData();
-  }, [authLoading, isLoggedIn, user, navigate]);
-
-  async function fetchDashboardData() {
+  const fetchDashboardData = useCallback(async () => {
     try {
       const token = localStorage.getItem("token");
       const headers = {
@@ -81,8 +70,7 @@ export function AdminDashboard({ initialTab = "dashboard" }) {
       ]);
 
       if (statsRes.status === 401 || statsRes.status === 403) {
-        localStorage.removeItem("user");
-        localStorage.removeItem("token");
+        clearSession();
         navigate("/login");
         return;
       }
@@ -101,7 +89,19 @@ export function AdminDashboard({ initialTab = "dashboard" }) {
     } catch (error) {
       console.error("Error fetching dashboard data:", error);
     }
-  }
+  }, [clearSession, navigate]);
+
+  // Auth guard — wait for auth to finish loading first
+  useEffect(() => {
+    if (authLoading) return;
+    if (!isLoggedIn || user?.role !== 'admin') {
+      navigate('/login');
+      return;
+    }
+    fetchDashboardData();
+  }, [authLoading, isLoggedIn, user, navigate, fetchDashboardData]);
+
+
 
   async function handleCreateFAQ(faqData) {
     try {

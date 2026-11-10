@@ -10,7 +10,7 @@ export const GradingPeriod = sequelize.define("GradingPeriod", {
   },
   quarter: {
     // Q1 | Q2 | Q3 | Q4
-    type: DataTypes.ENUM('Q1', 'Q2', 'Q3', 'Q4'),
+    type: DataTypes.ENUM('Q1', 'Q2', 'Q3', 'Q4', 'FINAL'),
     allowNull: false
   },
   schoolYear: {

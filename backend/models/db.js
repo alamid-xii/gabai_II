@@ -28,7 +28,7 @@ import { Sequelize } from "sequelize";
 import dotenv from "dotenv";
 import { fileURLToPath } from "node:url";
 
-dotenv.config({ path: fileURLToPath(new URL("../.env", import.meta.url)) });
+dotenv.config({ path: fileURLToPath(new URL("../.env", import.meta.url)), quiet: true });
 
 export const sequelize = new Sequelize(
   process.env.DB_NAME || "backend",

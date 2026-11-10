@@ -1,17 +1,16 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import { API } from '../../config/api';
 import { 
   Search, Filter, Download, CheckCircle, XCircle, 
   FileText, TrendingUp, Users, Calendar, Eye, BookOpen,
-  ChevronLeft, ChevronRight
+  ChevronLeft, ChevronRight, AlertCircle
 } from 'lucide-react';
 
 export function AdminEnrollments() {
   const navigate = useNavigate();
   const [enrollments, setEnrollments] = useState([]);
-  const [filteredEnrollments, setFilteredEnrollments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -19,31 +18,18 @@ export function AdminEnrollments() {
   const [selectedEnrollments, setSelectedEnrollments] = useState([]);
   const [showApprovalModal, setShowApprovalModal] = useState(null);
   const [approvalComment, setApprovalComment] = useState('');
+  const [showSSCModal, setShowSSCModal] = useState(null);
+  const [sscExamDate, setSSCExamDate] = useState('');
+  const [sscPassingScore, setSSCPassingScore] = useState(75);
+  const [sscExamScore, setSSCExamScore] = useState('');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   
-  useEffect(() => {
-    loadEnrollments();
-  }, []);
-  
-  useEffect(() => {
-    filterEnrollments();
-  }, [searchQuery, statusFilter, courseFilter, enrollments]);
-  
-  const loadEnrollments = async () => {
+  const loadEnrollments = useCallback(async () => {
     try {
-      setLoading(true);
       const token = localStorage.getItem('token');
       
-      if (!token) {
-        console.warn('No token found in localStorage');
-        toast.error('Authentication required. Please log in again.');
-        setEnrollments([]);
-        setLoading(false);
-        return;
-      }
-      
-      console.log('Loading enrollments with token:', token.substring(0, 20) + '...');
+
       
       const response = await fetch(`${API}/admin/enrollments`, {
         method: 'GET',
@@ -71,12 +57,13 @@ export function AdminEnrollments() {
     } finally {
       setLoading(false);
     }
-  };
-  
-  const filterEnrollments = () => {
+  }, []);
+
+  useEffect(() => { loadEnrollments(); }, [loadEnrollments]);
+
+  const filteredEnrollments = useMemo(() => {
     if (!Array.isArray(enrollments)) {
-      setFilteredEnrollments([]);
-      return;
+      return [];
     }
     
     let filtered = [...enrollments];
@@ -101,10 +88,9 @@ export function AdminEnrollments() {
       filtered = filtered.filter(e => e.course === courseFilter);
     }
     
-    setFilteredEnrollments(filtered);
-    setPage(1);
-  };
-  
+    return filtered;
+  }, [searchQuery, statusFilter, courseFilter, enrollments]);
+
   const handleApprove = async (id, comment) => {
     try {
       const res = await fetch(`${API}/admin/enrollments/${id}/approve`, {
@@ -152,7 +138,7 @@ export function AdminEnrollments() {
       loadEnrollments();
       setShowApprovalModal(null);
       setApprovalComment('');
-    } catch (error) {
+    } catch  {
       toast.error('Failed to reject enrollment');
     }
   };
@@ -179,7 +165,7 @@ export function AdminEnrollments() {
       setShowSSCModal(null);
       setSSCExamDate('');
       setSSCPassingScore('75');
-    } catch (error) {
+    } catch  {
       toast.error('Failed to schedule exam');
     }
   };
@@ -203,7 +189,7 @@ export function AdminEnrollments() {
       loadEnrollments();
       setShowSSCModal(null);
       setSSCExamScore('');
-    } catch (error) {
+    } catch  {
       toast.error('Failed to record exam result');
     }
   };
@@ -233,7 +219,7 @@ export function AdminEnrollments() {
       
       toast.success(`Exported ${selectedEnrollments.length} enrollments`);
       setSelectedEnrollments([]);
-    } catch (error) {
+    } catch  {
       toast.error('Failed to export enrollments');
     }
   };
@@ -333,7 +319,7 @@ export function AdminEnrollments() {
                   type="text"
                   placeholder="Search by name, student #, course..."
                   value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }}
                   className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#F5C400] focus:border-transparent"
                 />
               </div>
@@ -342,7 +328,7 @@ export function AdminEnrollments() {
             {/* Status Filter */}
             <select
               value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
+              onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
               className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#F5C400] focus:border-transparent"
             >
               <option value="all">All Status</option>
@@ -356,7 +342,7 @@ export function AdminEnrollments() {
             {/* Course Filter */}
             <select
               value={courseFilter}
-              onChange={(e) => setCourseFilter(e.target.value)}
+              onChange={(e) => { setCourseFilter(e.target.value); setPage(1); }}
               className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#F5C400] focus:border-transparent"
             >
               <option value="all">All Courses</option>

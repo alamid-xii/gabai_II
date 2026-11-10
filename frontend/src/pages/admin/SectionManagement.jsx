@@ -1,3 +1,4 @@
+import { usePortalSlot } from '../../hooks/usePortalSlot';
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { toast } from 'sonner';
@@ -9,7 +10,7 @@ import {
 } from 'lucide-react';
 
 import { API } from '../../config/api';
-import { confirmAction } from '../../components/ConfirmModal';
+import { confirmAction } from '../../utils/confirmAction';
 
 const tok = () => ({ Authorization: `Bearer ${localStorage.getItem('token')}`, 'Content-Type': 'application/json' });
 
@@ -19,6 +20,28 @@ const SCHOOL_YEARS = ['2026-2027', '2025-2026', '2024-2025'];
 const PAGE_SIZE = 10;
 
 // ── Section Students Panel ────────────────────────────────────────────────────
+function SectionFinalGrades({ sectionId }) {
+  const [data, setData] = useState(null);
+  const [error, setError] = useState('');
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`${API}/admin/sections/${sectionId}/grades`, { headers: tok() })
+      .then(async response => { const body = await response.json(); if (!response.ok) throw new Error(body.error || 'Could not load grades'); if (!cancelled) setData(body); })
+      .catch(err => { if (!cancelled) setError(err.message); });
+    return () => { cancelled = true; };
+  }, [sectionId]);
+  if (error) return <p role="alert" className="text-red-600">{error}</p>;
+  if (!data) return <p role="status">Loading final grades...</p>;
+  return <div className="space-y-3"><p className="text-sm text-gray-500">Year-end final grades submitted by teachers. Students cannot access these records.</p>
+    <div className="overflow-x-auto"><table className="w-full text-sm text-left">
+      <thead><tr>{['Student', 'Subject', 'Teacher', 'Final Grade', 'Result'].map(label => <th key={label} className="p-3">{label}</th>)}</tr></thead>
+      <tbody>{data.grades.map(row => <tr key={row.enrollmentSubjectId} className="border-t">
+        <td className="p-3">{row.familyName}, {row.firstName}</td><td className="p-3">{row.subjectCode} - {row.subjectDescription}</td>
+        <td className="p-3">{row.instructor || '-'}</td><td className="p-3">{row.finalGrade ?? 'Not submitted'}</td><td className="p-3">{row.finalGrade == null ? 'Pending' : row.remarks}</td>
+      </tr>)}{!data.grades.length && <tr><td colSpan="5" className="p-4">No enrolled subjects in this section.</td></tr>}</tbody>
+    </table></div></div>;
+}
+
 function SectionStudentsPanel({ section, allSections, onClose, onChanged }) {
   const [activeTab, setActiveTab] = useState('students');
   const [students, setStudents] = useState([]);
@@ -40,7 +63,7 @@ function SectionStudentsPanel({ section, allSections, onClose, onChanged }) {
       if (!res.ok) throw new Error('Failed to load');
       const data = await res.json();
       setStudents(data.students || []);
-    } catch (err) {
+    } catch  {
       toast.error('Failed to load section students');
     } finally {
       setLoadingStudents(false);
@@ -60,9 +83,9 @@ function SectionStudentsPanel({ section, allSections, onClose, onChanged }) {
       setTeachers(Array.isArray(teacherData) ? teacherData : []);
       // Initialize local instructor state
       const init = {};
-      subjData.forEach(s => { init[s.subjectCode] = s.instructor || ''; });
+      subjData.forEach(s => { init[s.subjectCode] = s.teacherId || teacherData.find(teacher => teacher.name === s.instructor)?.id || ''; });
       setLocalInstructors(init);
-    } catch (err) {
+    } catch  {
       toast.error('Failed to load subject teachers');
     } finally {
       setLoadingSubjects(false);
@@ -79,7 +102,7 @@ function SectionStudentsPanel({ section, allSections, onClose, onChanged }) {
     try {
       const res = await fetch(`${API}/admin/sections/${section.id}/subject-teachers`, {
         method: 'PUT', headers: tok(),
-        body: JSON.stringify({ subjectCode, instructor: localInstructors[subjectCode] || null }),
+        body: JSON.stringify({ subjectCode, teacherId: localInstructors[subjectCode] ? Number(localInstructors[subjectCode]) : null }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed');
@@ -136,6 +159,7 @@ function SectionStudentsPanel({ section, allSections, onClose, onChanged }) {
           {[
             { id: 'students', label: 'Students' },
             { id: 'subjects', label: 'Subject Teachers' },
+            { id: 'grades', label: 'Year-end Grades' },
           ].map(tab => (
             <button key={tab.id} onClick={() => setActiveTab(tab.id)}
               className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === tab.id
@@ -212,6 +236,7 @@ function SectionStudentsPanel({ section, allSections, onClose, onChanged }) {
           )}
 
           {/* ── Subject Teachers Tab ── */}
+          {activeTab === 'grades' && <SectionFinalGrades sectionId={section.id} />}
           {activeTab === 'subjects' && (
             loadingSubjects ? (
               <div className="flex items-center justify-center py-12 gap-2 text-gray-400 text-sm">
@@ -255,7 +280,7 @@ function SectionStudentsPanel({ section, allSections, onClose, onChanged }) {
                               className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-[#001840]/20 focus:border-[#001840] bg-white">
                               <option value="">— Not assigned —</option>
                               {teachers.map(t => (
-                                <option key={t.id} value={t.name}>{t.name}</option>
+                                <option key={t.id} value={t.id}>{t.name}</option>
                               ))}
                             </select>
                           </td>
@@ -690,30 +715,8 @@ export function SectionManagement() {
   const [page, setPage] = useState(1);
   const [formModal, setFormModal] = useState(null); // null | 'create' | section object
   const [studentsPanel, setStudentsPanel] = useState(null); // section object
-  const [headerContainer, setHeaderContainer] = useState(null);
+  const headerContainer = usePortalSlot('admin-header-slot', true, 'flex-1 flex items-center justify-end gap-2 flex-wrap ml-auto');
 
-  useEffect(() => {
-    const titleEl = document.querySelector("header h1");
-    const header = titleEl ? titleEl.closest("header") : document.querySelector("header");
-    if (!header) return;
-
-    let slot = header.querySelector("#admin-header-slot");
-    let created = false;
-    if (!slot) {
-      slot = document.createElement("div");
-      slot.id = "admin-header-slot";
-      slot.className = "flex items-center justify-end gap-2 ml-auto";
-      header.appendChild(slot);
-      created = true;
-    }
-    setHeaderContainer(slot);
-
-    return () => {
-      if (created && slot && slot.parentNode) {
-        slot.parentNode.removeChild(slot);
-      }
-    };
-  }, []);
 
   const loadSections = useCallback(async () => {
     setLoading(true);
@@ -722,7 +725,7 @@ export function SectionManagement() {
       if (!res.ok) throw new Error('Failed to load');
       const data = await res.json();
       setSections(Array.isArray(data) ? data : (data.sections || []));
-    } catch (err) {
+    } catch  {
       toast.error('Failed to load sections');
     } finally {
       setLoading(false);

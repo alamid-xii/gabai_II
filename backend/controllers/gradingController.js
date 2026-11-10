@@ -1,33 +1,6 @@
 import { sequelize } from '../models/db.js';
 import { GradingPeriod } from '../models/gradingPeriodModel.js';
 
-// ── Helper: compute final grade + remarks ────────────────────────────────────
-function computeFinalAndRemarks(q1, q2, q3, q4) {
-  const isFourTerms = q4 !== null && q4 !== undefined && q4 !== '';
-  const terms = isFourTerms ? [q1, q2, q3, q4] : [q1, q2, q3];
-  const quarters = terms.map(v => (v !== null && v !== undefined && v !== '' ? parseFloat(v) : null));
-  const entered = quarters.filter(v => v !== null);
-
-  const totalRequired = isFourTerms ? 4 : 3;
-
-  // Final grade is ONLY calculated and displayed once ALL 3 trimesters have complete grades
-  if (entered.length < totalRequired) {
-    return { finalGrade: null, remarks: 'Incomplete' };
-  }
-
-  const avg = entered.reduce((sum, v) => sum + v, 0) / totalRequired;
-  const finalGrade = Math.round(avg * 100) / 100;
-  const remarks = finalGrade >= 75 ? 'Passed' : 'Failed';
-
-  return { finalGrade, remarks };
-}
-
-// ── ADMIN: Grading Periods ────────────────────────────────────────────────────
-
-/**
- * GET /api/admin/grading-periods
- * List grading periods — optionally filter by schoolYear
- */
 export const getGradingPeriods = async (req, res) => {
   try {
     const { schoolYear } = req.query;
@@ -41,7 +14,7 @@ export const getGradingPeriods = async (req, res) => {
       } catch (_) {}
     }
 
-    const where = year ? { schoolYear: year } : {};
+    const where = year ? { schoolYear: year, quarter: 'FINAL' } : { quarter: 'FINAL' };
     const periods = await GradingPeriod.findAll({
       where,
       order: [['quarter', 'ASC']]
@@ -68,7 +41,7 @@ export const setupGradingPeriods = async (req, res) => {
       schoolYear = sy.year;
     }
 
-    const quarters = ['Q1', 'Q2', 'Q3'];
+    const quarters = ['FINAL'];
     let created = 0;
 
     for (const quarter of quarters) {
@@ -79,7 +52,7 @@ export const setupGradingPeriods = async (req, res) => {
       if (wasCreated) created++;
     }
 
-    const all = await GradingPeriod.findAll({ where: { schoolYear }, order: [['quarter', 'ASC']] });
+    const all = await GradingPeriod.findAll({ where: { schoolYear, quarter: 'FINAL' }, order: [['quarter', 'ASC']] });
     res.json({ message: `Grading periods ready for ${schoolYear}. ${created} new period(s) created.`, periods: all });
   } catch (err) {
     console.error('setupGradingPeriods error:', err);
@@ -95,6 +68,7 @@ export const openGradingPeriod = async (req, res) => {
   try {
     const period = await GradingPeriod.findByPk(req.params.id);
     if (!period) return res.status(404).json({ error: 'Grading period not found' });
+    if (period.quarter !== 'FINAL') return res.status(400).json({ error: 'Only year-end grade submission is supported.' });
     if (period.isOpen) return res.status(400).json({ error: `${period.quarter} is already open` });
 
     await period.update({ isOpen: true, openedAt: new Date(), closedAt: null });
@@ -149,8 +123,7 @@ export const getTeacherClasses = async (req, res) => {
         COUNT(es.id) AS studentCount
       FROM enrollment_subjects es
       LEFT JOIN sections s ON es.sectionId = s.id
-      WHERE (es.teacherId = ? OR es.instructor = ? OR s.teacherId = ? OR s.instructor = ?
-             OR EXISTS (SELECT 1 FROM class_schedules cs WHERE cs.sectionId = es.sectionId AND cs.subjectCode = es.subjectCode AND (cs.teacherId = ? OR cs.teacherName = ?)))
+      WHERE (es.teacherId = ? OR (es.teacherId IS NULL AND es.instructor = ?))
         AND es.status = 'enrolled'
         AND (s.isActive = 1 OR s.isActive IS NULL)
       GROUP BY 
@@ -164,7 +137,7 @@ export const getTeacherClasses = async (req, res) => {
         s.schoolYear,
         s.semester
       ORDER BY s.yearLevel ASC, es.subjectCode ASC, es.sectionName ASC
-    `, { replacements: [teacherId, teacherName, teacherId, teacherName, teacherId, teacherName] });
+    `, { replacements: [teacherId, teacherName] });
 
     res.json(classes || []);
   } catch (err) {
@@ -187,14 +160,13 @@ export const getGradeSheet = async (req, res) => {
 
     if (isNaN(sectionId)) return res.status(400).json({ error: 'Invalid section ID' });
 
-    // Verify teacher is assigned to this subject+section or is section adviser
+    // Verify teacher is assigned to this subject+section
     const [[check]] = await sequelize.query(
       `SELECT es.id FROM enrollment_subjects es
        LEFT JOIN sections s ON es.sectionId = s.id
-       WHERE (es.teacherId = ? OR es.instructor = ? OR s.teacherId = ? OR s.instructor = ?
-              OR EXISTS (SELECT 1 FROM class_schedules cs WHERE cs.sectionId = es.sectionId AND cs.subjectCode = es.subjectCode AND (cs.teacherId = ? OR cs.teacherName = ?)))
+       WHERE (es.teacherId = ? OR (es.teacherId IS NULL AND es.instructor = ?))
          AND es.sectionId = ? AND es.subjectCode = ? LIMIT 1`,
-      { replacements: [teacherId, teacherName, teacherId, teacherName, teacherId, teacherName, sectionId, subjectCode] }
+      { replacements: [teacherId, teacherName, sectionId, subjectCode] }
     );
     if (!check) {
       return res.status(403).json({ error: 'You are not assigned to this subject in this section' });
@@ -235,14 +207,7 @@ export const getGradeSheet = async (req, res) => {
       { replacements: [activeSchoolYear || ''] }
     );
 
-    const processedStudents = (students || []).map(s => {
-      const isComplete = s.q1 != null && s.q1 !== '' && s.q2 != null && s.q2 !== '' && s.q3 != null && s.q3 !== '';
-      return {
-        ...s,
-        finalGrade: isComplete ? s.finalGrade : null,
-        remarks: isComplete ? s.remarks : 'Incomplete'
-      };
-    });
+    const processedStudents = students || [];
 
     res.json({
       section: section || null,
@@ -258,37 +223,29 @@ export const getGradeSheet = async (req, res) => {
 
 /**
  * PUT /api/teacher/grades/:enrollmentSubjectId
- * Save one or more quarterly grades for a student's subject
- * Body: { quarter: 'Q1'|'Q2'|'Q3'|'Q4', grade: number }
- * Quarter must be open (admin-controlled)
+ * Submit a year-end final grade for a student's assigned subject.
+ * Body: { finalGrade: number }; admin must open the FINAL submission window.
  */
 export const saveGrade = async (req, res) => {
   try {
     const teacherId = req.user.id;
-    const enrollmentSubjectId = parseInt(req.params.enrollmentSubjectId);
-    const { quarter, grade } = req.body;
-
-    if (isNaN(enrollmentSubjectId)) return res.status(400).json({ error: 'Invalid enrollment subject ID' });
-
-    const validQuarters = ['Q1', 'Q2', 'Q3', 'Q4', '1st Tri', '2nd Tri', '3rd Tri'];
-    if (!validQuarters.includes(quarter)) {
-      return res.status(400).json({ error: 'Invalid grading period' });
-    }
-
-    const gradeNum = parseFloat(grade);
-    if (grade !== null && grade !== '' && (isNaN(gradeNum) || gradeNum < 0 || gradeNum > 100)) {
-      return res.status(400).json({ error: 'Grade must be a number between 0 and 100' });
+    const enrollmentSubjectId = Number(req.params.enrollmentSubjectId);
+    const { finalGrade } = req.body;
+    if (!Number.isInteger(enrollmentSubjectId) || enrollmentSubjectId <= 0) return res.status(400).json({ error: 'Invalid enrollment subject ID' });
+    if (req.body.quarter !== undefined) return res.status(400).json({ error: 'Submit a year-end finalGrade instead of quarterly grades.' });
+    const gradeNum = Number(finalGrade);
+    if (finalGrade === null || finalGrade === undefined || !['number', 'string'].includes(typeof finalGrade) || String(finalGrade).trim() === '' || !Number.isFinite(gradeNum) || gradeNum < 0 || gradeNum > 100) {
+      return res.status(400).json({ error: 'Final grade must be a number between 0 and 100' });
     }
 
     const teacherName = req.user.name;
 
-    // Verify teacher owns this enrollment subject or is section adviser
+    // Verify teacher owns this enrollment subject
     const [[es]] = await sequelize.query(
       `SELECT es.* FROM enrollment_subjects es
        LEFT JOIN sections s ON es.sectionId = s.id
-       WHERE es.id = ? AND (es.teacherId = ? OR es.instructor = ? OR s.teacherId = ? OR s.instructor = ?
-              OR EXISTS (SELECT 1 FROM class_schedules cs WHERE cs.sectionId = es.sectionId AND cs.subjectCode = es.subjectCode AND (cs.teacherId = ? OR cs.teacherName = ?)))`,
-      { replacements: [enrollmentSubjectId, teacherId, teacherName, teacherId, teacherName, teacherId, teacherName] }
+       WHERE es.id = ? AND (es.teacherId = ? OR (es.teacherId IS NULL AND es.instructor = ?))`,
+      { replacements: [enrollmentSubjectId, teacherId, teacherName] }
     );
     if (!es) return res.status(403).json({ error: 'You are not authorized to grade this student for this subject' });
 
@@ -298,44 +255,28 @@ export const saveGrade = async (req, res) => {
        JOIN sections s ON s.schoolYear = gp.schoolYear
        WHERE s.id = ? AND gp.quarter = ?
        LIMIT 1`,
-      { replacements: [es.sectionId, quarter] }
+      { replacements: [es.sectionId, 'FINAL'] }
     );
 
     if (!period) {
-      return res.status(400).json({ error: `Grading period for ${quarter} has not been set up yet. Ask admin to open grading.` });
+      return res.status(400).json({ error: 'Year-end submission has not been set up. Ask admin to open it.' });
     }
     if (!period.isOpen) {
-      return res.status(403).json({ error: `${quarter} grading period is closed. Contact admin to open it.` });
+      return res.status(403).json({ error: 'Year-end submission is closed. Contact admin to open it.' });
     }
 
-    // Save the grade for this quarter/trimester
-    const colMap = { Q1: 'q1', Q2: 'q2', Q3: 'q3', Q4: 'q4', '1st Tri': 'q1', '2nd Tri': 'q2', '3rd Tri': 'q3' };
-    const col = colMap[quarter];
-    const gradeValue = (grade === null || grade === '') ? null : gradeNum;
-
-    // Re-fetch to get all quarters for final grade computation
-    const [[current]] = await sequelize.query(
-      `SELECT q1, q2, q3, q4 FROM enrollment_subjects WHERE id = ?`,
-      { replacements: [enrollmentSubjectId] }
+    const value = Math.round(gradeNum * 100) / 100;
+    const remarks = value >= 75 ? 'Passed' : 'Failed';
+    // Check the window again in the write so a concurrent close prevents edits.
+    const [, result] = await sequelize.query(
+      `UPDATE enrollment_subjects es JOIN sections s ON s.id = es.sectionId
+       SET es.finalGrade = ?, es.remarks = ?, es.updatedAt = NOW()
+       WHERE es.id = ? AND EXISTS (SELECT 1 FROM grading_periods gp WHERE gp.schoolYear = s.schoolYear AND gp.quarter = 'FINAL' AND gp.isOpen = 1)`,
+      { replacements: [value, remarks, enrollmentSubjectId] }
     );
-
-    const updated = { ...current, [col]: gradeValue };
-    const { finalGrade, remarks } = computeFinalAndRemarks(updated.q1, updated.q2, updated.q3, updated.q4);
-
-    await sequelize.query(
-      `UPDATE enrollment_subjects
-       SET ${col} = ?, finalGrade = ?, remarks = ?, updatedAt = NOW()
-       WHERE id = ?`,
-      { replacements: [gradeValue, finalGrade, remarks, enrollmentSubjectId] }
-    );
-
-    res.json({
-      message: `${quarter} grade saved`,
-      quarter,
-      grade: gradeValue,
-      finalGrade,
-      remarks
-    });
+    const affected = typeof result === 'number' ? result : result?.affectedRows;
+    if (!affected) return res.status(409).json({ error: 'Submission window changed. Refresh and try again.' });
+    res.json({ message: 'Year-end final grade submitted', finalGrade: value, remarks });
   } catch (err) {
     console.error('saveGrade error:', err);
     res.status(500).json({ error: 'Failed to save grade' });
@@ -346,22 +287,20 @@ export const saveGrade = async (req, res) => {
 
 /**
  * GET /api/enrollments/:id/grades
- * Student views their own grades per subject
+ * Admin/registrar view grade records; students are denied.
  */
 export const getStudentGrades = async (req, res) => {
+  if (!['admin', 'registrar'].includes(req.user?.role)) return res.status(403).json({ error: 'Grade records are available only to admin and registrar.' });
   try {
     const enrollmentId = parseInt(req.params.id);
 
-    // Verify ownership (student can only see their own grades)
+    // Only admin and registrar may review enrollment grade records.
     const [[enrollment]] = await sequelize.query(
       'SELECT userId FROM enrollment_records WHERE id = ?',
       { replacements: [enrollmentId] }
     );
     if (!enrollment) return res.status(404).json({ error: 'Enrollment not found' });
 
-    const isOwner = enrollment.userId === req.user.id;
-    const isStaff = ['admin', 'registrar', 'teacher'].includes(req.user.role);
-    if (!isOwner && !isStaff) return res.status(403).json({ error: 'Access denied' });
 
     const [grades] = await sequelize.query(`
       SELECT
@@ -381,12 +320,9 @@ export const getStudentGrades = async (req, res) => {
       ORDER BY es.subjectCode ASC
     `, { replacements: [enrollmentId] });
 
-    // Ensure finalGrade and remarks are only finalized if all 3 trimesters are complete
+    // Final grades are submitted directly at year-end.
     const processedGrades = (grades || []).map(g => {
-      const isFourTerms = g.q4 !== null && g.q4 !== undefined && g.q4 !== '';
-      const isComplete = isFourTerms
-        ? (g.q1 != null && g.q1 !== '' && g.q2 != null && g.q2 !== '' && g.q3 != null && g.q3 !== '' && g.q4 != null && g.q4 !== '')
-        : (g.q1 != null && g.q1 !== '' && g.q2 != null && g.q2 !== '' && g.q3 != null && g.q3 !== '');
+      const isComplete = g.finalGrade !== null && g.finalGrade !== undefined && g.finalGrade !== '';
       return {
         ...g,
         finalGrade: isComplete ? g.finalGrade : null,
@@ -403,30 +339,14 @@ export const getStudentGrades = async (req, res) => {
       ? completedGrades.reduce((sum, g) => sum + parseFloat(g.finalGrade), 0) / completedGrades.length
       : null;
 
-    // Students only see whole numbers (rounded); decimals are preserved for teachers & registrar/admin
-    const isStudent = !isStaff || req.user.role === 'student';
-    const roundVal = (v) => (v !== null && v !== undefined && v !== '' ? Math.round(parseFloat(v)) : null);
-
-    const formattedGrades = processedGrades.map(g => {
-      if (!isStudent) return g;
-      return {
-        ...g,
-        q1: roundVal(g.q1),
-        q2: roundVal(g.q2),
-        q3: roundVal(g.q3),
-        q4: roundVal(g.q4),
-        finalGrade: g.finalGrade !== null ? Math.round(parseFloat(g.finalGrade)) : null,
-      };
-    });
-
     res.json({
-      grades: formattedGrades,
+      grades: processedGrades,
       summary: {
         total: processedGrades.length,
         passed,
         failed,
         incomplete,
-        gwa: gwa !== null ? (isStudent ? Math.round(gwa) : Math.round(gwa * 100) / 100) : null
+        gwa: gwa !== null ? Math.round(gwa * 100) / 100 : null
       }
     });
   } catch (err) {
@@ -470,7 +390,7 @@ export const getSectionGrades = async (req, res) => {
     `, { replacements: [sectionId] });
 
     const processedRows = (rows || []).map(r => {
-      const isComplete = r.q1 != null && r.q1 !== '' && r.q2 != null && r.q2 !== '' && r.q3 != null && r.q3 !== '';
+      const isComplete = r.finalGrade !== null && r.finalGrade !== undefined && r.finalGrade !== '';
       return {
         ...r,
         finalGrade: isComplete ? r.finalGrade : null,

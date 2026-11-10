@@ -40,7 +40,7 @@ test('snapshot rules survive current settings changes; legacy continuing student
 });
 test('submission checks persisted documents and ownership before changing draft status', async () => {
   const original = { transaction: sequelize.transaction, enrollment: EnrollmentRecord.findByPk, documents: EnrollmentDocument.findAll };
-  const enrollment = { id: 1, userId: 11, status: 'draft', educationLevel: 'SHS', gradeLevel: 'Grade 11', enrollmentType: 'new', strand: 'STEM', familyName: 'Student', firstName: 'Test', sex: 'Male', dateOfBirth: '2010-01-01', admissionPolicy: structuredClone(initialAdmission), admissionRevision: 1,
+  const enrollment = { id: 1, userId: 11, status: 'draft', educationLevel: 'SHS', gradeLevel: 'Grade 11', enrollmentType: 'new', strand: 'STEM', familyName: 'Student', firstName: 'Test', sex: 'Male', dateOfBirth: '2010-01-01', fatherName: 'Parent', fatherMobileNumber: '09123456789', parentsAddress: 'Bongabong', placeOfBirth: 'Bongabong', lrn: '123456789012', admissionPolicy: structuredClone(initialAdmission), admissionRevision: 1,
     async update(values) { Object.assign(this, values); }, toJSON() { return { id: this.id, status: this.status }; } };
   let docs = [], notifications = 0;
   const handler = createSubmissionHandler({ notify: async () => { notifications++; } });

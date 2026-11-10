@@ -1,3 +1,4 @@
+import { ACADEMIC_TERMS } from "../services/academicTerms.js";
 import { DataTypes } from "sequelize";
 import { sequelize } from "./db.js";
 import { Program } from "./programModel.js";
@@ -39,9 +40,15 @@ export const Subject = sequelize.define("Subject", {
     comment: 'Grade/Year level: 7-12 for HS, 1-4 for College'
   },
   semester: { 
-    type: DataTypes.ENUM('1st', '2nd', 'Summer'), 
+    type: DataTypes.ENUM(...ACADEMIC_TERMS),
+    validate: { isIn: { args: [ACADEMIC_TERMS], msg: "Select a valid semester or trimester" } },
     allowNull: false,
     comment: 'Semester when subject is offered'
+  },
+  teacherId: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    comment: 'Default subject teacher for new enrollments'
   },
   isActive: { 
     type: DataTypes.BOOLEAN, 

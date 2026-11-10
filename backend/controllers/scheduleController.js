@@ -1,5 +1,7 @@
+import { ACADEMIC_TERMS } from '../services/academicTerms.js';
 import { Op } from "sequelize";
 import { ClassSchedule, Section, Subject, User, EnrollmentRecord, SchoolYear, sequelize } from '../models/index.js';
+import { SectionSubjectAssignment } from '../models/sectionSubjectAssignmentModel.js';
 import { generateStudentSchedulePDF, generateTeacherSchedulePDF } from '../services/schedulePdfGenerator.js';
 
 // ── GET all class schedules ──────────────────────────────────────────────────
@@ -28,14 +30,29 @@ export const getClassSchedules = async (req, res) => {
   }
 };
 
+async function syncSubjectTimetable(sectionId, subjectCode, schoolYear, semester, transaction) {
+  const section = await Section.findByPk(sectionId, { transaction });
+  if (!section || section.schoolYear !== schoolYear || section.semester !== semester) return;
+  const schedules = await ClassSchedule.findAll({ where: { sectionId, subjectCode, schoolYear, semester }, order: [['dayOfWeek', 'ASC'], ['startTime', 'ASC']], transaction });
+  const text = schedules.map(item => `${item.dayOfWeek} ${item.startTime}-${item.endTime}`).join('; ') || null;
+  const assignment = await SectionSubjectAssignment.findOne({ where: { sectionId, subjectCode }, transaction });
+  if (assignment) await assignment.update({ schedule: text }, { transaction });
+  await sequelize.query(`UPDATE enrollment_subjects es JOIN enrollment_records er ON er.id = es.enrollmentId
+    SET es.schedule = ?, es.instructor = COALESCE(?, es.instructor), es.teacherId = COALESCE(?, es.teacherId), es.room = ?, es.updatedAt = NOW()
+    WHERE es.sectionId = ? AND es.subjectCode = ? AND er.academicYear = ?`, {
+    replacements: [text, assignment?.instructor || null, assignment?.teacherId || null, schedules[0]?.room || null, sectionId, subjectCode, schoolYear], transaction,
+  });
+}
+
 // Helper to parse time string into minutes from midnight (e.g., "7:30 AM" -> 450)
-function parseTimeToMinutes(timeStr) {
-  if (!timeStr) return null;
+export function parseTimeToMinutes(timeStr) {
+  if (typeof timeStr !== 'string' || !timeStr.trim()) return null;
   const match = timeStr.trim().match(/^(\d{1,2}):(\d{2})(?:\s*([AaPp][Mm]))?$/);
   if (!match) return null;
   let hours = parseInt(match[1], 10);
   const minutes = parseInt(match[2], 10);
   const meridiem = match[3] ? match[3].toUpperCase() : null;
+  if (minutes > 59 || (meridiem ? hours < 1 || hours > 12 : hours > 23)) return null;
 
   if (meridiem === 'PM' && hours < 12) hours += 12;
   if (meridiem === 'AM' && hours === 12) hours = 0;
@@ -45,6 +62,7 @@ function parseTimeToMinutes(timeStr) {
 
 // ── CREATE / ADD a class schedule ────────────────────────────────────────────
 export const createClassSchedule = async (req, res) => {
+  let transaction;
   try {
     const {
       subjectId,
@@ -84,12 +102,28 @@ export const createClassSchedule = async (req, res) => {
       return res.status(400).json({ error: 'End time must be later than start time' });
     }
 
-    const targetDays = Array.isArray(days) && days.length > 0
+    const requestedDays = Array.isArray(days) && days.length > 0
       ? days
       : dayOfWeek === 'All Weekdays'
         ? ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']
         : [dayOfWeek];
 
+    const targetDays = [...new Set(requestedDays)];
+    if (!targetDays.length || targetDays.some(day => !['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'].includes(day))) return res.status(400).json({ error: 'Select valid weekdays.' });
+    const section = sectionId ? await Section.findByPk(sectionId) : null;
+    if (sectionId && !section) return res.status(404).json({ error: 'Section not found.' });
+    const effectiveYear = schoolYear || section?.schoolYear;
+    const effectiveSemester = semester || section?.semester || '1st';
+    if (!ACADEMIC_TERMS.includes(effectiveSemester)) return res.status(400).json({ error: 'Select a valid academic term.' });
+    if (typeof effectiveYear !== 'string' || !/^\d{4}-\d{4}$/.test(effectiveYear) || Number(effectiveYear.slice(5)) !== Number(effectiveYear.slice(0, 4)) + 1) return res.status(400).json({ error: 'Select a valid school year.' });
+    if (!isBreak && teacherId) {
+      const teacher = await User.findOne({ where: { id: Number(teacherId), role: 'teacher', isActive: true } });
+      if (!teacher) return res.status(400).json({ error: 'Choose an active teacher.' });
+    }
+    transaction = await sequelize.transaction();
+    // One lock per year serializes overlapping timetable checks across sections, teachers and rooms.
+    const year = await SchoolYear.findOne({ where: { year: effectiveYear }, transaction, lock: transaction.LOCK.UPDATE });
+    if (!year) { await transaction.rollback(); transaction = null; return res.status(400).json({ error: 'Configure this school year before scheduling.' }); }
     const cleanTeacher = (!isBreak && teacherName) ? teacherName.trim().toLowerCase() : null;
     const cleanSection = sectionName.trim().toLowerCase();
     const cleanRoom = room ? room.trim().toLowerCase() : null;
@@ -102,7 +136,7 @@ export const createClassSchedule = async (req, res) => {
     // No room can be occupied by multiple classes simultaneously.
     for (const day of targetDays) {
       const existingSchedules = await ClassSchedule.findAll({
-        where: { dayOfWeek: day }
+        where: { dayOfWeek: day, schoolYear: effectiveYear, [Op.or]: [{ semester: effectiveSemester }, { semester: null }, { semester: '' }] }, transaction
       });
 
       for (const s of existingSchedules) {
@@ -120,6 +154,7 @@ export const createClassSchedule = async (req, res) => {
             (s.teacherName && s.teacherName.trim().toLowerCase() === cleanTeacher);
 
           if (isSameTeacher) {
+            await transaction.rollback(); transaction = null;
             return res.status(400).json({
               error: `Teacher conflict: ${s.teacherName} is already assigned to ${s.subjectName} (${s.sectionName}) on ${day} from ${s.startTime} to ${s.endTime}.`,
               conflictType: 'teacher',
@@ -133,6 +168,7 @@ export const createClassSchedule = async (req, res) => {
           (s.sectionName && s.sectionName.trim().toLowerCase() === cleanSection);
 
         if (isSameSection) {
+          await transaction.rollback(); transaction = null;
           const teacherPart = s.teacherName && s.teacherName !== 'No Teacher' && s.teacherName !== '—' ? ` with ${s.teacherName}` : '';
           return res.status(400).json({
             error: `Section conflict: ${s.sectionName} already has ${s.subjectName}${teacherPart} on ${day} from ${s.startTime} to ${s.endTime}.`,
@@ -143,6 +179,7 @@ export const createClassSchedule = async (req, res) => {
 
         // 3. Room Conflict check
         if (cleanRoom && s.room && s.room.trim().toLowerCase() === cleanRoom) {
+          await transaction.rollback(); transaction = null;
           return res.status(400).json({
             error: `Room conflict: ${s.room} is already booked for ${s.sectionName} (${s.subjectName}) on ${day} from ${s.startTime} to ${s.endTime}.`,
             conflictType: 'room',
@@ -170,52 +207,19 @@ export const createClassSchedule = async (req, res) => {
         startTime,
         endTime,
         room: room ? room.trim() : null,
-        schoolYear: schoolYear || null,
-        semester: semester || null,
-      });
+        schoolYear: effectiveYear,
+        semester: effectiveSemester,
+      }, { transaction });
       createdRecords.push(scheduleRecord);
     }
 
-    // Optionally sync with Section table if sectionId provided (only for academic subjects)
-    if (sectionId && !isBreak) {
-      try {
-        const sec = await Section.findByPk(sectionId);
-        if (sec) {
-          const schedText = `${targetDays[0].slice(0, 3)} ${startTime}–${endTime}`;
-          await sec.update({
-            schedule: schedText,
-            room: room ? room.trim() : sec.room,
-            instructor: teacherName ? teacherName.trim() : sec.instructor,
-            teacherId: teacherId ? parseInt(teacherId) : sec.teacherId,
-          });
-        }
-      } catch (secErr) {
-        console.warn('Sync to section warning:', secErr.message);
-      }
+    if (sectionId && subjectCode && !isBreak && section.schoolYear === effectiveYear && section.semester === effectiveSemester) {
+      await SectionSubjectAssignment.upsert({ sectionId: Number(sectionId), subjectCode,
+        teacherId: teacherId ? Number(teacherId) : null, instructor: finalTeacherName,
+        schedule: null, room: room?.trim() || null }, { transaction });
+      await syncSubjectTimetable(Number(sectionId), subjectCode, effectiveYear, effectiveSemester, transaction);
     }
-
-    // Optionally sync with enrollment_subjects if sectionId & subjectCode provided (only for academic subjects)
-    if (sectionId && subjectCode && !isBreak) {
-      try {
-        await sequelize.query(
-          `UPDATE enrollment_subjects
-           SET schedule = ?, instructor = ?, teacherId = ?, room = COALESCE(?, room), updatedAt = NOW()
-           WHERE sectionId = ? AND subjectCode = ?`,
-          {
-            replacements: [
-              `${targetDays[0]} ${startTime}–${endTime}`,
-              teacherName,
-              teacherId || null,
-              room || null,
-              sectionId,
-              subjectCode
-            ]
-          }
-        );
-      } catch (subErr) {
-        console.warn('Sync to enrollment_subjects warning:', subErr.message);
-      }
-    }
+    await transaction.commit(); transaction = null;
 
     res.status(201).json({
       message: targetDays.length > 1
@@ -225,6 +229,7 @@ export const createClassSchedule = async (req, res) => {
       schedules: createdRecords
     });
   } catch (error) {
+    if (transaction && !transaction.finished) await transaction.rollback();
     console.error('Create class schedule error:', error);
     res.status(500).json({ error: error.message || 'Failed to save schedule' });
   }
@@ -237,7 +242,11 @@ export const deleteClassSchedule = async (req, res) => {
     const item = await ClassSchedule.findByPk(id);
     if (!item) return res.status(404).json({ error: 'Schedule not found' });
 
-    await item.destroy();
+    await sequelize.transaction(async transaction => {
+      await SchoolYear.findOne({ where: { year: item.schoolYear }, transaction, lock: transaction.LOCK.UPDATE });
+      await item.destroy({ transaction });
+      if (item.sectionId && item.subjectCode) await syncSubjectTimetable(item.sectionId, item.subjectCode, item.schoolYear, item.semester, transaction);
+    });
     res.json({ message: 'Schedule removed successfully' });
   } catch (error) {
     console.error('Delete schedule error:', error);
@@ -311,7 +320,7 @@ export const getStudentSchedule = async (req, res) => {
     let schedules = [];
     if (targetEnrollment.sectionId) {
       schedules = await ClassSchedule.findAll({
-        where: { sectionId: targetEnrollment.sectionId },
+        where: { sectionId: targetEnrollment.sectionId, schoolYear: targetEnrollment.academicYear },
         order: [
           ['dayOfWeek', 'ASC'],
           ['startTime', 'ASC']
@@ -323,6 +332,7 @@ export const getStudentSchedule = async (req, res) => {
       const sName = section ? `Grade ${section.yearLevel} - ${section.code}` : targetEnrollment.sectionName;
       schedules = await ClassSchedule.findAll({
         where: {
+          schoolYear: targetEnrollment.academicYear,
           [Op.or]: [
             { sectionName: sName },
             { sectionName: { [Op.like]: `%${section?.code || targetEnrollment.sectionName}%` } }
@@ -339,7 +349,7 @@ export const getStudentSchedule = async (req, res) => {
     let enrolledSubjects = [];
     try {
       const [rows] = await sequelize.query(
-        `SELECT * FROM enrollment_subjects WHERE enrollmentId = ?`,
+        `SELECT id, subjectCode, subjectDescription, units, sectionId, sectionName, schedule, instructor, teacherId, room, status FROM enrollment_subjects WHERE enrollmentId = ?`,
         { replacements: [targetEnrollment.id] }
       );
       enrolledSubjects = rows || [];
@@ -441,7 +451,7 @@ export const downloadStudentSchedulePDF = async (req, res) => {
     let schedules = [];
     if (targetEnrollment.sectionId) {
       schedules = await ClassSchedule.findAll({
-        where: { sectionId: targetEnrollment.sectionId },
+        where: { sectionId: targetEnrollment.sectionId, schoolYear: targetEnrollment.academicYear },
         order: [
           ['dayOfWeek', 'ASC'],
           ['startTime', 'ASC']
@@ -453,6 +463,7 @@ export const downloadStudentSchedulePDF = async (req, res) => {
       const sName = section ? `Grade ${section.yearLevel} - ${section.code}` : targetEnrollment.sectionName;
       schedules = await ClassSchedule.findAll({
         where: {
+          schoolYear: targetEnrollment.academicYear,
           [Op.or]: [
             { sectionName: sName },
             { sectionName: { [Op.like]: `%${section?.code || targetEnrollment.sectionName}%` } }

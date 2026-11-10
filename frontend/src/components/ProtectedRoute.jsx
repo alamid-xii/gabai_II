@@ -1,8 +1,10 @@
-import { Navigate } from "react-router";
-import { useAuth } from "../contexts/AuthContext";
+import { roleHome } from "../utils/roleHome";
+import { Navigate, useLocation } from "react-router";
+import { useAuth } from "../contexts/authState";
 
-export function ProtectedRoute({ children, requireAdmin = false, allowIncompleteProfile = false }) {
+export function ProtectedRoute({ children, requireAdmin = false, role, allowIncompleteProfile = false }) {
   const { user, isLoggedIn, loading } = useAuth();
+  const { pathname } = useLocation();
 
   if (loading) {
     return (
@@ -19,8 +21,12 @@ export function ProtectedRoute({ children, requireAdmin = false, allowIncomplete
     return <Navigate to="/login" replace />;
   }
 
-  if (requireAdmin && user?.role !== "admin") {
-    return <Navigate to="/" replace />;
+  const expectedRole = role || (requireAdmin ? "admin"
+    : pathname.startsWith("/registrar") ? "registrar"
+    : pathname.startsWith("/teacher") ? "teacher"
+    : pathname === "/complete-profile" ? null : "student");
+  if (expectedRole && user?.role !== expectedRole) {
+    return <Navigate to={roleHome(user?.role)} replace />;
   }
 
   if (user?.profileCompleted === false && !allowIncompleteProfile) {
@@ -29,3 +35,4 @@ export function ProtectedRoute({ children, requireAdmin = false, allowIncomplete
 
   return children;
 }
+

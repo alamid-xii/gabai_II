@@ -63,7 +63,7 @@ export function MySchedule() {
   const [allSections, setAllSections] = useState([]);
   const [previewSectionId, setPreviewSectionId] = useState('');
   const [previewSchedules, setPreviewSchedules] = useState([]);
-  const [loadingPreview, setLoadingPreview] = useState(false);
+  const [, setLoadingPreview] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [showDownloadModal, setShowDownloadModal] = useState(false);
 
@@ -123,7 +123,7 @@ export function MySchedule() {
         const secs = await res.json();
         setAllSections(Array.isArray(secs) ? secs : []);
       }
-    } catch (_) { }
+    } catch  { }
   };
 
   const loadPreviewSchedule = async (secId) => {
@@ -140,7 +140,7 @@ export function MySchedule() {
         const data = await res.json();
         setPreviewSchedules(Array.isArray(data) ? data : []);
       }
-    } catch (_) {
+    } catch  {
       toast.error('Failed to load preview');
     } finally {
       setLoadingPreview(false);

@@ -10,61 +10,22 @@ import { FAQ } from "../models/faqModel.js";
 import { ChatLog } from "../models/chatLogModel.js";
 import { Building } from "../models/buildingModel.js";
 import { sequelize } from "../models/db.js";
+import { authenticateRequest, authenticationError } from "../services/authentication.js";
+import { isValidPassword, normalizeAccountEmail, PASSWORD_POLICY_MESSAGE } from "../services/accountValidation.js";
+import { updateManagedUser } from "../services/userAdministration.js";
 
 try { await sequelize.authenticate(); } catch (err) { console.warn("DB unavailable at import (adminController):", err.message); }
 
 // Set up associations
 ChatLog.belongsTo(User, { foreignKey: 'userId', as: 'user' });
 
-// Middleware to check admin role
+// Legacy admin routes share bearer/session revocation and active-account checks.
 export const requireAdmin = async (req, res, next) => {
   try {
-    // Check for JWT token in Authorization header
-    const authHeader = req.headers.authorization;
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      const token = authHeader.substring(7);
-      const jwt = await import('jsonwebtoken');
-      const JWT_SECRET = process.env.JWT_SECRET || "emc-secret-key-2025";
-      
-      try {
-        const decoded = jwt.default.verify(token, JWT_SECRET);
-        const user = await User.findByPk(decoded.id);
-        
-        if (!user || user.role !== 'admin') {
-          return res.status(403).json({ error: "Forbidden: Admin access required" });
-        }
-
-        if (user.isActive === false || user.isActive === 0 || user.isActive === '0') {
-          return res.status(403).json({ error: "Your account has been suspended or deactivated.", isSuspended: true });
-        }
-        
-        req.user = user;
-        return next();
-      } catch (jwtError) {
-        return res.status(401).json({ error: "Invalid or expired token" });
-      }
-    }
-    
-    // Fallback to session-based auth
-    if (!req.session.userId) {
-      return res.status(401).json({ error: "Unauthorized" });
-    }
-    
-    const user = await User.findByPk(req.session.userId);
-    if (!user || user.role !== 'admin') {
-      return res.status(403).json({ error: "Forbidden: Admin access required" });
-    }
-
-    if (user.isActive === false || user.isActive === 0 || user.isActive === '0') {
-      return res.status(403).json({ error: "Your account has been suspended or deactivated.", isSuspended: true });
-    }
-    
-    req.user = user;
-    next();
-  } catch (err) {
-    console.error("Auth error:", err);
-    res.status(500).json({ error: "Authentication error" });
-  }
+    req.user = await authenticateRequest(req, { allowSession: true });
+    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin access required' });
+    return next();
+  } catch (error) { return authenticationError(res, error); }
 };
 
 export const getDashboardStats = async (req, res) => {
@@ -163,81 +124,51 @@ export const getAllUsers = async (req, res) => {
 
 export const updateUser = async (req, res) => {
   try {
-    const user = await User.findByPk(req.params.id);
-    if (!user) return res.status(404).json({ error: "User not found" });
-    
     const { name, email, role, department, isActive } = req.body;
     const updates = {};
-    
     if (name !== undefined) {
-      if (!name.trim()) return res.status(400).json({ error: "Name cannot be empty" });
-      if (name.length > 100) return res.status(400).json({ error: "Name must be 100 characters or less" });
+      if (typeof name !== 'string' || !name.trim() || name.trim().length > 100) {
+        return res.status(400).json({ error: 'Name must contain 1 to 100 characters' });
+      }
       updates.name = name.trim();
     }
     if (email !== undefined) {
-      const cleanEmail = email.trim().toLowerCase();
-      if (!cleanEmail) return res.status(400).json({ error: "Email cannot be empty" });
-      const existing = await User.findOne({ where: { email: cleanEmail } });
-      if (existing && existing.id !== user.id) {
-        return res.status(400).json({ error: "Email address is already in use" });
-      }
-      updates.email = cleanEmail;
+      updates.email = normalizeAccountEmail(email);
+      if (!updates.email) return res.status(400).json({ error: 'Enter a valid email address' });
     }
     if (role !== undefined) {
-      const validRoles = ['student', 'teacher', 'registrar', 'admin'];
-      if (!validRoles.includes(role)) {
-        return res.status(400).json({ error: "Invalid role specified" });
-      }
-      if (req.user?.id === user.id && role !== 'admin') {
-        return res.status(400).json({ error: "You cannot change your own admin role" });
-      }
+      if (!['student', 'teacher', 'registrar', 'admin'].includes(role)) return res.status(400).json({ error: 'Invalid role specified' });
       updates.role = role;
     }
-    if (department !== undefined) updates.department = department;
-    if (isActive !== undefined) updates.isActive = Boolean(isActive);
-
-    await user.update(updates);
-    res.json({
-      id: user.id,
-      name: user.name,
-      email: user.email,
-      role: user.role,
-      department: user.department,
-      isActive: user.isActive
+    if (department !== undefined) {
+      if (department !== null && (typeof department !== 'string' || department.length > 100)) return res.status(400).json({ error: 'Department must be 100 characters or less' });
+      updates.department = department;
+    }
+    if (isActive !== undefined) {
+      if (typeof isActive !== 'boolean') return res.status(400).json({ error: 'isActive must be true or false' });
+      updates.isActive = isActive;
+    }
+    const user = await updateManagedUser(req.user?.id, req.params.id, async (current, transaction) => {
+      if (updates.email) {
+        const existing = await User.findOne({ where: { email: updates.email }, transaction });
+        if (existing && String(existing.id) !== String(current.id)) throw Object.assign(new Error('Email address is already in use'), { status: 400 });
+      }
+      return updates;
     });
+    res.json({ id: user.id, name: user.name, email: user.email, role: user.role, department: user.department, isActive: user.isActive });
   } catch (error) {
-    console.error("Update user error:", error);
-    res.status(500).json({ error: "Failed to update user" });
+    if (!error.status) console.error('Update user error:', error);
+    res.status(error.status || 500).json({ error: error.status ? error.message : 'Failed to update user' });
   }
 };
 
-// Toggle user active / suspended status
 export const toggleUserStatus = async (req, res) => {
   try {
-    const { id } = req.params;
-    const adminId = req.user?.id;
-
-    if (parseInt(id) === adminId) {
-      return res.status(400).json({ error: "You cannot deactivate your own account" });
-    }
-
-    const user = await User.findByPk(id);
-    if (!user) return res.status(404).json({ error: "User not found" });
-
-    const currentActive = user.isActive === true || user.isActive === 1 || user.isActive === '1';
-    user.isActive = !currentActive;
-    await user.save();
-
-    res.json({
-      success: true,
-      id: user.id,
-      name: user.name,
-      isActive: user.isActive,
-      message: `Account for ${user.name} is now ${user.isActive ? 'Active' : 'Suspended'}`
-    });
+    const user = await updateManagedUser(req.user?.id, req.params.id, current => ({ isActive: !(current.isActive === true || current.isActive === 1 || current.isActive === '1') }));
+    res.json({ success: true, id: user.id, name: user.name, isActive: user.isActive, message: `Account for ${user.name} is now ${user.isActive ? 'Active' : 'Suspended'}` });
   } catch (error) {
-    console.error("Toggle user status error:", error);
-    res.status(500).json({ error: "Failed to toggle user status" });
+    if (!error.status) console.error('Toggle user status error:', error);
+    res.status(error.status || 500).json({ error: error.status ? error.message : 'Failed to toggle user status' });
   }
 };
 
@@ -247,8 +178,8 @@ export const resetUserPassword = async (req, res) => {
     const { id } = req.params;
     const { newPassword } = req.body;
 
-    if (!newPassword || newPassword.length < 6) {
-      return res.status(400).json({ error: "New password must be at least 6 characters" });
+    if (!isValidPassword(newPassword)) {
+      return res.status(400).json({ error: PASSWORD_POLICY_MESSAGE });
     }
 
     const user = await User.findByPk(id);
@@ -257,8 +188,11 @@ export const resetUserPassword = async (req, res) => {
     const bcrypt = (await import('bcrypt')).default;
     const hashedPassword = await bcrypt.hash(newPassword, 10);
 
-    user.password = hashedPassword;
-    await user.save();
+    await sequelize.transaction(async transaction => {
+      const current = await User.findByPk(id, { transaction, lock: transaction.LOCK.UPDATE });
+      if (!current) throw Object.assign(new Error('User not found'), { status: 404 });
+      await current.update({ password: hashedPassword, tokenVersion: Number(current.tokenVersion || 0) + 1 }, { transaction });
+    });
 
     res.json({
       success: true,

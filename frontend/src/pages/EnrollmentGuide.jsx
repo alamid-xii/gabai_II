@@ -1,6 +1,6 @@
 import { useSchoolProfile } from "../hooks/useSchoolProfile";
-import { toast } from "sonner";
-import { confirmAction } from "../components/ConfirmModal";
+
+
 import { useState, useEffect } from "react";
 import {
   CheckCircle2,
@@ -67,29 +67,11 @@ export function EnrollmentGuide() {
     });
   }
 
-  async function resetProgress() {
-    if (await confirmAction("Are you sure you want to reset your enrollment progress?")) {
-      setCompleted(new Set());
-      localStorage.removeItem(`enrollmentProgress_${guide.revision}`);
-    }
-  }
+  
 
-  function printGuide() {
-    window.print();
-  }
+  
 
-  function shareGuide() {
-    if (navigator.share) {
-      navigator.share({
-        title: `${profile?.schoolName || 'School'} Enrollment Guide`,
-        text: `Check out the enrollment guide for ${profile?.schoolName || 'the school'}`,
-        url: window.location.href
-      });
-    } else {
-      toast.success('Share link copied to clipboard!');
-      navigator.clipboard.writeText(window.location.href);
-    }
-  }
+  
 
   const completedCount = steps.filter(step => completed.has(step.id)).length;
   const progress = steps.length ? Math.round((completedCount / steps.length) * 100) : 0;

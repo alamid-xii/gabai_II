@@ -6,7 +6,7 @@ import {
 } from "lucide-react";
 
 import { cn } from "./utils";
-import { Button, buttonVariants } from "./button";
+import { buttonVariants } from "./buttonVariants";
 
 function Pagination({ className, ...props }) {
   return (
@@ -37,6 +37,11 @@ function PaginationItem({ ...props }) {
   return <li data-slot="pagination-item" {...props} />;
 }
 
+
+function PaginationLink({ className, isActive, size = "icon", ...props }) {
+  return <a aria-current={isActive ? "page" : undefined} data-slot="pagination-link"
+    data-active={isActive} className={cn(buttonVariants({ variant: isActive ? "outline" : "ghost", size }), className)} {...props} />;
+}
 
 function PaginationPrevious({
   className,

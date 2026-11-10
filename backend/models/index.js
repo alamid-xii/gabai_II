@@ -20,6 +20,7 @@ import { Building } from './buildingModel.js';
 import { EnrollmentDocument } from './enrollmentDocumentModel.js';
 import { ClassSchedule } from './classScheduleModel.js';
 import { SystemLog } from './systemLogModel.js';
+import { SectionSubjectAssignment } from './sectionSubjectAssignmentModel.js';
 
 // Export all models
 export {
@@ -38,4 +39,5 @@ export {
   EnrollmentDocument,
   ClassSchedule,
   SystemLog,
+  SectionSubjectAssignment,
 };

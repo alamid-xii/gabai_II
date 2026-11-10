@@ -1,5 +1,5 @@
 import { useSchoolProfile } from "../hooks/useSchoolProfile";
-import { MapPin, Mail, Phone, Facebook, Twitter, Instagram } from "lucide-react";
+import { MapPin, Mail, Phone, Facebook } from "lucide-react";
 import { Link } from "react-router";
 
 export function Footer() {
@@ -14,9 +14,7 @@ export function Footer() {
           {/* Brand */}
           <div>
             <div className="flex items-center gap-2 mb-4">
-              <div className="bg-[#F5C400] w-10 h-10 rounded-lg flex items-center justify-center">
-                <MapPin className="w-6 h-6 text-[#001840]" />
-              </div>
+              <img src="/GabAi_Logo.png" alt="GabAI Logo" className="w-10 h-10 rounded-lg object-contain shadow shrink-0" />
               <div>
                 <h3 className="font-bold text-xl">GabAI</h3>
                 <p className="text-xs text-[#FFDC5F]">{profile?.schoolName || 'School'}</p>
@@ -53,26 +51,39 @@ export function Footer() {
             <h4 className="font-semibold text-lg mb-4 text-[#F5C400]">Contact</h4>
             {error && <p className="text-xs text-[#FFDC5F] mb-2" role="status">{error}</p>}
             <ul className="space-y-3">
-              <li className="flex items-start gap-2 text-[#FFFDF0] text-sm">
-                <MapPin className="w-4 h-4 mt-1 shrink-0 text-[#FFDC5F]" />
-                <span>{profile?.address || 'Address to be announced'}</span>
+              <li className="flex items-start gap-2.5 text-[#FFFDF0] text-sm">
+                <MapPin className="w-4 h-4 mt-0.5 shrink-0 text-[#FFDC5F]" />
+                <span className="leading-snug">{profile?.address || 'Address to be announced'}</span>
               </li>
-              <li className="flex items-center gap-2 text-[#FFFDF0] text-sm">
-                <Mail className="w-4 h-4 shrink-0 text-[#FFDC5F]" />
-                <a href={profile?.email ? `mailto:${profile.email}` : undefined} className="hover:text-[#FFDC5F] transition-colors duration-200">
+              <li className="flex items-start gap-2.5 text-[#FFFDF0] text-sm">
+                <Mail className="w-4 h-4 mt-0.5 shrink-0 text-[#FFDC5F]" />
+                <a
+                  href={profile?.email ? `mailto:${profile.email}` : undefined}
+                  className="hover:text-[#FFDC5F] transition-colors duration-200 leading-snug break-all min-h-0 min-w-0"
+                >
                   {profile?.email || 'Email to be announced'}
                 </a>
               </li>
-              <li className="flex items-center gap-2 text-[#FFFDF0] text-sm">
-                <Phone className="w-4 h-4 shrink-0 text-[#FFDC5F]" />
-                <span>{profile?.phone || 'Phone to be announced'}</span>
+              <li className="flex items-start gap-2.5 text-[#FFFDF0] text-sm">
+                <Phone className="w-4 h-4 mt-0.5 shrink-0 text-[#FFDC5F]" />
+                <span className="leading-snug">{profile?.phone || 'Phone to be announced'}</span>
               </li>
+              {profile?.facebookUrl && (
+                <li className="flex items-start gap-2.5 text-[#FFFDF0] text-sm">
+                  <Facebook className="w-4 h-4 mt-0.5 shrink-0 text-[#FFDC5F]" />
+                  <a
+                    aria-label="School Facebook page"
+                    href={profile.facebookUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="hover:text-[#FFDC5F] transition-colors duration-200 leading-snug"
+                  >
+                    Eastern Mindoro College, Inc. - High School Department
+                  </a>
+                </li>
+              )}
             </ul>
             <div className="flex gap-3 mt-6">
-              {profile?.facebookUrl && <a aria-label="School Facebook page" href={profile.facebookUrl} target="_blank" rel="noopener noreferrer"
-                className="bg-[#102A71] hover:bg-[#F5C400] w-9 h-9 rounded-lg flex items-center justify-center transition-colors duration-200 group">
-                <Facebook className="w-4 h-4 text-[#FFFDF0] group-hover:text-[#001840]" />
-              </a>}
               {profile?.websiteUrl && <a href={profile.websiteUrl} target="_blank" rel="noopener noreferrer" className="text-sm underline">Official website</a>}
               
             </div>

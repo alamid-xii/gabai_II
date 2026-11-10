@@ -86,18 +86,16 @@ export const getEnrollments = async (filters = {}) => {
 
 // Get single enrollment by ID
 export const getEnrollmentById = async (id) => {
+  const token = getAuthToken();
+  if (!token) throw new Error('Please sign in again to load your enrollment.');
   const response = await fetch(`${API_URL}/enrollments/${id}`, {
-    headers: {
-      'Authorization': `Bearer ${getAuthToken()}`
-    }
+    credentials: 'include', cache: 'no-store',
+    headers: { Authorization: `Bearer ${token}` }
   });
-  
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.message || error.error || 'Failed to fetch enrollment');
-  }
-  
-  return response.json();
+  const body = await response.json().catch(() => null);
+  if (!response.ok) throw new Error(response.status === 401 ? 'Your session has expired. Please sign in again.' : body?.message || body?.error || `Could not load enrollment (HTTP ${response.status}).`);
+  if (!body || typeof body !== 'object' || !(body.enrollment?.id || body.id)) throw new Error('The server returned an invalid enrollment response. Restart the backend and retry.');
+  return body;
 };
 
 // Get user's enrollments
@@ -214,7 +212,9 @@ export const uploadEnrollmentDocuments = async (enrollmentId, files) => {
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({}));
-    throw new Error(error.error || 'Failed to upload documents');
+    const uploadError = new Error(error.error || 'Failed to upload documents');
+    uploadError.field = error.field;
+    throw uploadError;
   }
 
   return response.json();

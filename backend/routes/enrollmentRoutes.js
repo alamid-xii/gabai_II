@@ -1,6 +1,7 @@
+import { createHash } from "node:crypto";
 import { documentPublicDirectory } from "../services/documentStorage.js";
 import { getApplicationPolicy, submitApplication } from "../controllers/admissionSettingsController.js";
-import { currentAdmission, policyFor, validateSelection, validateDocuments } from "../services/admissionPolicy.js";
+import { currentAdmission, policyFor, validateSelection } from "../services/admissionPolicy.js";
 /*
 MIT License
 
@@ -48,7 +49,7 @@ import {
   scheduleSSCExam,
   recordSSCResult
 } from "../controllers/enrollmentController.js";
-import { requireAdminOrRegistrar } from "../middleware/auth.js";
+import { requireAdminOrRegistrar, requireStudent } from "../middleware/auth.js";
 import { getStudentGrades } from "../controllers/gradingController.js";
 import {
   sanitizeBody,
@@ -62,7 +63,6 @@ import {
   getEnrollmentDocuments,
   deleteEnrollmentDocument,
 } from "../controllers/documentController.js";
-import { sendEnrollmentSubmittedEmail } from '../services/emailService.js';
 import { sequelize } from "../models/db.js";
 import { EnrollmentDocument } from "../models/enrollmentDocumentModel.js";
 import { EnrollmentRecord } from "../models/enrollmentRecordModel.js";
@@ -94,7 +94,7 @@ const memUpload = memUploadInstance.any();
 const router = express.Router();
 
 // GET /api/enrollments/check-lrn?lrn=xxx - Check if LRN is already taken by another student
-router.get("/check-lrn", requireAuth, async (req, res) => {
+router.get("/check-lrn", requireAuth, requireStudent, async (req, res) => {
   const { lrn } = req.query;
   if (!lrn || lrn.length < 12) return res.json({ taken: false });
   const [rows] = await sequelize.query(
@@ -105,7 +105,7 @@ router.get("/check-lrn", requireAuth, async (req, res) => {
 });
 
 // GET /api/enrollments/ssc-application/status - Check if student already applied for SSC
-router.get("/ssc-application/status", requireAuth, async (req, res) => {
+router.get("/ssc-application/status", requireAuth, requireStudent, async (req, res) => {
   try {
     const [rows] = await sequelize.query(
       "SELECT id FROM enrollment_records WHERE userId = ? AND sscApplied = 1 LIMIT 1",
@@ -118,7 +118,7 @@ router.get("/ssc-application/status", requireAuth, async (req, res) => {
 });
 
 // POST /api/enrollments/ssc-application - Student submits SSC application with report card
-router.post("/ssc-application", requireAuth, (req, res, next) => {
+router.post("/ssc-application", requireAuth, requireStudent, (req, res, next) => {
   memUploadInstance.single("sscCard")(req, res, (err) => {
     if (err) {
       const msg = err.code === 'LIMIT_FILE_SIZE'
@@ -193,12 +193,13 @@ router.post("/ssc-application", requireAuth, (req, res, next) => {
 });
 
 router.get("/:id/admission-policy", requireAuth, getApplicationPolicy);
-router.post("/:id/submit", requireAuth, submitApplication);
+router.post("/:id/submit", requireAuth, requireStudent, submitApplication);
 
-// POST /api/enrollments - Create new enrollment (authenticated users)
+// POST /api/enrollments - Create a student enrollment
 router.post(
   "/",
   requireAuth,
+  requireStudent,
   sanitizeBody,
   validateEnrollmentCreate,
   createEnrollment
@@ -227,6 +228,7 @@ router.get("/:id", requireAuth, getEnrollmentById);
 router.put(
   "/:id",
   requireAuth,
+  requireStudent,
   sanitizeBody,
   validateEnrollmentUpdate,
   updateEnrollment
@@ -236,6 +238,7 @@ router.put(
 router.put(
   "/:id/profile-sections",
   requireAuth,
+  requireStudent,
   sanitizeBody,
   updateStudentProfileSections
 );
@@ -251,7 +254,7 @@ router.put("/:id/ssc-schedule", requireAuth, requireAdminOrRegistrar, validateSS
 router.put("/:id/ssc-result", requireAuth, requireAdminOrRegistrar, validateSSCResultMiddleware, recordSSCResult);
 
 // PUT /api/enrollments/:id/ssc-choice - Student chooses SSC or Regular class after passing
-router.put("/:id/ssc-choice", requireAuth, async (req, res) => {
+router.put("/:id/ssc-choice", requireAuth, requireStudent, async (req, res) => {
   try {
     const { choice } = req.body; // 'SSC' or 'Regular'
 
@@ -272,9 +275,9 @@ router.put("/:id/ssc-choice", requireAuth, async (req, res) => {
       return res.status(400).json({ message: 'SSC choice is only available for students who passed the exam' });
     }
 
-    // Cannot change once made
-    if (enrollment.sscChoiceMade) {
-      return res.status(400).json({ message: `You already chose ${enrollment.sscClass}. This choice cannot be changed.` });
+    // A passing applicant may choose either track until the full form is started.
+    if (enrollment.firstName || !['draft', 'submitted'].includes(enrollment.status)) {
+      return res.status(409).json({ message: 'Your enrollment form has already been started. Contact the registrar to change class.' });
     }
 
     await sequelize.query(
@@ -335,6 +338,21 @@ router.post("/:id/documents", requireAuth, (req, res) => {
       if (!req.files || Object.keys(req.files).length === 0)
         return res.status(400).json({ error: "No files uploaded" });
 
+      // Compare contents before replacing any documents, including renamed files.
+      const hash = buffer => createHash('sha256').update(buffer).digest('hex');
+      const fingerprints = new Map();
+      const existingDocuments = await EnrollmentDocument.findAll({ where: { enrollmentId } });
+      for (const document of existingDocuments) {
+        if (grouped[document.documentType] || !policy.documents.some(item => item.key === document.documentType)) continue;
+        const storedPath = path.join(documentPublicDirectory, document.filePath);
+        if (fs.existsSync(storedPath)) fingerprints.set(hash(await fs.promises.readFile(storedPath)), document.documentLabel || document.documentType);
+      }
+      for (const [key, [file]] of Object.entries(grouped)) {
+        const fingerprint = hash(file.buffer);
+        if (fingerprints.has(fingerprint)) return res.status(400).json({ error: `This file is already used for ${fingerprints.get(fingerprint)}. Choose a different document.`, field: key });
+        fingerprints.set(fingerprint, policy.documents.find(item => item.key === key)?.label || key);
+      }
+
       const uploadDir = path.join(documentPublicDirectory, "uploads", "documents", `enrollment-${enrollmentId}`);
       fs.mkdirSync(uploadDir, { recursive: true });
 
@@ -379,35 +397,6 @@ router.get("/:id/documents", requireAuth, getEnrollmentDocuments);
 router.delete("/:id/documents/:docId", requireAuth, deleteEnrollmentDocument);
 
 
-// POST /api/enrollments/:id/resubmit - Student resubmits a returned enrollment
-router.post("/:id/resubmit", requireAuth, async (req, res) => {
-  try {
-    const enrollmentId = parseInt(req.params.id);
-    const [[enrollment]] = await sequelize.query(
-      "SELECT * FROM enrollment_records WHERE id = ?",
-      { replacements: [enrollmentId] }
-    );
-    if (!enrollment) return res.status(404).json({ error: "Enrollment not found" });
-    if (enrollment.userId !== req.user.id) return res.status(403).json({ error: "Access denied" });
-    if (enrollment.status !== "returned") return res.status(400).json({ error: "Only returned enrollments can be resubmitted" });
-
-    const { policy } = await policyFor(enrollment);
-    validateSelection(policy, enrollment, { sscPlaceholder: Boolean(enrollment.sscResult) });
-    validateDocuments(policy, enrollment, await EnrollmentDocument.findAll({ where: { enrollmentId } }));
-    await sequelize.query(
-      "UPDATE enrollment_records SET status = 'submitted', updatedAt = NOW() WHERE id = ?",
-      { replacements: [enrollmentId] }
-    );
-    const [[updated]] = await sequelize.query("SELECT * FROM enrollment_records WHERE id = ?", { replacements: [enrollmentId] });
-          // Send email notification
-      try {
-        const [[user]] = await sequelize.query("SELECT * FROM users WHERE id = ?", { replacements: [updated.userId] });
-        if (user) await sendEnrollmentSubmittedEmail(user, updated);
-      } catch (_) {}
-      res.json({ message: "Enrollment resubmitted successfully", enrollment: updated });
-  } catch (e) {
-    console.error("Resubmit error:", e);
-    res.status(e.status || 500).json({ error: e.status ? e.message : "Failed to resubmit enrollment" });
-  }
-});
+// Legacy links use the same locked, fully validated submission path.
+router.post("/:id/resubmit", requireAuth, requireStudent, submitApplication);
 export default router;

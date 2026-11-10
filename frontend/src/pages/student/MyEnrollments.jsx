@@ -1,3 +1,4 @@
+import EnrollmentDetailsModal from '../../components/enrollment/EnrollmentDetailsModal';
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
@@ -5,7 +6,7 @@ import { getUserEnrollments, downloadEnrollmentPDF, deleteEnrollment } from '../
 import {
   FileText, Download, Eye, Trash2, Plus, Upload,
   CheckCircle, Clock, XCircle, AlertCircle, Calendar, BookOpen,
-  UserX, ArrowRightLeft, RotateCcw, FlaskConical, Loader2, Award
+  UserX, ArrowRightLeft, RotateCcw, FlaskConical, Loader2
 } from 'lucide-react';
 import { API } from '../../config/api';
 
@@ -16,6 +17,7 @@ export function MyEnrollments() {
   const [enrollments, setEnrollments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
+  const [viewingEnrollment, setViewingEnrollment] = useState(null);
   const [deleting, setDeleting] = useState(false);
   const [sscChoiceLoading, setSscChoiceLoading] = useState(null);
 
@@ -39,7 +41,7 @@ export function MyEnrollments() {
       setSscChoiceLoading(null);
     }
   }
-  const [filterStatus, setFilterStatus] = useState('all');
+  const [filterStatus] = useState('all');
   const [activeYear, setActiveYear] = useState('');
   const [historyOpen, setHistoryOpen] = useState(false);
 
@@ -201,10 +203,7 @@ export function MyEnrollments() {
   );
 
   // Student has a completed enrollment or enrollment from a previous school year (eligible to advance grade level)
-  const completedOrPastEnrollment = enrollments.find(e =>
-    e.status === 'completed' ||
-    (e.status === 'enrolled' && activeYear && e.academicYear && e.academicYear !== activeYear)
-  );
+  
 
   return (
     <div className="min-h-[calc(100svh-4rem)] lg:min-h-[calc(100svh-5rem)] bg-linear-to-br from-[#FFFDF0] via-[#FFF9E6] to-[#FFFDF0] py-4 sm:py-8">
@@ -249,6 +248,8 @@ export function MyEnrollments() {
                 const statusConfig = getStatusConfig(enrollment.status || 'draft');
                 const StatusIcon = statusConfig.icon;
                 const progress = calculateProgress(enrollment);
+                const isSSCApplication = Boolean(enrollment.sscApplied && !enrollment.firstName);
+                const isEnrollmentFinished = ['subjects_enrolled', 'enrolled', 'active', 'completed'].includes(enrollment.status);
 
                 return (
                   <div
@@ -367,7 +368,7 @@ export function MyEnrollments() {
                             )}
 
                             {/* SSC Result */}
-                            {enrollment.sscResult && (
+                            {enrollment.sscResult && ['draft', 'pending_exam'].includes(enrollment.status) && (
                               <div className={`mt-3 rounded-lg px-4 py-3 border ${enrollment.sscResult === 'passed' ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
                                 <p className="text-xs font-bold uppercase tracking-wide mb-1 ${enrollment.sscResult === 'passed' ? 'text-green-800' : 'text-red-800'}">SSC Exam Result</p>
                                 <div className="flex items-center justify-between text-sm">
@@ -453,13 +454,7 @@ export function MyEnrollments() {
                                   </div>
                                 </div>
                                 <div className="flex flex-wrap items-center gap-2">
-                                  <button
-                                    onClick={() => navigate(`/student-dashboard/${enrollment.id}`)}
-                                    className="shrink-0 px-3.5 py-2 bg-white text-[#102A71] border border-[#102A71]/30 hover:bg-[#EEF2FF] font-bold text-xs rounded-lg transition-all flex items-center gap-1.5 shadow-2xs hover:scale-[1.02] active:scale-[0.98]"
-                                  >
-                                    <Award className="w-3.5 h-3.5 text-[#F5C400]" />
-                                    View Past Grades
-                                  </button>
+
                                   {!hasActiveEnrollment && (
                                     <button
                                       onClick={() => navigate('/enroll')}
@@ -473,7 +468,7 @@ export function MyEnrollments() {
                             )}
 
                             {/* Progress Bar — hide when already enrolled */}
-                            {!['enrolled', 'completed'].includes(enrollment.status) && (
+                            {!enrollment.sscResult && !['pending_exam', 'enrolled', 'completed'].includes(enrollment.status) && (
                               <div className="mt-3">
                                 <div className="flex items-center justify-between text-xs mb-1">
                                   <span className="text-gray-600">Completion</span>
@@ -491,8 +486,8 @@ export function MyEnrollments() {
                         </div>
                       </div>
 
-                      {/* Right Section - Actions */}
-                      <div className="flex flex-wrap lg:flex-col gap-2 lg:w-48">
+                      {/* Application actions are only needed before enrollment is finalized. */}
+                      {!isEnrollmentFinished && <div className={`flex flex-wrap lg:flex-col gap-2 ${isSSCApplication ? "lg:w-64 lg:shrink-0" : "lg:w-48"}`}>
 
                         {/* SSC passed — show choice prompt if not yet chosen */}
                         {enrollment.sscApplied && !enrollment.firstName && enrollment.sscResult === 'passed' && !enrollment.sscChoiceMade && (
@@ -537,21 +532,12 @@ export function MyEnrollments() {
 
                         {/* Choice made — show Complete Enrollment Form button */}
                         {enrollment.sscApplied && !enrollment.firstName && enrollment.sscResult === 'passed' && enrollment.sscChoiceMade && (
-                          <div className="w-full space-y-2">
-                            <div className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold ${enrollment.sscClass === 'SSC'
-                              ? 'bg-[#F5C400]/20 text-[#001840] border border-[#F5C400]/40'
-                              : 'bg-gray-100 text-gray-700 border border-gray-200'
-                              }`}>
-                              {enrollment.sscClass === 'SSC'
-                                ? <><FlaskConical className="w-3.5 h-3.5 shrink-0 text-[#F5C400]" /> Enrolled in SSC Class</>
-                                : <><BookOpen className="w-3.5 h-3.5 shrink-0" /> Enrolled in Regular Class</>
-                              }
-                            </div>
+                          <div className="w-full rounded-xl border border-yellow-200 bg-yellow-50/60 p-4">
+                            <p className="mb-1 text-sm font-semibold text-[#001840]">Continue your application</p>
+                            <p className="mb-4 text-xs leading-relaxed text-gray-600">Complete the five-step enrollment form to submit your application.</p>
                             <button
-                              onClick={() => navigate('/hs-enrollment-form', {
-                                state: { educationLevel: 'JHS', sscEnrollmentId: enrollment.id }
-                              })}
-                              className="flex-1 lg:flex-none w-full px-4 py-2 bg-[#F5C400] text-[#001840] rounded-lg hover:bg-[#FFDC5F] transition-all font-bold flex items-center justify-center gap-2"
+                              onClick={() => navigate('/enroll')}
+                              className="w-full px-4 py-3 bg-[#F5C400] text-[#001840] rounded-lg hover:bg-[#FFDC5F] transition-all font-semibold text-sm flex items-center justify-center gap-2"
                             >
                               <FileText className="w-4 h-4" />
                               Complete Enrollment Form
@@ -559,12 +545,14 @@ export function MyEnrollments() {
                           </div>
                         )}
 
+                        {enrollment.sscApplied && !enrollment.firstName && enrollment.sscResult === 'failed' && (
+                          <button onClick={() => navigate('/hs-enrollment-form', { state: { educationLevel: 'JHS', sscEnrollmentId: enrollment.id } })} className="w-full rounded-lg bg-[#102A71] px-4 py-3 text-sm font-semibold text-white">Complete Regular Enrollment Form</button>
+                        )}
+
                         {/* View Details — only show when form is actually filled */}
                         {enrollment.firstName && (
                           <button
-                            onClick={() => navigate(`/enrollment/${enrollment.id}`, {
-                              state: { educationLevel: enrollment.educationLevel }
-                            })}
+                            onClick={() => setViewingEnrollment(enrollment.id)}
                             className="flex-1 lg:flex-none px-4 py-2 bg-[#102A71] text-white rounded-lg hover:bg-[#001840] transition-all font-medium flex items-center justify-center gap-2"
                           >
                             <Eye className="w-4 h-4" />
@@ -574,21 +562,11 @@ export function MyEnrollments() {
 
                         {enrollment.status === 'returned' && enrollment.firstName && (
                           <button
-                            onClick={() => navigate(`/resubmit/${enrollment.id}`)}
+                            onClick={() => navigate(`/hs-enrollment-form/${enrollment.id}`, { state: { educationLevel: enrollment.educationLevel } })}
                             className="flex-1 lg:flex-none px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-all font-medium flex items-center justify-center gap-2"
                           >
                             <Upload className="w-4 h-4" />
                             Fix and Resubmit
-                          </button>
-                        )}
-
-                        {['enrolled', 'active', 'completed'].includes(enrollment.status) && (
-                          <button
-                            onClick={() => navigate(`/student-dashboard/${enrollment.id}`)}
-                            className="flex-1 lg:flex-none px-4 py-2 bg-emerald-700 text-white rounded-lg hover:bg-emerald-800 transition-all font-medium flex items-center justify-center gap-2"
-                          >
-                            <Award className="w-4 h-4 text-[#FFDC5F]" />
-                            {enrollment.status === 'completed' ? 'View Past Grades' : 'View Grades'}
                           </button>
                         )}
 
@@ -602,16 +580,16 @@ export function MyEnrollments() {
                           </button>
                         )}
 
-                        <button
+                        {enrollment.status !== 'pending_exam' && !isSSCApplication && (<button
                           onClick={() => handleDownloadPDF(enrollment.id)}
                           className="flex-1 lg:flex-none px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-all font-medium flex items-center justify-center gap-2"
                         >
                           <Download className="w-4 h-4" />
                           Download PDF
-                        </button>
+                        </button>)}
 
                         {/* Only allow delete before the enrollment is submitted (draft only) */}
-                        {enrollment.status === 'draft' && (
+                        {enrollment.status === 'draft' && !isSSCApplication && (
                           <button
                             onClick={() => setDeleteConfirm(enrollment.id)}
                             className="flex-1 lg:flex-none px-4 py-2 border-2 border-red-300 text-red-600 bg-white rounded-lg hover:bg-red-50 transition-all font-medium flex items-center justify-center gap-2"
@@ -620,7 +598,7 @@ export function MyEnrollments() {
                             Delete
                           </button>
                         )}
-                      </div>
+                      </div>}
                     </div>
                   </div>
                 );
@@ -687,25 +665,19 @@ export function MyEnrollments() {
                               <StatusIcon className="w-3 h-3" />
                               {statusConfig.label}
                             </div>
+
                             <button
-                              onClick={() => navigate(`/student-dashboard/${enrollment.id}`)}
-                              className="px-3 py-1.5 text-xs bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-lg hover:bg-emerald-100 transition-colors font-semibold flex items-center gap-1.5"
-                            >
-                              <Award className="w-3.5 h-3.5 text-emerald-600" />
-                              Grades
-                            </button>
-                            <button
-                              onClick={() => navigate(`/enrollment/${enrollment.id}`, { state: { educationLevel: enrollment.educationLevel } })}
+                              onClick={() => setViewingEnrollment(enrollment.id)}
                               className="px-3 py-1.5 text-xs border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 transition-colors font-medium"
                             >
                               View
                             </button>
-                            <button
+                            {enrollment.status !== 'pending_exam' && (<button
                               onClick={() => handleDownloadPDF(enrollment.id)}
                               className="px-3 py-1.5 text-xs border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 transition-colors font-medium"
                             >
                               PDF
-                            </button>
+                            </button>)}
                           </div>
                         </div>
                       );
@@ -717,6 +689,8 @@ export function MyEnrollments() {
           )}
         </div>
       )}
+
+      {viewingEnrollment && <EnrollmentDetailsModal key={viewingEnrollment} enrollmentId={viewingEnrollment} onClose={() => setViewingEnrollment(null)} />}
 
       {/* Delete Confirmation Modal */}
       {deleteConfirm && (

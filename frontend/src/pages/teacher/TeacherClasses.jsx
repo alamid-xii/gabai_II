@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { useNavigate } from "react-router";
 import { RefreshCw } from "lucide-react";
 import { Navbar } from "../../components/Navbar";
-import { useAuth } from "../../contexts/AuthContext";
+import { useAuth } from "../../contexts/authState";
 import { MyClassesView } from "./TeacherDashboard";
 
 export function TeacherClasses() {

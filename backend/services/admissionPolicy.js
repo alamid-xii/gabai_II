@@ -1,5 +1,6 @@
 import { DataTypes } from 'sequelize';
 import { AdmissionSettings } from '../models/admissionSettingsModel.js';
+import { allowedEnrollmentTypes, GRADES_BY_LEVEL } from '../../shared/enrollmentRules.mjs';
 
 export const TYPES = ['new', 'old', 'transferee', 'returnee'];
 export const LEVELS = ['JHS', 'SHS'];
@@ -66,8 +67,10 @@ export function checklist(policy, enrollment) {
 }
 export function validateSelection(policy, body, { sscPlaceholder = false } = {}) {
   if (!LEVELS.includes(body.educationLevel) || !TYPES.includes(body.enrollmentType || 'new')) throw fail('Select a valid education level and applicant type.');
-  const grades = body.educationLevel === 'JHS' ? ['Grade 7','Grade 8','Grade 9','Grade 10'] : ['Grade 11','Grade 12'];
+  const grades = GRADES_BY_LEVEL[body.educationLevel];
   if (!grades.includes(body.gradeLevel)) throw fail('Choose a valid grade for your education level.');
+  if (!allowedEnrollmentTypes(body.gradeLevel).includes(body.enrollmentType || 'new')) throw fail('This applicant type is not available for the selected grade level.');
+  if (body.dateOfBirth !== undefined && body.dateOfBirth !== null && body.dateOfBirth !== '') validateBirthDate(body.dateOfBirth);
   if (body.educationLevel === 'SHS' && !policy.strands.some(strand => strand.active && strand.name === body.strand)) throw fail('This SHS strand is not accepting applications under your admission rules.');
   if (body.sscApplied && (body.educationLevel !== 'JHS' || body.gradeLevel !== 'Grade 7')) throw fail('SSC is available only for JHS Grade 7.');
   if (body.sscApplied && !sscPlaceholder) {
@@ -75,6 +78,19 @@ export function validateSelection(policy, body, { sscPlaceholder = false } = {})
     const average = Number(body.grade6Average);
     if (body.grade6Average === '' || body.grade6Average == null || !Number.isFinite(average) || average < policy.ssc.minimumAverage || average > 100) throw fail(`SSC applicants need a Grade 6 average of at least ${policy.ssc.minimumAverage}.`);
   }
+}
+
+export function validateBirthDate(value, now = new Date()) {
+  const date = typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) ? new Date(value + 'T00:00:00.000Z') : null;
+  if (!date || !Number.isFinite(date.getTime()) || date.toISOString().slice(0, 10) !== value) throw fail('Enter a valid date of birth in YYYY-MM-DD format.');
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit' }).format(now);
+  if (value > today) throw fail('Date of birth cannot be in the future.');
+}
+
+export function sscContinuationEligibility(summary, policy) {
+  if (!summary.gradesComplete || summary.computedGwa === null) return null;
+  const maintainingAverage = Number(policy.ssc?.maintainingAverage ?? policy.ssc?.minimumAverage ?? 85);
+  return !summary.hasFailedSubject && summary.computedGwa >= maintainingAverage;
 }
 export function validateDocuments(policy, enrollment, uploaded) {
   // Continuing students have past records on file; direct submission without new documents is permitted

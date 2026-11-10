@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import { AlertCircle, ArrowRight, CheckCircle2, ClipboardList, Clock, Download, Layers, RefreshCw, Users } from "lucide-react";
 import { BarChart, Bar, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { API, tok, StatusBadge } from "./RegistrarShared";
+import { StatusBadge } from "./RegistrarShared";
+import { API, tok } from "./registrarConfig";
 
 const STATUS_COLORS = { submitted: "#2563eb", pending_exam: "#d97706", verified: "#7c3aed", returned: "#ea580c", approved: "#0d9488", subjects_enrolled: "#4f46e5", enrolled: "#059669", active: "#0891b2", completed: "#64748b", rejected: "#dc2626" };
 const TYPES = { new: "New", old: "Continuing", transferee: "Transferee", returnee: "Returnee" };

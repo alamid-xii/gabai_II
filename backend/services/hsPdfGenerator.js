@@ -11,7 +11,11 @@ const __dirname = path.dirname(__filename);
  * Matches the actual EMC High School Enrollment Slip format
  * Page height auto-fits content — no whitespace at bottom
  */
-export const generateHSEnrollmentPDF = (enrollment) => {
+export const generateHSEnrollmentPDF = async (enrollment, schoolProfile) => {
+  // Resolve the same school profile used by the website; allow injection for exports/tests.
+  const profile = schoolProfile ?? (await import('../models/schoolProfileModel.js'))
+    .SchoolProfile.findByPk(1).then(record => record?.content || {});
+  const school = await profile;
   return new Promise((resolve, reject) => {
     try {
       const L = 36, R = 576, W = 540;
@@ -80,9 +84,9 @@ export const generateHSEnrollmentPDF = (enrollment) => {
       } catch (e) { /* skip logo if missing */ }
 
       doc.fontSize(12).font('Helvetica-Bold')
-        .text('EASTERN MINDORO COLLEGE, INC.', L + 60, y + 8);
+        .text(school.schoolName || 'EASTERN MINDORO COLLEGE, INC.', L + 60, y + 8, { width: 270, lineBreak: false, ellipsis: true });
       doc.fontSize(9).font('Helvetica')
-        .text('Calapan City, Oriental Mindoro', L + 60, y + 23);
+        .text(school.address || 'BB II, Bongabong, Or. Mindoro', L + 60, y + 23, { width: 270, lineBreak: false, ellipsis: true });
 
       doc.fontSize(13).font('Helvetica-Bold')
         .text('HIGH SCHOOL ENROLLMENT SLIP', R - 210, y + 10, { width: 210, align: 'right' });
@@ -198,6 +202,14 @@ export const generateHSEnrollmentPDF = (enrollment) => {
       label('Occupation:', L + 290, y);
       field(enrollment.motherOccupation || '', L + 352, y, R - L - 352 - 4);
       y += ROW;
+
+      if (enrollment.fatherMobileNumber || enrollment.motherMobileNumber) {
+        label('Father mobile:', L + 16, y);
+        field(enrollment.fatherMobileNumber || '', L + 94, y, 130);
+        label('Mother mobile:', L + 240, y);
+        field(enrollment.motherMobileNumber || '', L + 320, y, W - 324);
+        y += ROW;
+      }
 
       // 5. Address of Parents
       label('5.', L + 4, y);

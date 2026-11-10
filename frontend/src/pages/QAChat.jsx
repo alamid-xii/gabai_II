@@ -1,8 +1,8 @@
 import { useState, useRef, useEffect, forwardRef, useImperativeHandle } from "react";
 import { Send, Bot, User, Sparkles, ThumbsUp, ThumbsDown, Loader2, Copy, Check, AlertCircle } from "lucide-react";
-import { useAuth } from "../contexts/AuthContext";
+import { useAuth } from "../contexts/authState";
 import { API } from "../config/api";
-import { confirmAction } from "../components/ConfirmModal";
+import { confirmAction } from "../utils/confirmAction";
 
 function renderFormattedText(text) {
   if (!text) return null;
@@ -38,7 +38,7 @@ const initialMessages = [
   },
 ];
 
-export const QAChat = forwardRef(function QAChat({ onClose, isOverlay = false }, ref) {
+export const QAChat = forwardRef(function QAChat( ref) {
   const { user } = useAuth();
   const chatKey = user ? `chatHistory_${user.id}` : 'chatHistory_guest';
 

@@ -211,6 +211,8 @@ export const EnrollmentRecord = sequelize.define("EnrollmentRecord", {
   },
   
   // Parent Information
+  fatherMobileNumber: { type: DataTypes.STRING(20), allowNull: true },
+  motherMobileNumber: { type: DataTypes.STRING(20), allowNull: true },
   fatherName: {
     type: DataTypes.STRING(200),
     allowNull: true

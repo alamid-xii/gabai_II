@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Loader2, Save } from "lucide-react";
 import { API } from "../config/api";
 
-const NAME_PATTERN = /^[\p{L}\p{M}\s'\u2019-]+$/u;
+const NAME_PATTERN = /^[\p{L}\p{M}\s.'\u2019-]+$/u;
 const fields = [
   { key: "firstName", label: "First name", autoComplete: "given-name", required: true },
   { key: "middleName", label: "Middle name (optional)", autoComplete: "additional-name" },
@@ -21,7 +21,7 @@ export function ProfileDetailsForm({ user, onSaved, onCancel, submitLabel = "Sav
     const details = Object.fromEntries(Object.entries(values).map(([key, value]) => [key, value.trim()]));
     for (const { key, label, required } of fields.slice(0, 3)) {
       if ((required && !details[key]) || (details[key] && (!NAME_PATTERN.test(details[key]) || !/\p{L}/u.test(details[key])))) {
-        setError(`${label.replace(" (optional)", "")} must contain letters, spaces, apostrophes or hyphens.`);
+        setError(`${label.replace(" (optional)", "")} must contain letters, spaces, periods, apostrophes or hyphens.`);
         return;
       }
     }

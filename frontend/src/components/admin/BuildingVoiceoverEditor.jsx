@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { API, BACKEND_URL } from '../../config/api';
-import { confirmAction } from '../ConfirmModal';
+import { confirmAction } from '../../utils/confirmAction';
 
 export function BuildingVoiceoverEditor({ buildingId, script, onScriptLoaded, onRefresh }) {
   const [building, setBuilding] = useState(null);

@@ -1,6 +1,6 @@
-﻿import nodemailer from "nodemailer";
+import nodemailer from "nodemailer";
 import dotenv from "dotenv";
-dotenv.config();
+dotenv.config({ quiet: true });
 
 const transporter = nodemailer.createTransport({
   service: process.env.EMAIL_SERVICE || "gmail",
@@ -33,7 +33,7 @@ function wrap(title, body) {
     </div>
     <!-- Footer -->
     <div style="background:#f9f9f5;padding:20px 32px;border-top:1px solid #eee;text-align:center;">
-      <p style="color:#888;font-size:12px;margin:0;">Eastern Mindoro College, Inc. &bull; Calapan City, Oriental Mindoro</p>
+      <p style="color:#888;font-size:12px;margin:0;">Eastern Mindoro College, Inc. &bull; BB II, Bongabong, Or. Mindoro</p>
       <p style="color:#aaa;font-size:11px;margin:4px 0 0;">This is an automated message. Please do not reply.</p>
     </div>
   </div>
@@ -123,7 +123,7 @@ export async function sendEnrollmentReturnedEmail(user, enrollment, remarks) {
       <p style="color:#e65100;font-size:13px;font-weight:bold;margin:0 0 4px;">Registrar Remarks:</p>
       <p style="color:#bf360c;font-size:14px;margin:0;">${remarks}</p>
     </div>
-    ${btn("Fix and Resubmit", `${BASE_URL}/resubmit/${enrollment.id}`)}
+    ${btn("Fix and Resubmit", `${BASE_URL}/hs-enrollment-form/${enrollment.id}`)}
     <p style="color:#888;font-size:12px;margin-top:24px;">Please correct the issues and resubmit as soon as possible.</p>`;
   await send(user.email || enrollment.email, "Action Required — Enrollment Returned", wrap("Enrollment Returned for Correction", body));
 }
@@ -173,7 +173,7 @@ export async function sendSSCExamScheduledEmail(user, enrollment) {
       ${info("Exam Date", examDate)}
       ${info("Passing Score", enrollment.sscPassingScore || "75")}
     </table>
-    <p style="color:#444;font-size:14px;">Please come on time and bring a valid school ID. Good luck!</p>
+    <p style="color:#444;font-size:14px;">Please arrive on time on your scheduled exam date and bring your <strong>original report card</strong> for verification, along with a valid school ID. Good luck!</p>
     ${btn("View Enrollment Details", `${BASE_URL}/enrollment/${enrollment.id}`)}`;
   await send(user.email || enrollment.email, "SSC Exam Scheduled — GabAI EMC", wrap("SSC Entrance Exam Scheduled", body));
 }
@@ -186,12 +186,12 @@ export async function sendSSCResultEmail(user, enrollment) {
     <p style="color:#444;font-size:14px;line-height:1.6;">Your SSC entrance exam result is now available.</p>
     <table style="width:100%;border-collapse:collapse;margin:16px 0;background:${passed ? "#f1f8e9" : "#ffebee"};border-radius:8px;padding:12px;">
       ${info("Result", passed ? "PASSED" : "DID NOT PASS")}
-      ${enrollment.sscExamScore ? info("Score", enrollment.sscExamScore) : ""}
+      ${enrollment.sscExamScore != null ? info("Score", enrollment.sscExamScore) : ""}
       ${info("Class Assignment", enrollment.sscClass || (passed ? "SSC" : "Regular"))}
     </table>
-    <p style="color:#444;font-size:14px;">${passed ? "Congratulations! You qualify for the Special Science Class." : "You will be enrolled in the Regular class."}</p>
-    ${btn("View Enrollment Details", `${BASE_URL}/enrollment/${enrollment.id}`)}`;
-  await send(user.email || enrollment.email, `SSC Exam Result — ${passed ? "Passed" : "Not Passed"} — GabAI EMC`, wrap("SSC Exam Result", body));
+    <p style="color:#444;font-size:14px;">${passed ? "Congratulations! You qualify for the Special Science Class. Sign in, open My Enrollments, and click Complete Enrollment Form to proceed with the five-step enrollment form." : "You may continue with the Regular class. Sign in and open My Enrollments to complete the five-step enrollment form."}</p>
+    ${btn("Continue Enrollment", `${BASE_URL}/my-enrollments`)}`;
+  return await send(user.email || enrollment.email, `SSC Exam Result — ${passed ? "Passed" : "Not Passed"} — GabAI EMC`, wrap("SSC Exam Result", body));
 }
 // Verification email
 export async function sendVerificationEmail(user, token) {

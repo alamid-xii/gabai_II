@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback, useRef } from "react";
-import { Link, useNavigate, useLocation } from "react-router";
+
+import { Link } from "react-router";
 import {
   MapPin, Users, MessageSquare, FileText, BarChart3, Settings, LogOut,
   Bell, Search, TrendingUp, AlertCircle, CheckCircle2, Clock, Menu, X,
@@ -7,21 +7,21 @@ import {
   CheckCircle, XCircle, Download, Calendar, Filter, ChevronLeft, ChevronRight,
   UserPlus, Archive
 } from "lucide-react";
-import { MapContainer, TileLayer, Marker, useMapEvents } from "react-leaflet";
+import { MapContainer, TileLayer, Marker } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { toast } from "sonner";
+
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../components/ui/card";
 import { Badge } from "../../components/ui/badge";
 import { AcademicSetup } from "../../components/admin/AcademicSetup";
 import { SectionManagement } from "./SectionManagement";
-import { useAuth } from "../../contexts/AuthContext";
+
 
 
 // ── Status config ─────────────────────────────────────────────────────────────
-export const ADMIN_STATUS_CFG = {
+const ADMIN_STATUS_CFG = {
   draft:             { label: 'Draft',             color: 'bg-gray-100 text-gray-700' },
   submitted:         { label: 'Pending',           color: 'bg-amber-100 text-amber-800' },
   pending_exam:      { label: 'Pending Exam',       color: 'bg-yellow-100 text-yellow-700' },

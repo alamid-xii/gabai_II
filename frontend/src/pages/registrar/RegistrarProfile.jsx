@@ -2,9 +2,9 @@ import { useState } from "react";
 import { User, Mail, ShieldCheck, Lock, Eye, EyeOff, Save, X } from "lucide-react";
 import { useNavigate } from "react-router";
 import { toast } from "sonner";
-import { useAuth } from "../../contexts/AuthContext";
+import { useAuth } from "../../contexts/authState";
 import { Navbar } from "../../components/Navbar";
-import { API, tok } from "./RegistrarShared";
+import { API, tok } from "./registrarConfig";
 
 export function RegistrarProfile() {
   const { user, updateUser } = useAuth();
@@ -56,7 +56,7 @@ export function RegistrarProfile() {
   async function savePassword(e) {
     e.preventDefault();
     if (!pwForm.current) { toast.error("Current password is required"); return; }
-    if (pwForm.next.length < 8) { toast.error("New password must be at least 8 characters"); return; }
+    if (pwForm.next.length < 12 || !/[A-Z]/.test(pwForm.next) || !/[0-9]/.test(pwForm.next) || new TextEncoder().encode(pwForm.next).length > 72) { toast.error("Use 12 or more characters, an uppercase letter and a number (maximum 72 bytes)"); return; }
     if (pwForm.next !== pwForm.confirm) { toast.error("Passwords do not match"); return; }
     setSavingPw(true);
     try {
@@ -67,6 +67,7 @@ export function RegistrarProfile() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || data.message || "Failed to change password");
+      if (data.token) localStorage.setItem("token", data.token);
       toast.success("Password changed successfully");
       setChangingPw(false);
       setPwForm({ current: "", next: "", confirm: "" });

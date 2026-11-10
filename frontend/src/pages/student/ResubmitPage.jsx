@@ -13,7 +13,7 @@ export function ResubmitPage() {
   const { settings, error: policyError, retry: retryPolicy } = useAdmissionSettings(id);
   const CREDENTIALS = admissionChecklist(settings?.content, enrollment?.educationLevel || 'JHS', enrollment?.enrollmentType || 'new').map(doc => ({ ...doc, optional: !doc.required }));
   const [uploadedDocs, setUploadedDocs] = useState([]);
-  const [newFiles, setNewFiles] = useState({});
+  const [, setNewFiles] = useState({});
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 

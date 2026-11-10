@@ -44,8 +44,8 @@ function validateName(value, label, optional = false) {
     invalid(`${label} is required.`);
   }
   if (name.length > 100) invalid(`${label} must be no more than 100 characters.`);
-  if (!/^[\p{L}\p{M} '\u2019-]+$/u.test(name) || !/\p{L}/u.test(name)) {
-    invalid(`${label} may contain letters, spaces, apostrophes and hyphens only.`);
+  if (!/^[\p{L}\p{M} .'\u2019-]+$/u.test(name) || !/\p{L}/u.test(name)) {
+    invalid(`${label} may contain letters, spaces, periods, apostrophes and hyphens only.`);
   }
   return name;
 }

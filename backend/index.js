@@ -1,3 +1,4 @@
+import { ensureAcademicTerms, ensureYearEndGrading, ensureSubjectTeacher } from "./services/academicTerms.js";
 import { documentPublicDirectory } from "./services/documentStorage.js";
 import { protectDocumentUploads } from "./middleware/privateDocuments.js";
 import { initializeAdmission } from "./services/admissionPolicy.js";
@@ -50,7 +51,7 @@ import "./models/systemLogModel.js";          // ensure system_logs table is syn
 import { auditLoggerMiddleware, backfillSystemLogs } from "./services/systemLogger.js";
 
 // Load environment variables
-dotenv.config();
+dotenv.config({ quiet: true });
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -155,6 +156,8 @@ const syncPromise = sequelize.query("SET FOREIGN_KEY_CHECKS = 0").catch(() => {}
 async function addMissingColumns() {
   try {
     const queries = [
+      `ALTER TABLE enrollment_records ADD COLUMN fatherMobileNumber VARCHAR(20) NULL`,
+      `ALTER TABLE enrollment_records ADD COLUMN motherMobileNumber VARCHAR(20) NULL`,
       `ALTER TABLE enrollment_records ADD COLUMN sectionId INTEGER`,
       `ALTER TABLE enrollment_records ADD COLUMN sectionName VARCHAR(50)`,
       `ALTER TABLE sections ADD COLUMN strand VARCHAR(50)`,
@@ -171,6 +174,7 @@ async function addMissingColumns() {
       `ALTER TABLE users ADD COLUMN lastName VARCHAR(100) NULL`,
       `ALTER TABLE users ADD COLUMN mobileNumber VARCHAR(20) NULL`,
       `ALTER TABLE users ADD COLUMN profileCompleted BOOLEAN NOT NULL DEFAULT 1`,
+      `ALTER TABLE users ADD COLUMN tokenVersion INTEGER UNSIGNED NOT NULL DEFAULT 0`,
       `CREATE UNIQUE INDEX users_googleId_unique ON users (googleId)`,
       `ALTER TABLE enrollment_records MODIFY COLUMN enrollmentType ENUM('new', 'old', 'transferee', 'returnee') NULL`,
       `ALTER TABLE sections ADD COLUMN teacherId INTEGER`,
@@ -201,6 +205,9 @@ async function addMissingColumns() {
 }
 await syncPromise;
 await addMissingColumns();
+await ensureAcademicTerms(sequelize);
+await ensureYearEndGrading(sequelize);
+await ensureSubjectTeacher(sequelize);
 await ensureVoiceoverColumns(sequelize);
 await ensurePanoramaLabelColumn(sequelize);
 await initializeEnrollmentGuide();

@@ -45,6 +45,7 @@ test("password recovery stores only a token hash, replaces links, hashes passwor
   assert.equal((await call("resetPassword", { token, password: "longpassword123" })).statusCode, 400);
   assert.equal((await call("resetPassword", { token, password: "NewPassword123" })).statusCode, 200);
   assert.equal(await bcrypt.compare("NewPassword123", user.password), true);
+  assert.equal(user.tokenVersion, 1);
   assert.equal((await call("resetPassword", { token, password: "OtherPassword123" })).statusCode, 400);
 });
 
