@@ -4,9 +4,23 @@ import { API } from "../config/api";
 
 import { AuthContext } from "./authState";
 
+function getInitialStoredUser() {
+  try {
+    const token = localStorage.getItem("token");
+    const rawUser = localStorage.getItem("user");
+    if (!token || !rawUser) return null;
+    const payload = JSON.parse(atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")));
+    if (!payload?.exp || payload.exp * 1000 <= Date.now()) return null;
+    return JSON.parse(rawUser);
+  } catch {
+    return null;
+  }
+}
+
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null);
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const initialUser = getInitialStoredUser();
+  const [user, setUser] = useState(initialUser);
+  const [isLoggedIn, setIsLoggedIn] = useState(Boolean(initialUser));
   const [loading, setLoading] = useState(true);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);

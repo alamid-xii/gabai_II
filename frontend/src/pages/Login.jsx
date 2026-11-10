@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { SchoolName } from "../components/SchoolName";
-import { Link, useNavigate } from "react-router";
+import { Link, Navigate, useNavigate } from "react-router";
+import { roleHome } from "../utils/roleHome";
 import { Eye, EyeOff, LogIn, Mail, Lock, AlertCircle, Loader2, CheckCircle } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
@@ -20,9 +21,13 @@ export function Login() {
       ? params.get("message") || "Google sign-in failed. Please try again."
       : "";
   });
-  const { login } = useAuth();
+  const { login, isLoggedIn, user } = useAuth();
   const navigate = useNavigate();
   const googleCallbackHandled = useRef(false);
+
+  if (isLoggedIn && user) {
+    return <Navigate to={user.profileCompleted === false ? "/complete-profile" : roleHome(user.role)} replace />;
+  }
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
