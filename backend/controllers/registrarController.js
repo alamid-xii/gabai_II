@@ -137,9 +137,9 @@ export const getRegistrarEnrollments = async (req, res) => {
     }
 
     if (search) {
-      query += ` AND (er.firstName LIKE ? OR er.familyName LIKE ? OR er.studentNumber LIKE ? OR er.lrn LIKE ? OR er.gradeLevel LIKE ?)`;
+      query += ` AND (er.firstName LIKE ? OR er.familyName LIKE ? OR er.studentNumber LIKE ? OR er.lrn LIKE ? OR er.gradeLevel LIKE ? OR u.name LIKE ? OR u.email LIKE ?)`;
       const s = `%${search}%`;
-      params.push(s, s, s, s, s);
+      params.push(s, s, s, s, s, s, s);
     }
 
     query += ` ORDER BY er.createdAt DESC`;

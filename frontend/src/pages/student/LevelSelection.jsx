@@ -81,6 +81,7 @@ export function LevelSelection() {
   const [checking, setChecking] = useState(true);
   const [existingEnrollment, setExistingEnrollment] = useState(null);
   const [passedSSCApplication, setPassedSSCApplication] = useState(null);
+  const [failedSSCApplication, setFailedSSCApplication] = useState(null);
   const [classChoice, setClassChoice] = useState('SSC');
   const [savingClassChoice, setSavingClassChoice] = useState(false);
   const [completedEnrollment, setCompletedEnrollment] = useState(null); // for carry-over
@@ -108,6 +109,9 @@ export function LevelSelection() {
 
       const passedSSC = enrollments.find(enrollment => enrollment.sscApplied && enrollment.sscResult === 'passed' && !enrollment.firstName && ['draft', 'submitted'].includes(enrollment.status) && (!currentActiveYear || enrollment.academicYear === currentActiveYear));
       if (passedSSC) { setPassedSSCApplication(passedSSC); setClassChoice(passedSSC.sscClass || 'SSC'); setChecking(false); return; }
+
+      const failedSSC = enrollments.find(enrollment => enrollment.sscApplied && enrollment.sscResult === 'failed' && !enrollment.firstName && ['draft', 'submitted'].includes(enrollment.status) && (!currentActiveYear || enrollment.academicYear === currentActiveYear));
+      if (failedSSC) { setFailedSSCApplication(failedSSC); setChecking(false); return; }
 
       // Active = ongoing application for the CURRENT active school year
       // (exclude rejected, completed, draft, or enrollments from a previous academic year)
@@ -170,31 +174,67 @@ export function LevelSelection() {
     </section></div>;
   }
 
+  if (failedSSCApplication) {
+    return (
+      <div className="min-h-[70vh] flex items-center justify-center bg-[#FFFDF0] p-4">
+        <section className="w-full max-w-xl rounded-2xl border border-gray-200 bg-white p-6 sm:p-8 shadow-sm">
+          <h1 className="text-2xl font-bold text-[#001840]">Continue Grade 7 Regular Class Enrollment</h1>
+          <p className="mt-3 text-sm leading-relaxed text-gray-600">
+            Your SSC entrance examination result did not meet the passing cutoff for the Special Science Class, so you have been placed in the <strong>Regular Class</strong> curriculum. Click below to complete your five-step Grade 7 enrollment form.
+          </p>
+          <button
+            onClick={() => navigate('/hs-enrollment-form', { state: { educationLevel: 'JHS', sscEnrollmentId: failedSSCApplication.id } })}
+            className="mt-6 w-full rounded-xl bg-[#102A71] px-4 py-3 font-semibold text-white hover:bg-[#001840] transition-all"
+          >
+            Complete Regular Enrollment Form
+          </button>
+        </section>
+      </div>
+    );
+  }
+
   if (existingEnrollment) {
+    const isPendingSSC = existingEnrollment.status === 'pending_exam' || (existingEnrollment.sscApplied && !existingEnrollment.sscResult && !existingEnrollment.firstName);
     return (
       <div className="min-h-[calc(100svh-4rem)] lg:min-h-[calc(100svh-5rem)] bg-linear-to-br from-[#FFFDF0] via-[#FFF9E6] to-[#FFFDF0] flex items-center justify-center px-4">
         <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-8 max-w-md w-full text-center">
-          <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <FileText className="w-8 h-8 text-blue-600" />
+          <div className={`w-16 h-16 ${isPendingSSC ? 'bg-yellow-100' : 'bg-blue-100'} rounded-full flex items-center justify-center mx-auto mb-4`}>
+            {isPendingSSC ? <FlaskConical className="w-8 h-8 text-yellow-600" /> : <FileText className="w-8 h-8 text-blue-600" />}
           </div>
-          <h2 className="text-xl font-bold text-[#001840] mb-2">You already have an active enrollment</h2>
+          <h2 className="text-xl font-bold text-[#001840] mb-2">
+            {isPendingSSC ? 'SSC Application Pending Registrar Review' : 'You already have an active enrollment'}
+          </h2>
           <p className="text-sm text-gray-500 mb-1">
-            {existingEnrollment.firstName
-              ? `${existingEnrollment.firstName} ${existingEnrollment.familyName} — ${existingEnrollment.educationLevel} ${existingEnrollment.gradeLevel || ''}`
-              : `${existingEnrollment.educationLevel} enrollment`}
+            {isPendingSSC
+              ? 'Junior High School — Grade 7 (Special Science Class)'
+              : existingEnrollment.firstName
+                ? `${existingEnrollment.firstName} ${existingEnrollment.familyName} — ${existingEnrollment.educationLevel} ${existingEnrollment.gradeLevel || ''}`
+                : `${existingEnrollment.educationLevel} enrollment`}
           </p>
-          <p className="text-xs text-gray-400 mb-6 capitalize">
-            Status: <span className="font-semibold text-[#102A71]">{existingEnrollment.status === 'submitted' ? 'Pending' : existingEnrollment.status.replace('_', ' ')}</span>
+          <p className="text-xs text-gray-400 mb-4 capitalize">
+            Status: <span className="font-semibold text-[#102A71]">
+              {isPendingSSC
+                ? 'Pending SSC Entrance Exam'
+                : existingEnrollment.status === 'submitted'
+                  ? 'Pending'
+                  : existingEnrollment.status.replace('_', ' ')}
+            </span>
           </p>
+          {isPendingSSC && existingEnrollment.sscExamDate && (
+            <div className="mb-4 rounded-xl bg-yellow-50 border border-yellow-200 px-4 py-2.5 text-xs text-yellow-800">
+              Scheduled Exam Date: <span className="font-bold">{new Date(existingEnrollment.sscExamDate).toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' })}</span>
+            </div>
+          )}
           <p className="text-sm text-gray-600 mb-6">
-            You cannot start a new enrollment while you have an active application.
-            Please wait for your current enrollment to be processed.
+            {isPendingSSC
+              ? 'Your Grade 6 Report Card has been submitted. Please wait for the Registrar to process your SSC application, schedule your entrance examination, and record your exam result before proceeding to the enrollment form.'
+              : 'You cannot start a new enrollment while you have an active application. Please wait for your current enrollment to be processed.'}
           </p>
           <button
             onClick={() => navigate('/my-enrollments')}
             className="w-full py-3 bg-[#102A71] text-white rounded-xl font-semibold hover:bg-[#001840] transition-all"
           >
-            View Enrollment
+            {isPendingSSC ? 'View SSC Application Status' : 'View Enrollment'}
           </button>
         </div>
       </div>
@@ -378,16 +418,10 @@ export function LevelSelection() {
     // JHS Special Science Class (SSC) flow
     if (targetLevel === 'JHS' && jhsProgram === 'ssc') {
       if (selectedGrade === 'Grade 7') {
-        // Incoming Grade 7 SSC Admission application
+        // Incoming Grade 7 SSC Admission application must be processed by Registrar before enrollment form
         if (sscDone) {
           setShowRegularModal(false);
-          navigate('/hs-enrollment-form', {
-            state: {
-              educationLevel: 'JHS',
-              gradeLevel: 'Grade 7',
-              enrollmentType: 'new',
-            }
-          });
+          navigate('/my-enrollments');
           return;
         }
         await handleSubmitSSC();
@@ -437,14 +471,19 @@ export function LevelSelection() {
       });
       const data = await res.json();
       if (!res.ok) {
-        // If already applied, treat it as success — let them continue
         if (res.status === 400 && data.message?.toLowerCase().includes('already')) {
           setSscDone(true);
+          toast.info('Your SSC application is already submitted and pending Registrar review.');
+          setShowRegularModal(false);
+          navigate('/my-enrollments');
           return;
         }
         throw new Error(data.message || 'Failed to submit SSC application');
       }
       setSscDone(true);
+      toast.success('SSC application submitted! Please wait for the Registrar to review your report card, schedule your entrance exam, and release your result before proceeding to the enrollment form.');
+      setShowRegularModal(false);
+      navigate('/my-enrollments');
     } catch (err) {
       setSscFileError(err.message);
     } finally {
@@ -648,11 +687,11 @@ export function LevelSelection() {
                 </div>
 
                 {sscDone ? (
-                  <div className="bg-green-50 border border-green-200 rounded-xl p-4 text-center">
-                    <CheckCircle2 className="w-8 h-8 text-green-600 mx-auto mb-2" />
-                    <p className="font-bold text-sm text-green-900">SSC Report Card Already Submitted</p>
-                    <p className="text-xs text-green-700 mt-1">
-                      Your Grade 6 Report Card is on file. Click below to continue filling out your Grade 7 enrollment form.
+                  <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 text-center">
+                    <FlaskConical className="w-8 h-8 text-yellow-600 mx-auto mb-2" />
+                    <p className="font-bold text-sm text-yellow-900">SSC Application Pending Registrar Review</p>
+                    <p className="text-xs text-yellow-800 mt-1">
+                      Your Grade 6 Report Card has been submitted. Please wait for the Registrar to verify your report card, schedule your entrance examination, and release your exam result before proceeding to the enrollment form.
                     </p>
                   </div>
                 ) : (
@@ -745,7 +784,7 @@ export function LevelSelection() {
                 {submittingSSC ? (
                   <><Loader2 size={15} className="animate-spin" /> Submitting...</>
                 ) : targetLevel === 'JHS' && jhsProgram === 'ssc' && selectedGrade === 'Grade 7' ? (
-                  sscDone ? <>Proceed to Form <ArrowRight size={15} /></> : <><Upload size={15} /> Apply for SSC</>
+                  sscDone ? <>View SSC Status <ArrowRight size={15} /></> : <><Upload size={15} /> Apply for SSC</>
                 ) : selectedType === 'old' ? (
                   <>Proceed to Form <ArrowRight size={15} /></>
                 ) : (

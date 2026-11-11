@@ -163,6 +163,52 @@ export function HSEnrollmentForm({ enrollmentId: propId, readOnly = false }) {
 
   const [sscChosenClass, setSscChosenClass] = useState(null); // 'SSC' | 'Regular'
 
+  // Guard against direct access to /hs-enrollment-form while an SSC application is pending exam or active enrollment exists
+  useEffect(() => {
+    if (isEditMode || readOnly || !user?.id) return;
+    let cancelled = false;
+    const token = localStorage.getItem('token');
+    if (!token) return;
+    Promise.all([
+      fetch(`${API}/academic/school-years/active`).then(r => r.ok ? r.json() : null).catch(() => null),
+      fetch(`${API}/enrollments/user/${user.id}`, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.ok ? r.json() : []).catch(() => [])
+    ]).then(([sy, data]) => {
+      if (cancelled) return;
+      const currentActiveYear = sy?.year || null;
+      const enrollments = Array.isArray(data) ? data : (data.enrollments || []);
+
+      const pendingSSC = enrollments.find(e =>
+        e.sscApplied && !e.sscResult && !e.firstName &&
+        e.status === 'pending_exam' &&
+        (!currentActiveYear || !e.academicYear || e.academicYear === currentActiveYear)
+      );
+      if (pendingSSC) {
+        toast.error('Your SSC application is still pending Registrar review and entrance exam results. Please wait before filling out the enrollment form.');
+        navigate('/my-enrollments', { replace: true });
+        return;
+      }
+
+      const readySSC = enrollments.find(e =>
+        e.sscApplied && ['passed', 'failed'].includes(e.sscResult) && !e.firstName &&
+        ['draft', 'submitted'].includes(e.status) &&
+        (!currentActiveYear || !e.academicYear || e.academicYear === currentActiveYear)
+      );
+      if (readySSC) {
+        navigate('/enroll', { replace: true });
+        return;
+      }
+
+      const active = enrollments.find(e =>
+        !['rejected', 'completed', 'draft'].includes(e.status) &&
+        (!currentActiveYear || !e.academicYear || e.academicYear === currentActiveYear)
+      );
+      if (active) {
+        navigate('/my-enrollments', { replace: true });
+      }
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [isEditMode, readOnly, user?.id, navigate]);
+
   // Load existing enrollment when editing
   useEffect(() => {
     if (!isEditMode) return;
