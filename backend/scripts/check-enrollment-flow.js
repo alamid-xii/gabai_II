@@ -71,9 +71,9 @@ try {
     const data = await response.json(); return { code: response.status, data };
   }
   function expect(result, code, label) { assert.equal(result.code, code, `${label}: ${JSON.stringify(result.data)}`); checks.push(label); return result.data; }
-  const payload = { educationLevel: 'JHS', gradeLevel: 'Grade 7', enrollmentType: 'new', studentType: 'New', firstName: 'Synthetic', familyName: 'Student', sex: 'Male', dateOfBirth: '2010-01-01', academicYear: '2026-2027', sscApplied: false };
+  const payload = { educationLevel: 'JHS', gradeLevel: 'Grade 7', enrollmentType: 'new', studentType: 'New', firstName: 'Synthetic', familyName: 'Student', sex: 'Male', dateOfBirth: '2010-01-01', placeOfBirth: 'Bongabong', lrn: '100000000001', fatherName: 'Father Synthetic', fatherOccupation: 'Farmer', fatherMobileNumber: '09171234567', parentsAddress: 'Bongabong, Oriental Mindoro', academicYear: '2026-2027', sscApplied: false };
   const upload = async (who, id, keys) => {
-    const form = new FormData(); for (const key of keys) form.append(key, new Blob(['%PDF-1.4 synthetic test'], { type: 'application/pdf' }), `${key}.pdf`);
+    const form = new FormData(); for (const key of keys) form.append(key, new Blob([`%PDF-1.4 synthetic test ${key}`], { type: 'application/pdf' }), `${key}.pdf`);
     return call(who, 'POST', `/api/enrollments/${id}/documents`, form);
   };
   expect(await call(null, 'POST', '/api/enrollments', payload), 401, 'Anonymous application blocked');
@@ -113,7 +113,7 @@ try {
   const schedule = expect(await call(student, 'GET', '/api/student/my-schedule'), 200, 'Assigned class schedule readable');
   assert.equal(schedule.schedules.length, 1);
   expect(await call(registrar, 'GET', '/api/registrar/stats'), 200, 'Registrar stats SQL succeeds');
-  const draft = expect(await call(draftStudent, 'POST', '/api/enrollments', payload), 201, 'Second draft created');
+  const draft = expect(await call(draftStudent, 'POST', '/api/enrollments', { ...payload, lrn: '100000000002' }), 201, 'Second draft created');
   expect(await call(admin, 'POST', `/api/admin/enrollments/${draft.enrollment.id}/approve`, {}), 400, 'Approval of incomplete draft blocked');
   const before = (await Section.findByPk(section.id)).currentEnrollment;
   expect(await call(admin, 'POST', `/api/admin/enrollments/${id}/approve`, {}), 200, 'Repeated approval is safe');
@@ -121,16 +121,17 @@ try {
   const settings = expect(await call(admin, 'GET', '/api/admission-settings'), 200, 'Admission settings readable');
   const revised = structuredClone(settings.content); revised.ssc.minimumAverage = 90; revised.strands.find(item => item.name === 'HUMSS').active = false;
   expect(await call(admin, 'PUT', '/api/admin/admission-settings', { revision: settings.revision, content: revised }), 200, 'Admin changes SSC/strand rules');
-  expect(await call(shs, 'POST', '/api/enrollments', { ...payload, educationLevel: 'SHS', gradeLevel: 'Grade 11', strand: 'HUMSS' }), 400, 'Disabled SHS strand blocked');
+  expect(await call(shs, 'POST', '/api/enrollments', { ...payload, lrn: '100000000003', educationLevel: 'SHS', gradeLevel: 'Grade 11', strand: 'HUMSS' }), 400, 'Disabled SHS strand blocked');
   const report = new FormData(); report.append('sscCard', new Blob(['%PDF-test'], { type: 'application/pdf' }), 'ssc.pdf'); report.append('grade6Average', '89');
   expect(await call(ssc, 'POST', '/api/enrollments/ssc-application', report), 400, 'SSC below current threshold blocked');
   const validReport = new FormData(); validReport.append('sscCard', new Blob(['%PDF-test'], { type: 'application/pdf' }), 'ssc.pdf'); validReport.append('grade6Average', '95');
   const sscApplication = expect(await call(ssc, 'POST', '/api/enrollments/ssc-application', validReport), 201, 'Eligible SSC report-card application created');
   const sid = sscApplication.enrollmentId;
+  expect(await call(ssc, 'PUT', `/api/enrollments/${sid}`, { ...payload, lrn: '100000000004', sscApplied: true, grade6Average: 95 }), 409, 'SSC form edit blocked while pending Registrar exam result');
   expect(await call(registrar, 'PUT', `/api/registrar/enrollments/${sid}/ssc-schedule`, { examDate: '2026-11-15T09:00', passingScore: 75 }), 200, 'SSC exam scheduled');
   expect(await call(registrar, 'PUT', `/api/registrar/enrollments/${sid}/ssc-result`, { examScore: 90 }), 200, 'SSC pass result recorded');
   expect(await call(ssc, 'PUT', `/api/enrollments/${sid}/ssc-choice`, { choice: 'SSC' }), 200, 'Student selects SSC class');
-  expect(await call(ssc, 'PUT', `/api/enrollments/${sid}`, { ...payload, sscApplied: true, grade6Average: 95 }), 200, 'SSC placeholder completed');
+  expect(await call(ssc, 'PUT', `/api/enrollments/${sid}`, { ...payload, lrn: '100000000004', sscApplied: true, grade6Average: 95 }), 200, 'SSC placeholder completed');
   expect(await upload(ssc, sid, ['f138', 'cert']), 200, 'SSC enrollment documents uploaded');
   expect(await call(ssc, 'POST', `/api/enrollments/${sid}/submit`), 200, 'SSC full enrollment submitted');
   expect(await call(registrar, 'POST', `/api/registrar/enrollments/${sid}/verify`, {}), 200, 'SSC documents verified');
@@ -139,7 +140,7 @@ try {
 
   const shsSubject = await Subject.create({ code: 'TESTSTEM11', description: 'Synthetic STEM Science', programCode: 'SHS', gradeLevel: 11, strand: 'STEM', semester: '1st', units: 1 });
   const shsSection = await Section.create({ code: 'TEST-STEM11', course: 'SHS', yearLevel: 11, strand: 'STEM', semester: '1st', schoolYear: '2026-2027', capacity: 20 });
-  const shsDraft = expect(await call(shs, 'POST', '/api/enrollments', { ...payload, educationLevel: 'SHS', gradeLevel: 'Grade 11', strand: 'STEM' }), 201, 'Enabled SHS strand application created');
+  const shsDraft = expect(await call(shs, 'POST', '/api/enrollments', { ...payload, lrn: '100000000005', educationLevel: 'SHS', gradeLevel: 'Grade 11', strand: 'STEM' }), 201, 'Enabled SHS strand application created');
   const hid = shsDraft.enrollment.id;
   expect(await upload(shs, hid, ['f138','cert']), 200, 'SHS documents uploaded');
   expect(await call(shs, 'POST', `/api/enrollments/${hid}/submit`), 200, 'SHS submitted');
@@ -150,14 +151,14 @@ try {
   expect(await call(admin, 'POST', '/api/admin/enrollments/bulk-approve', { ids: [hid] }), 200, 'Repeated bulk approval skips enrolled records');
   assert.equal((await Section.findByPk(shsSection.id)).currentEnrollment, beforeBulk);
   const waitingUser = await makeUser('Waiting');
-  const waiting = expect(await call(waitingUser, 'POST', '/api/enrollments', { ...payload, gradeLevel: 'Grade 10', enrollmentType: 'old' }), 201, 'Continuing JHS application draft');
+  const waiting = expect(await call(waitingUser, 'POST', '/api/enrollments', { ...payload, lrn: '100000000006', gradeLevel: 'Grade 10', enrollmentType: 'old', studentType: 'Old', studentNumber: 'A-0027' }), 201, 'Continuing JHS application draft with EMC Student ID A-0027');
   const wid = waiting.enrollment.id;
   expect(await upload(waitingUser, wid, ['f138','cert']), 200, 'Continuing JHS documents uploaded');
   expect(await call(waitingUser, 'POST', `/api/enrollments/${wid}/submit`), 200, 'Continuing JHS submitted');
   const waitingApproved = expect(await call(registrar, 'POST', `/api/registrar/enrollments/${wid}/approve`, {}), 200, 'Registrar approval handles no matching section');
   assert.equal(waitingApproved.enrollment.status, 'approved'); assert.equal(waitingApproved.enrollment.sectionId, null); checks.push('No wrong-grade or wrong-year section fallback');
   const transfer = await makeUser('Transferee');
-  const t = expect(await call(transfer, 'POST', '/api/enrollments', { ...payload, gradeLevel: 'Grade 8', enrollmentType: 'transferee' }), 201, 'Transferee draft created');
+  const t = expect(await call(transfer, 'POST', '/api/enrollments', { ...payload, lrn: '100000000007', gradeLevel: 'Grade 8', enrollmentType: 'transferee' }), 201, 'Transferee draft created');
   expect(await upload(transfer, t.enrollment.id, ['f138','cert']), 200, 'Transferee partial documents uploaded');
   expect(await call(transfer, 'POST', `/api/enrollments/${t.enrollment.id}/submit`), 400, 'Transferee transfer credentials enforced');
   expect(await upload(transfer, t.enrollment.id, ['f137a','f137e']), 200, 'Transferee transfer credentials uploaded');

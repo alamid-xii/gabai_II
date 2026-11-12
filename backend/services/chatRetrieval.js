@@ -7,7 +7,7 @@ import { sequelize } from '../models/db.js';
 import { PORTAL_FAQS } from './chatKnowledge.js';
 import { normalizeSchoolQuery } from './chatLanguage.js';
 
-const STOP = new Set('a an the is are was were be been am i me my we our you your they them it its what how when where who which why do does did can could would should will shall may might must to of in on at for with about by from into onto and or but if so as than too very just this that these those there here please tell give show need want know help hello hi hey good morning afternoon evening day sir maam po opo ho ko mo niya natin nila akin iyo ba pa na nga din rin lang naman sana kaya kasi pala daw raweh eh ha ang ng mga sa ay at o ni kay para kapag pag kung habang bago pagkatapos yung yun yon iyan ito dito diyan doon pwede puwede paki maaari maari gusto malaman tanong magtanong itanong ask asking sabihin emc school eastern mindoro college available currently'.split(' '));
+const STOP = new Set('a an the is are was were be been am i me my we our you your they them it its what how when where who which why do does did can could would should will shall may might must to of in on at for with about by from into onto and or but if so as than too very just this that these those there here please tell give show need want know help hello hi hey good morning afternoon evening day sir maam po opo ho ko mo niya natin nila akin iyo ba pa na nga din rin lang naman sana kaya kasi pala daw raw eh ha ano anong paano pano ang ng mga sa ay at o ni kay para kapag pag kung habang bago pagkatapos yung yun yon iyan ito dito diyan doon pwede puwede paki maaari maari gusto malaman tanong magtanong itanong ask asking sabihin emc school eastern mindoro college available currently'.split(' '));
 const ALIASES = {
   enrolment: 'enroll', enrollment: 'enroll', enrolling: 'enroll', enrolled: 'enroll', admission: 'enroll', admissions: 'enroll',
   requirements: 'requirement', required: 'requirement', kailangan: 'requirement',
@@ -28,6 +28,10 @@ function tokens(text) {
 function keywordList(value) {
   try { const parsed = Array.isArray(value) ? value : JSON.parse(value || '[]'); return Array.isArray(parsed) ? parsed.filter(x => typeof x === 'string') : []; } catch { return []; }
 }
+const HIGH_VALUE_TOKENS = new Set(['ssc', 'transferee', 'returnee', 'strand', 'stem', 'abm', 'humss', 'tvl', 'forgot', 'reset', 'password', 'tour', '360', 'upload', 'file', 'format', 'size', 'email', 'phone', 'location', 'registrar', 'schedule', 'status', 'f138', 'f137', 'birth', 'moral', 'subject', 'building', 'library', 'canteen', 'clinic', 'gym']);
+function tokenWeight(word) {
+  return HIGH_VALUE_TOKENS.has(word) ? 2.5 : 1;
+}
 function tokenMatches(word, list) {
   return list.some(target => target === word || (word.length >= 4 && target.length >= 4 && (word.startsWith(target) || target.startsWith(word))));
 }
@@ -42,16 +46,17 @@ export function scoreFAQ(message, faq) {
   const keys = tokens(keywordList(faq.keywords).join(' '));
   const answer = tokens(faq.answer).slice(0, 120);
   const qAndKeys = [...new Set([...question, ...keys])];
-  const matchedInQKeys = input.filter(w => tokenMatches(w, qAndKeys)).length;
-  const matchedInQuestion = input.filter(w => tokenMatches(w, question)).length;
-  const matchedInAnswer = input.filter(w => tokenMatches(w, answer)).length;
-  if (!matchedInQKeys && !matchedInAnswer) return 0;
-  // Cap denominator so long conversational questions are not unfairly penalized.
-  const denom = Math.min(input.length, 4);
-  const coverage = matchedInQKeys / denom;
-  const qRatio = matchedInQuestion / denom;
-  const qPrecision = question.length ? matchedInQuestion / question.length : 0;
-  const aRatio = matchedInAnswer / denom;
+  const sumWeight = words => words.reduce((acc, w) => acc + tokenWeight(w), 0);
+  const matchedQKeyWords = input.filter(w => tokenMatches(w, qAndKeys));
+  const matchedQuestionWords = input.filter(w => tokenMatches(w, question));
+  const matchedAnswerWords = input.filter(w => tokenMatches(w, answer));
+  if (!matchedQKeyWords.length && !matchedAnswerWords.length) return 0;
+  const topInputWeight = sumWeight([...input].sort((a, b) => tokenWeight(b) - tokenWeight(a)).slice(0, 4));
+  const denom = Math.max(1, topInputWeight);
+  const coverage = Math.min(1, sumWeight(matchedQKeyWords) / denom);
+  const qRatio = Math.min(1, sumWeight(matchedQuestionWords) / denom);
+  const qPrecision = question.length ? matchedQuestionWords.length / question.length : 0;
+  const aRatio = Math.min(1, sumWeight(matchedAnswerWords) / denom);
   const raw = coverage * 0.65 + qRatio * 0.15 + qPrecision * 0.1 + aRatio * 0.1;
   return Math.min(1, Math.round(raw * 1000) / 1000);
 }
@@ -125,20 +130,16 @@ export async function retrieve(message) {
     { question: 'How can I contact the school?', keywords: '["contact", "email", "phone", "telephone", "number", "numero", "cellphone", "mobile", "makontak", "website", "facebook"]', answer: [profile.phone ? `Phone: ${profile.phone}` : 'Phone: No telephone or mobile number is currently listed in the portal profile.', profile.email ? `Email: ${profile.email}` : '', profile.websiteUrl, profile.facebookUrl, profile.registrarLocation ? `Registrar: ${profile.registrarLocation}` : ''].filter(Boolean).join('\n') || 'School contact details have not been provided yet.' },
     { question: 'Where is the Registrar office and what are its hours?', keywords: '["registrar", "office", "hours", "oras"]', answer: [profile.registrarLocation, profile.registrarHours].filter(Boolean).join('\n') || 'Registrar details have not been provided yet.' }
   ].map(faq => ({ ...faq, id: null, source: 'portal', profile: true })) : [];
-  const isCampusFacilityQuery = /\b(library|gym|canteen|clinic|laboratory|lab|room|building|classroom|chapel|stage|court|audio|avr)\b/i.test(rawMessage);
-  const profileIntent = !isCampusFacilityQuery && !/\b(student|reference|lrn|id)\s+number\b/i.test(rawMessage) && (/\b(contact|telephone|phone|numero|cellphone|mobile|telepono|website|facebook|school name|school address|lokasyon|matatagpuan)\b/i.test(rawMessage) || (/\b(where|saan|san|nasaan|makikita)\b/i.test(rawMessage) && /\b(emc|school|paaralan|college|bayan)\b/i.test(rawMessage)) || /\bregistrar\b.*\b(hours|office|location|oras)\b/i.test(rawMessage));
-  // Combine all knowledge sources; boost official profile fields when query is specifically about school contact/address.
-  const faqs = [...profileFAQs, ...admissionFAQs, ...stored, ...guideFAQs, ...localFAQs];
-  const topFAQs = faqs.map(faq => {
-    let score = scoreFAQ(rawMessage, faq);
-    if (profileIntent && faq.profile && score > 0) score = Math.min(1, score + 0.25);
-    return { faq, score };
-  })
+  const isCampusFacilityQuery = /\b(library|gym|canteen|clinic|laboratory|lab|room|building|classroom|chapel|stage|court|audio|avr|schedule|iskedyul|subject|grade|enroll|enrollment|status|password|account|register)\b/i.test(rawMessage);
+  const profileIntent = !isCampusFacilityQuery && !/\b(student|reference|lrn|id)\s+number\b/i.test(rawMessage) && (/\b(contact|email|telephone|phone|numero|cellphone|mobile|telepono|website|facebook|school name|school address|lokasyon|matatagpuan)\b/i.test(rawMessage) || (/\b(where|saan|san|nasaan|makikita)\b/i.test(rawMessage) && /\b(emc|school|paaralan|college|bayan)\b/i.test(rawMessage)) || /\bregistrar\b.*\b(hours|office|location|oras)\b/i.test(rawMessage));
+  // Official profile fields win over legacy FAQs for identity/contact questions.
+  const faqs = profileIntent && profileFAQs.length ? profileFAQs : [...profileFAQs, ...admissionFAQs, ...stored, ...guideFAQs, ...localFAQs];
+  const topFAQs = faqs.map(faq => ({ faq, score: scoreFAQ(rawMessage, faq) }))
     .filter(item => item.score >= 0.25)
-    .sort((a, b) => (profileIntent ? (b.faq.profile ? 1 : 0) - (a.faq.profile ? 1 : 0) : 0) || b.score - a.score || (a.faq.source === 'portal') - (b.faq.source === 'portal'))
+    .sort((a, b) => b.score - a.score || (a.faq.source === 'portal') - (b.faq.source === 'portal'))
     .slice(0, 8);
   const liveRecords = [];
-  for (const source of SOURCES.filter(s => (!profileIntent || isCampusFacilityQuery) && (s.pattern.test(rawMessage) || s.pattern.test(message)))) {
+  for (const source of SOURCES.filter(s => !profileIntent && (s.pattern.test(rawMessage) || s.pattern.test(message)))) {
     try {
       const [rows] = await sequelize.query(source.sql);
       if (rows.length) liveRecords.push({ name: source.name, text: rows.map(source.format).join('\n') });

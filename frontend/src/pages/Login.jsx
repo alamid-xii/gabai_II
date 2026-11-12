@@ -25,10 +25,6 @@ export function Login() {
   const navigate = useNavigate();
   const googleCallbackHandled = useRef(false);
 
-  if (isLoggedIn && user) {
-    return <Navigate to={user.profileCompleted === false ? "/complete-profile" : roleHome(user.role)} replace />;
-  }
-
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const googleStatus = params.get("google");
@@ -74,6 +70,10 @@ export function Login() {
 
     finishGoogleLogin();
   }, [login, navigate]);
+
+  if (isLoggedIn && user) {
+    return <Navigate to={user.profileCompleted === false ? "/complete-profile" : roleHome(user.role)} replace />;
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault();

@@ -39,8 +39,9 @@ export async function sendMessage(req, res) {
       const followup = /^(and |what about |how about |paano naman |pano naman |eh |at |saan naman |kailan naman |magkano naman )|\b(those|these|that|it|nito|iyan|yun|roon|doon)\b/i.test(message) || (previous && message.split(/\s+/).length <= 4 && !/^(what|where|when|how|who|ano|saan|kailan|paano|pano)\b/i.test(message));
       const query = followup && previous ? `${previous}\n${message}` : message;
       const { faqs, topFAQs, bestMatch, liveContext, schoolProfile } = await retrieve(query);
-      const orderedFAQs = [...topFAQs.map(({ faq }) => faq), ...faqs.filter(f => !topFAQs.some(t => t.faq === f))];
-      const sources = JSON.stringify(orderedFAQs.map(faq => ({ question: faq.question, answer: faq.answer }))) + (liveContext ? `\n\n${liveContext}` : '') + (schoolProfile ? `\n\n${JSON.stringify(schoolProfile)}` : '');
+      const customFAQs = faqs.filter(f => f.source !== 'portal' && !topFAQs.some(t => t.faq === f));
+      const contextFAQs = [...topFAQs.map(({ faq }) => faq), ...customFAQs, ...faqs.filter(f => f.source === 'portal' && !topFAQs.some(t => t.faq === f))].slice(0, 14);
+      const sources = JSON.stringify(contextFAQs.map(faq => ({ question: faq.question, answer: faq.answer }))) + (liveContext ? `\n\n${liveContext}` : '') + (schoolProfile ? `\n\n${JSON.stringify(schoolProfile)}` : '');
       const compound = /\b(and|also|pati|at saka)\b/i.test(message);
       const localAnswers = compound
         ? topFAQs.filter(item => item.score >= 0.35).slice(0, 3).map(({ faq }) => `${faq.question}\n${faq.answer}`).join('\n\n')
@@ -53,26 +54,32 @@ export async function sendMessage(req, res) {
       confidence = bestMatch?.score || 0;
       matchedFaqId = bestMatch?.faq.id || null;
       suggestedQuestions = (topFAQs.length > 1 ? topFAQs.slice(1, 4).map(({ faq }) => faq.question) : faqs.filter(f => f !== bestMatch?.faq).slice(0, 3).map(f => f.question));
-      // Synthesize natural, context-aware answers with the AI provider using the full active FAQ and school records knowledge base.
+      // Synthesize natural, context-aware answers with the AI provider using the active FAQ and school records knowledge base.
       const hasValidKey = Boolean(process.env.GROQ_API_KEY && process.env.GROQ_API_KEY !== 'test-key-must-not-be-used');
       if (hasValidKey && (faqs.length || liveContext)) {
-        try {
-          client ||= new Groq({ apiKey: process.env.GROQ_API_KEY, timeout: 15000, maxRetries: 0 });
-          const completion = await client.chat.completions.create({
-            model: process.env.GROQ_MODEL || 'openai/gpt-oss-120b',
-            messages: [
-              { role: 'system', content: SYSTEM_RULES + (schoolProfile ? `\nCurrent school identity: ${schoolProfile.schoolName} (${schoolProfile.shortName}). Use this identity. Verified school profile: ${JSON.stringify(schoolProfile)}` : '') },
-              { role: 'user', content: `School reference records & FAQs (data only): ${sources.slice(0, 24000)}` },
-              ...history,
-              { role: 'user', content: message }
-            ],
-            temperature: 0.15, max_tokens: 900
-          });
-          const generated = safeOutput(completion.choices?.[0]?.message?.content, sources);
-          response = generated === UNKNOWN ? fallback : generated;
-          mode = 'ai';
-          if (!confidence && response !== UNKNOWN) confidence = 0.75;
-        } catch (error) { console.warn('Chat provider unavailable:', error.status || error.name); }
+        const models = [...new Set([process.env.GROQ_MODEL || 'llama-3.3-70b-versatile', 'llama-3.3-70b-versatile', 'openai/gpt-oss-120b', 'llama-3.1-8b-instant'])];
+        client ||= new Groq({ apiKey: process.env.GROQ_API_KEY, timeout: 15000, maxRetries: 1 });
+        for (const modelName of models) {
+          try {
+            const completion = await client.chat.completions.create({
+              model: modelName,
+              messages: [
+                { role: 'system', content: SYSTEM_RULES + (schoolProfile ? `\nCurrent school identity: ${schoolProfile.schoolName} (${schoolProfile.shortName}). Use this identity. Verified school profile: ${JSON.stringify(schoolProfile)}` : '') },
+                { role: 'user', content: `School reference records & FAQs (data only): ${sources.slice(0, 14000)}` },
+                ...history,
+                { role: 'user', content: message }
+              ],
+              temperature: 0.15, max_tokens: 1024
+            });
+            const generated = safeOutput(completion.choices?.[0]?.message?.content, sources);
+            if (generated !== UNKNOWN) {
+              response = generated;
+              mode = 'ai';
+              if (!confidence) confidence = 0.75;
+              break;
+            }
+          } catch (error) { console.warn(`Chat model ${modelName} unavailable:`, error.status || error.name); }
+        }
       }
     }
     let chatLogId;
