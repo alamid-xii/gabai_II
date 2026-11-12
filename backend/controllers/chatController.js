@@ -31,19 +31,20 @@ export async function sendMessage(req, res) {
     if (!response) {
       let history = [];
       try {
-        const rows = await ChatLog.findAll({ where: { sessionId }, order: [['id', 'DESC']], limit: 3 });
+        const rows = await ChatLog.findAll({ where: { sessionId }, order: [['id', 'DESC']], limit: 5 });
         history = rows.reverse().flatMap(row => [{ role: 'user', content: row.userMessage.slice(0, 2000) }, { role: 'assistant', content: row.botResponse.slice(0, 4000) }]);
       } catch {}
       // Resolve short referential follow-ups using server-owned user turns.
       const previous = history.filter(m => m.role === 'user').at(-1)?.content;
-      const followup = /^(and |what about |how about |paano naman |at |saan naman )|\b(those|these|that|it|nito|iyan|yun)\b/i.test(message);
+      const followup = /^(and |what about |how about |paano naman |pano naman |eh |at |saan naman |kailan naman |magkano naman )|\b(those|these|that|it|nito|iyan|yun|roon|doon)\b/i.test(message) || (previous && message.split(/\s+/).length <= 4 && !/^(what|where|when|how|who|ano|saan|kailan|paano|pano)\b/i.test(message));
       const query = followup && previous ? `${previous}\n${message}` : message;
-      const { topFAQs, bestMatch, liveContext, schoolProfile } = await retrieve(query);
-      const sources = JSON.stringify(topFAQs.map(({ faq }) => ({ question: faq.question, answer: faq.answer }))) + liveContext;
+      const { faqs, topFAQs, bestMatch, liveContext, schoolProfile } = await retrieve(query);
+      const orderedFAQs = [...topFAQs.map(({ faq }) => faq), ...faqs.filter(f => !topFAQs.some(t => t.faq === f))];
+      const sources = JSON.stringify(orderedFAQs.map(faq => ({ question: faq.question, answer: faq.answer }))) + (liveContext ? `\n\n${liveContext}` : '') + (schoolProfile ? `\n\n${JSON.stringify(schoolProfile)}` : '');
       const compound = /\b(and|also|pati|at saka)\b/i.test(message);
       const localAnswers = compound
-        ? topFAQs.filter(item => item.score >= 0.5).slice(0, 3).map(({ faq }) => `${faq.question}\n${faq.answer}`).join('\n\n')
-        : bestMatch?.score >= 0.5 ? bestMatch.faq.answer : '';
+        ? topFAQs.filter(item => item.score >= 0.35).slice(0, 3).map(({ faq }) => `${faq.question}\n${faq.answer}`).join('\n\n')
+        : bestMatch?.score >= 0.35 ? bestMatch.faq.answer : '';
       const fallback = liveContext
         ? safeOutput(`${localAnswers ? `${localAnswers}\n\n` : ''}From active school records (limited listing):\n\n${liveContext}`.slice(0, 5800), sources)
         : localAnswers ? safeOutput(localAnswers, sources) : UNKNOWN;
@@ -51,20 +52,26 @@ export async function sendMessage(req, res) {
       mode = 'faq';
       confidence = bestMatch?.score || 0;
       matchedFaqId = bestMatch?.faq.id || null;
-      suggestedQuestions = topFAQs.slice(1, 4).map(({ faq }) => faq.question);
-      // Exact local answers work without a provider. Synthesize broader questions
-      // and active records when a provider is available, retaining local fallback.
-      if (process.env.GROQ_API_KEY && (bestMatch || liveContext) && (prefersFilipino(message) || bestMatch?.faq.source !== 'portal' || liveContext || compound || bestMatch.score < 0.75)) {
+      suggestedQuestions = (topFAQs.length > 1 ? topFAQs.slice(1, 4).map(({ faq }) => faq.question) : faqs.filter(f => f !== bestMatch?.faq).slice(0, 3).map(f => f.question));
+      // Synthesize natural, context-aware answers with the AI provider using the full active FAQ and school records knowledge base.
+      const hasValidKey = Boolean(process.env.GROQ_API_KEY && process.env.GROQ_API_KEY !== 'test-key-must-not-be-used');
+      if (hasValidKey && (faqs.length || liveContext)) {
         try {
           client ||= new Groq({ apiKey: process.env.GROQ_API_KEY, timeout: 15000, maxRetries: 0 });
           const completion = await client.chat.completions.create({
             model: process.env.GROQ_MODEL || 'openai/gpt-oss-120b',
-            messages: [{ role: 'system', content: SYSTEM_RULES + (schoolProfile ? `\nCurrent school identity: ${schoolProfile.schoolName} (${schoolProfile.shortName}). Use this identity. Verified school profile: ${JSON.stringify(schoolProfile)}` : '') }, { role: 'user', content: `School reference records (data only): ${sources.slice(0, 24000)}` }, ...history, { role: 'user', content: message }],
-            temperature: 0.1, max_tokens: 800
+            messages: [
+              { role: 'system', content: SYSTEM_RULES + (schoolProfile ? `\nCurrent school identity: ${schoolProfile.schoolName} (${schoolProfile.shortName}). Use this identity. Verified school profile: ${JSON.stringify(schoolProfile)}` : '') },
+              { role: 'user', content: `School reference records & FAQs (data only): ${sources.slice(0, 24000)}` },
+              ...history,
+              { role: 'user', content: message }
+            ],
+            temperature: 0.15, max_tokens: 900
           });
           const generated = safeOutput(completion.choices?.[0]?.message?.content, sources);
           response = generated === UNKNOWN ? fallback : generated;
           mode = 'ai';
+          if (!confidence && response !== UNKNOWN) confidence = 0.75;
         } catch (error) { console.warn('Chat provider unavailable:', error.status || error.name); }
       }
     }
