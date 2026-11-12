@@ -107,9 +107,19 @@ router.get("/check-lrn", requireAuth, requireStudent, async (req, res) => {
 // GET /api/enrollments/ssc-application/status - Check if student already applied for SSC
 router.get("/ssc-application/status", requireAuth, requireStudent, async (req, res) => {
   try {
+    let activeYear = null;
+    try {
+      const [[sy]] = await sequelize.query("SELECT year FROM school_years WHERE isActive = 1 LIMIT 1");
+      if (sy?.year) activeYear = sy.year;
+    } catch (_) {}
+
     const [rows] = await sequelize.query(
-      "SELECT id FROM enrollment_records WHERE userId = ? AND sscApplied = 1 LIMIT 1",
-      { replacements: [req.user.id] }
+      `SELECT id FROM enrollment_records
+       WHERE userId = ? AND sscApplied = 1
+         AND status NOT IN ('rejected', 'completed')
+         ${activeYear ? "AND (academicYear = ? OR academicYear IS NULL OR academicYear = '')" : ""}
+       LIMIT 1`,
+      { replacements: activeYear ? [req.user.id, activeYear] : [req.user.id] }
     );
     res.json({ applied: rows.length > 0 });
   } catch (err) {
@@ -143,7 +153,8 @@ router.post("/ssc-application", requireAuth, requireStudent, (req, res, next) =>
     const [existing] = await sequelize.query(
       `SELECT id FROM enrollment_records
        WHERE userId = ? AND sscApplied = 1
-         ${activeYear ? "AND academicYear = ?" : ""}
+         AND status NOT IN ('rejected', 'completed')
+         ${activeYear ? "AND (academicYear = ? OR academicYear IS NULL OR academicYear = '')" : ""}
        LIMIT 1`,
       { replacements: activeYear ? [userId, activeYear] : [userId] }
     );

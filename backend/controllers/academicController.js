@@ -156,9 +156,14 @@ export const setActiveSchoolYear = async (req, res) => {
     if (!Number.isSafeInteger(id) || id < 1) return res.status(400).json({ message: 'Invalid school year.' });
     await sequelize.transaction(async transaction => {
       const years = await SchoolYear.findAll({ transaction, lock: transaction.LOCK.UPDATE, order: [['id', 'ASC']] });
-      if (!years.some(year => year.id === id)) throw Object.assign(new Error('School year not found.'), { status: 404 });
+      const targetYear = years.find(year => year.id === id);
+      if (!targetYear) throw Object.assign(new Error('School year not found.'), { status: 404 });
       await SchoolYear.update({ isActive: false }, { where: {}, transaction });
       await SchoolYear.update({ isActive: true }, { where: { id }, transaction });
+      await sequelize.query(
+        `UPDATE enrollment_records SET academicYear = ? WHERE academicYear IS NULL OR academicYear = ''`,
+        { replacements: [targetYear.year], transaction }
+      );
     });
     res.json({ message: 'Active school year updated.' });
   } catch (error) { res.status(error.status || 500).json({ message: error.status ? error.message : 'Could not activate the school year.' }); }

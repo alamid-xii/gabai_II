@@ -1,15 +1,15 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
-import { useNavigate } from "react-router";
 import {
   FileText, Search, RefreshCw, X, Eye, ChevronLeft, ChevronRight
 } from "lucide-react";
 import { toast } from "sonner";
 import { AdminStatusBadge } from "./AdminShared";
 import { API } from "../../config/api";
+import EnrollmentDetailsModal from "../../components/enrollment/EnrollmentDetailsModal";
 
 export function AdminEnrollmentsView() {
-  const navigate = useNavigate();
   const [enrollments, setEnrollments] = useState([]);
+  const [viewingEnrollmentId, setViewingEnrollmentId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -55,8 +55,8 @@ export function AdminEnrollmentsView() {
   const filtered = useMemo(() => {
     return enrollments.filter(e => {
       const matchSearch = !search.trim() ||
-        `${e.firstName} ${e.familyName}`.toLowerCase().includes(search.trim().toLowerCase()) ||
-        (e.studentNumber || '').toLowerCase().includes(search.trim().toLowerCase()) ||
+        `${e.firstName || ''} ${e.familyName || ''} ${e.user_name || ''} ${e.user_email || ''}`.toLowerCase().includes(search.trim().toLowerCase()) ||
+        (e.studentNumber || `#${e.id}`).toLowerCase().includes(search.trim().toLowerCase()) ||
         (e.course || '').toLowerCase().includes(search.trim().toLowerCase()) ||
         (e.strand || '').toLowerCase().includes(search.trim().toLowerCase());
       const matchStatus = statusFilter === 'all' || 
@@ -265,7 +265,9 @@ export function AdminEnrollmentsView() {
                   {paginated.map(e => (
                     <tr key={e.id} className="hover:bg-gray-50/60 transition-colors">
                       <td className="px-5 py-3.5">
-                        <p className="font-semibold text-gray-900">{e.firstName} {e.familyName}</p>
+                        <p className="font-semibold text-gray-900">
+                          {[e.firstName, e.familyName].filter(Boolean).join(' ') || e.user_name || e.user_email || `Applicant #${e.id}`}
+                        </p>
                         <p className="text-xs text-gray-400 mt-0.5">{e.studentNumber || `#${e.id}`}</p>
                         {e.sscApplied == 1 && (
                           <span className="text-[10px] bg-purple-50 text-purple-700 border border-purple-200 px-1.5 py-0.5 rounded-full mt-1 inline-block font-semibold">
@@ -280,7 +282,7 @@ export function AdminEnrollmentsView() {
                               ? 'bg-blue-50 text-blue-700 border border-blue-200/70'
                               : 'bg-purple-50 text-purple-700 border border-purple-200/70'
                           }`}>
-                            {e.educationLevel} {e.gradeLevel ? `· Grade ${e.gradeLevel}` : ''}
+                            {e.educationLevel} {e.gradeLevel ? `· ${String(e.gradeLevel).startsWith('Grade') ? e.gradeLevel : `Grade ${e.gradeLevel}`}` : ''}
                           </span>
                           {e.strand && (
                             <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-50 text-amber-800 border border-amber-200">
@@ -313,7 +315,7 @@ export function AdminEnrollmentsView() {
                       <td className="px-5 py-3.5 whitespace-nowrap text-right">
                         <button
                           type="button"
-                          onClick={() => navigate(`/enrollment/${e.id}`, { state: { fromAdmin: true } })}
+                          onClick={() => setViewingEnrollmentId(e.id)}
                           className="p-1.5 text-gray-500 hover:text-[#001840] hover:bg-gray-100 rounded-lg transition-colors inline-flex items-center justify-center"
                           title="View Application Details"
                         >
@@ -401,6 +403,13 @@ export function AdminEnrollmentsView() {
           </>
         )}
       </div>
+      {viewingEnrollmentId && (
+        <EnrollmentDetailsModal
+          key={viewingEnrollmentId}
+          enrollmentId={viewingEnrollmentId}
+          onClose={() => setViewingEnrollmentId(null)}
+        />
+      )}
     </div>
   );
 }

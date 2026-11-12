@@ -24,7 +24,7 @@ export function ProtectedRoute({ children, requireAdmin = false, role, allowInco
   const expectedRole = role || (requireAdmin ? "admin"
     : pathname.startsWith("/registrar") ? "registrar"
     : pathname.startsWith("/teacher") ? "teacher"
-    : pathname === "/complete-profile" ? null : "student");
+    : (pathname === "/complete-profile" || pathname.startsWith("/enrollment/")) ? null : "student");
   if (expectedRole && user?.role !== expectedRole) {
     return <Navigate to={roleHome(user?.role)} replace />;
   }

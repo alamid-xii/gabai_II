@@ -20,10 +20,18 @@ export const getAllEnrollments = async (req, res) => {
 
     // Default to active school year if not specified
     let yearFilter = academicYear;
-    if (!yearFilter || yearFilter === 'all') {
+    let isDefaultActiveYear = false;
+    if (!yearFilter) {
       try {
         const [[sy]] = await sequelize.query("SELECT year FROM school_years WHERE isActive = 1 LIMIT 1");
-        if (sy?.year) yearFilter = sy.year;
+        if (sy?.year) {
+          yearFilter = sy.year;
+          isDefaultActiveYear = true;
+          await sequelize.query(
+            "UPDATE enrollment_records SET academicYear = ? WHERE academicYear IS NULL OR academicYear = ''",
+            { replacements: [sy.year] }
+          ).catch(() => {});
+        }
       } catch (_) {}
     }
 
@@ -41,7 +49,11 @@ export const getAllEnrollments = async (req, res) => {
 
     // Filter by school year (active year by default, 'all' to bypass)
     if (yearFilter && yearFilter !== 'all') {
-      query += ` AND er.academicYear = ?`;
+      if (isDefaultActiveYear) {
+        query += ` AND (er.academicYear = ? OR er.academicYear IS NULL OR er.academicYear = '')`;
+      } else {
+        query += ` AND er.academicYear = ?`;
+      }
       params.push(yearFilter);
     }
 

@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, forwardRef, useImperativeHandle } from "react";
-import { Send, Bot, User, Sparkles, ThumbsUp, ThumbsDown, Loader2, Copy, Check, AlertCircle } from "lucide-react";
+import { Send, Bot, User, Sparkles, ThumbsUp, ThumbsDown, Loader2, Copy, Check, AlertCircle, Trash2 } from "lucide-react";
 import { useAuth } from "../contexts/authState";
 import { API } from "../config/api";
 import { confirmAction } from "../utils/confirmAction";
@@ -38,7 +38,7 @@ const initialMessages = [
   },
 ];
 
-export const QAChat = forwardRef(function QAChat( ref) {
+export const QAChat = forwardRef(function QAChat({ isOverlay = false } = {}, ref) {
   const { user } = useAuth();
   const chatKey = user ? `chatHistory_${user.id}` : 'chatHistory_guest';
 
@@ -256,6 +256,20 @@ export const QAChat = forwardRef(function QAChat( ref) {
       {/* Chat Container */}
       <div className="flex-1 min-h-0 px-3 sm:px-6 lg:px-8 py-3 sm:py-6 flex flex-col overflow-hidden">
         <div className="max-w-6xl mx-auto w-full flex flex-col h-full min-h-0">
+          {!isOverlay && messages.length > 1 && (
+            <div className="flex justify-end mb-2 shrink-0">
+              <button
+                type="button"
+                onClick={clearChat}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white hover:bg-red-50 text-gray-600 hover:text-red-600 border border-gray-200 hover:border-red-200 text-xs font-semibold transition-colors shadow-xs"
+                aria-label="Clear chat history"
+                title="Clear chat history"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Clear Chat</span>
+              </button>
+            </div>
+          )}
 
           {/* Messages */}
           <div
