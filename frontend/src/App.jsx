@@ -8,6 +8,7 @@ import { About } from "./pages/About";
 import { QAChat } from "./pages/QAChat";
 import { ARNavigation } from "./pages/ARNavigation";
 import { EnrollmentGuide } from "./pages/EnrollmentGuide";
+import { LegalPage } from "./pages/LegalPage";
 import { Login } from "./pages/Login";
 import { PasswordRecovery } from "./pages/PasswordRecovery";
 import { CompleteProfile } from "./pages/CompleteProfile";
@@ -50,6 +51,8 @@ export default function App() {
             <Route path="qa" element={<QAChat />} />
             <Route path="ar-navigation" element={<ARNavigation />} />
             <Route path="enrollment-guide" element={<EnrollmentGuide />} />
+            <Route path="terms" element={<LegalPage type="terms" />} />
+            <Route path="privacy" element={<LegalPage type="privacy" />} />
             <Route
               path="enroll"
               element={

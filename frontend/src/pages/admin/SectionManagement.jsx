@@ -15,7 +15,6 @@ import { confirmAction } from '../../utils/confirmAction';
 const tok = () => ({ Authorization: `Bearer ${localStorage.getItem('token')}`, 'Content-Type': 'application/json' });
 
 const COURSES = ['JHS', 'SHS'];
-const SEMESTERS = ['1st Trimester', '2nd Trimester', '3rd Trimester'];
 const SCHOOL_YEARS = ['2026-2027', '2025-2026', '2024-2025'];
 const PAGE_SIZE = 10;
 
@@ -475,7 +474,7 @@ function CourseBadge({ course }) {
 }
 
 const EMPTY_FORM = {
-  code: '', course: 'JHS', yearLevel: '7', semester: '1st Trimester',
+  code: '', course: 'JHS', yearLevel: '7',
   schoolYear: '2026-2027', instructor: '', schedule: '', room: '', capacity: '40',
   strand: '',
 };
@@ -487,7 +486,6 @@ function SectionFormModal({ section, onClose, onSaved }) {
     code: section.code || '',
     course: section.course || 'JHS',
     yearLevel: String(section.yearLevel || '7'),
-    semester: section.semester || '1st Trimester',
     schoolYear: section.schoolYear || '2026-2027',
     instructor: section.instructor || '',
     schedule: section.schedule || '',
@@ -566,33 +564,24 @@ function SectionFormModal({ section, onClose, onSaved }) {
             </div>
             <div>
               <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Course / Level</label>
-              <select value={form.course} onChange={e => { set('course', e.target.value); set('yearLevel', '1'); }}
+              <select value={form.course} onChange={e => { const nextCourse = e.target.value; set('course', nextCourse); set('yearLevel', nextCourse === 'JHS' ? '7' : '11'); set('strand', ''); }}
                 className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#001840]/20 focus:border-[#001840] bg-white">
                 {COURSES.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
           </div>
 
-          {/* Row 2: Year Level + Semester */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
-                Grade Level
-              </label>
-              <select value={form.yearLevel} onChange={e => set('yearLevel', e.target.value)}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#001840]/20 focus:border-[#001840] bg-white">
-                {yearLevels.map(y => (
-                  <option key={y} value={y}>Grade {y}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Semester</label>
-              <select value={form.semester} onChange={e => set('semester', e.target.value)}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#001840]/20 focus:border-[#001840] bg-white">
-                {SEMESTERS.map(s => <option key={s} value={s}>{s}</option>)}
-              </select>
-            </div>
+          {/* Row 2: Grade Level */}
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+              Grade Level
+            </label>
+            <select value={form.yearLevel} onChange={e => set('yearLevel', e.target.value)}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#001840]/20 focus:border-[#001840] bg-white">
+              {yearLevels.map(y => (
+                <option key={y} value={y}>Grade {y}</option>
+              ))}
+            </select>
           </div>
 
           {/* Strand — SHS shows strand selector, JHS shows SSC toggle */}

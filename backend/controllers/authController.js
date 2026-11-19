@@ -230,7 +230,8 @@ export const consumeGoogleAuth = async (req, res) => {
 
 export const registerUser = async (req, res) => {
   try {
-    const { name, password } = req.body;
+    const { password } = req.body;
+    const rawName = typeof req.body.name === "string" ? req.body.name.trim() : "";
     const email = normalizeAccountEmail(req.body.email);
     if (!email) return res.status(400).json({ message: 'Enter a valid email address.' });
     if (!isValidPassword(password)) return res.status(400).json({ message: PASSWORD_POLICY_MESSAGE });
@@ -242,9 +243,10 @@ export const registerUser = async (req, res) => {
     // Generate 6-digit OTP
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     const otpExpires = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+    const pendingName = rawName || email.split("@")[0];
 
-    const [pendingRegistration] = await PendingRegistration.upsert({
-      name,
+    await PendingRegistration.upsert({
+      name: pendingName,
       email,
       password: hashed,
       verificationToken: otp,
@@ -252,7 +254,7 @@ export const registerUser = async (req, res) => {
     });
 
     // Send OTP email
-    const emailSent = await sendOtpEmail(pendingRegistration, otp);
+    const emailSent = await sendOtpEmail({ email, name: rawName || "Student" }, otp);
 
     res.status(201).json({
       message: emailSent
@@ -311,8 +313,14 @@ export const verifyEmail = async (req, res) => {
 
       const user = await User.create({
         name: pending.name,
+        firstName: null,
+        middleName: null,
+        lastName: null,
+        mobileNumber: null,
+        profileCompleted: false,
         email: pending.email,
         password: pending.password,
+        authProvider: "password",
         isVerified: true,
         verificationToken: null,
         verificationExpires: null,
@@ -326,7 +334,8 @@ export const verifyEmail = async (req, res) => {
     }
 
     if (!result.alreadyVerified) {
-      try { await sendWelcomeEmail(result.user); } catch (_) {}
+      const greetingName = result.user.firstName ? result.user.name : "Student";
+      try { await sendWelcomeEmail({ email: result.user.email, name: greetingName }); } catch (_) {}
     }
 
     res.json({ success: true, message: "Email verified successfully! You can now log in." });
@@ -354,7 +363,10 @@ export const resendVerification = async (req, res) => {
     user.verificationExpires = otpExpires;
     await user.save();
 
-    const emailSent = await sendOtpEmail(user, otp);
+    const emailSent = await sendOtpEmail({
+      email: user.email,
+      name: user.firstName ? user.name : "Student",
+    }, otp);
     if (!emailSent) {
       return res.status(503).json({ message: "The verification email could not be sent. Please try again later." });
     }

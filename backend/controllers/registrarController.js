@@ -254,8 +254,8 @@ export const approveEnrollment = async (req, res) => {
       studentNumber = prev?.studentNumber || await generateStudentNumber();
     }
 
-    // Auto-set lifeStatus: transferees get 'transferred_in', everyone else gets 'enrolled'
-    const autoLifeStatus = enrollment.enrollmentType === 'transferee' ? 'transferred_in' : 'enrolled';
+    // Auto-set lifeStatus to 'enrolled' on approval (transferee status is tracked in enrollmentType)
+    const autoLifeStatus = 'enrolled';
 
     await sequelize.query(
       `UPDATE enrollment_records
@@ -527,7 +527,7 @@ export const evaluateTOR = async (req, res) => {
 
 // ── Life Status ───────────────────────────────────────────────────────────────
 
-const VALID_LIFE_STATUSES = ['enrolled', 'dropped', 'transferred_out', 'transferred_in', 'retained', 'completed'];
+const VALID_LIFE_STATUSES = ['dropped', 'transferred_out', 'retained'];
 
 /**
  * PUT /api/registrar/enrollments/:id/life-status

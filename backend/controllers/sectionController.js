@@ -46,14 +46,15 @@ export const createSection = async (req, res) => {
   try {
     const { code, course, yearLevel, strand, semester, schoolYear, instructor, schedule, room, capacity } = req.body;
 
-    if (!code || !course || !yearLevel || !semester || !schoolYear) {
+    if (!code || !course || !yearLevel || !schoolYear) {
       return res.status(400).json({ 
-        message: 'Code, course, yearLevel, semester, and schoolYear are required' 
+        message: 'Code, course, yearLevel, and schoolYear are required' 
       });
     }
 
+    const effectiveSemester = semester?.trim() || '1st Trimester';
     validateSectionConfiguration({ ...req.body, capacity: capacity ?? 40 });
-    if (!ACADEMIC_TERMS.includes(semester)) return res.status(400).json({ message: 'Select a valid academic term.' });
+    if (!ACADEMIC_TERMS.includes(effectiveSemester)) return res.status(400).json({ message: 'Select a valid academic term.' });
     let adviserId = req.body.teacherId ? Number(req.body.teacherId) : null;
     let adviserName = instructor || null;
     if (adviserId) {
@@ -66,7 +67,7 @@ export const createSection = async (req, res) => {
       course,
       yearLevel,
       strand: strand || null,
-      semester,
+      semester: effectiveSemester,
       schoolYear,
       instructor: adviserName,
       teacherId: adviserId,

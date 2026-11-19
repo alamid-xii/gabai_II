@@ -4,6 +4,7 @@ import { Home } from "./pages/Home";
 import { About } from "./pages/About";
 import { QAChat } from "./pages/QAChat";
 import { EnrollmentGuide } from "./pages/EnrollmentGuide";
+import { LegalPage } from "./pages/LegalPage";
 import { Login } from "./pages/Login";
 import { PasswordRecovery } from "./pages/PasswordRecovery";
 import { SignUp } from "./pages/SignUp";
@@ -19,6 +20,8 @@ export const router = createBrowserRouter([
       { path: "about", Component: About },
       { path: "qa", Component: QAChat },
       { path: "enrollment-guide", Component: EnrollmentGuide },
+      { path: "terms", Component: () => <LegalPage type="terms" /> },
+      { path: "privacy", Component: () => <LegalPage type="privacy" /> },
     ],
   },
   // Standalone pages without Root layout

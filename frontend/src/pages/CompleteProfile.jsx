@@ -10,7 +10,19 @@ export function CompleteProfile() {
   if (user?.profileCompleted !== false) return <Navigate to="/my-enrollments" replace />;
   return <main className="min-h-screen bg-linear-to-br from-[#001840] via-[#102A71] to-[#001840] flex items-center justify-center p-4 py-10">
     <div className="w-full max-w-xl">
-      <div className="text-center mb-6"><p className="text-2xl font-bold text-white">GabAI</p><p className="text-xs text-[#FFDC5F] mt-1"><SchoolName /></p></div>
+      <div className="text-center mb-6">
+        <div className="inline-flex items-center gap-2.5">
+          <img
+            src="/GabAi_Logo.png"
+            alt="GabAI Logo"
+            className="w-12 h-12 rounded-xl object-contain shadow-lg"
+          />
+          <div className="text-left">
+            <p className="text-2xl font-bold tracking-wide text-white leading-tight">GabAI</p>
+            <p className="text-xs text-[#FFDC5F] leading-none tracking-wider mt-0.5"><SchoolName /></p>
+          </div>
+        </div>
+      </div>
       <section className="rounded-2xl bg-[#FFFDF0] p-6 sm:p-8 shadow-xl border border-[#F5C400]/20">
         <span className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-xl bg-[#102A71]/10 text-[#102A71]"><UserRound size={25} /></span>
         <h1 className="text-2xl font-bold text-[#001840]">Complete your profile</h1>

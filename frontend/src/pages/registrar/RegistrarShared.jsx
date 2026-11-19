@@ -239,7 +239,6 @@ export function LifeStatusModal({ enrollment, onClose, onSuccess }) {
     { value: 'dropped',         label: 'Dropped',          desc: 'Student stopped attending mid-year' },
     { value: 'transferred_out', label: 'Transferred Out',  desc: 'Student left for another school' },
     { value: 'retained',        label: 'Retained',         desc: 'Student did not advance to next grade' },
-    { value: 'completed',       label: 'Completed',        desc: 'Student finished the school year' },
   ];
 
   async function submit(e) {

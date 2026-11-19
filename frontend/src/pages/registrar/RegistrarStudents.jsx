@@ -1,25 +1,29 @@
 import { usePortalSlot } from '../../hooks/usePortalSlot';
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
-import { Download, RefreshCw, Search, UserX, Users, Filter, X } from "lucide-react";
-import { LifeStatusBadge, StatusBadge, EnrollmentDetail, LifeStatusModal, RegistrarPagination } from "./RegistrarShared";
+import { Archive, Download, RefreshCw, Search, UserX, Users, X } from "lucide-react";
+import { LifeStatusBadge, LifeStatusModal, RegistrarPagination } from "./RegistrarShared";
 import { API, tok, LIFE_STATUS_CFG } from "./registrarConfig";
 
-// ── Students Tab (life status management) ────────────────────────────────────
-const LIFE_STATUS_OPTIONS = [
-  { value: 'all', label: 'All Students' },
+const ARCHIVED_STATUSES = ['dropped', 'transferred_out'];
+
+const ACTIVE_STATUS_OPTIONS = [
+  { value: 'all', label: 'All Active Statuses' },
   { value: 'enrolled', label: 'Enrolled' },
+  { value: 'retained', label: 'Retained' },
+];
+
+const ARCHIVED_STATUS_OPTIONS = [
+  { value: 'all', label: 'All Archived (Dropped & Transferred Out)' },
   { value: 'dropped', label: 'Dropped' },
   { value: 'transferred_out', label: 'Transferred Out' },
-  { value: 'transferred_in', label: 'Transferred In' },
-  { value: 'retained', label: 'Retained' },
-  { value: 'completed', label: 'Completed' },
 ];
 
 export function StudentsTab() {
-  const [students, setStudents] = useState([]);
+  const [allStudents, setAllStudents] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [viewMode, setViewMode] = useState('active'); // 'active' | 'archived'
   const [search, setSearch] = useState('');
   const [lifeStatusFilter, setLifeStatusFilter] = useState('all');
   const [levelFilter, setLevelFilter] = useState('');
@@ -35,10 +39,6 @@ export function StudentsTab() {
   const [pageSize] = useState(10);
   const [exporting, setExporting] = useState(false);
   const headerContainer = usePortalSlot('registrar-header-slot', false, 'flex-1 flex items-center justify-end gap-2 flex-wrap ml-auto');
-
-
-  // Available grade levels based on selected education level
-  
 
   // Available program / strand options based on selected education level
   const availablePrograms = levelFilter === 'JHS'
@@ -101,13 +101,15 @@ export function StudentsTab() {
       ? `LEVEL:${levelFilter}`
       : '';
 
-  
-
-  
-
   const handleProgramChange = (val) => {
     setProgramFilter(val);
     setSectionFilter('');
+  };
+
+  const handleSwitchViewMode = (mode) => {
+    setViewMode(mode);
+    setLifeStatusFilter('all');
+    setPage(1);
   };
 
   const handleResetFilters = () => {
@@ -124,6 +126,70 @@ export function StudentsTab() {
   const hasActiveFilters = Boolean(
     levelFilter || gradeFilter || programFilter || sectionFilter || search || (lifeStatusFilter !== 'all')
   );
+
+  useEffect(() => {
+    fetch(`${API}/academic/school-years`)
+      .then(r => r.ok ? r.json() : [])
+      .then(data => {
+        if (Array.isArray(data)) {
+          setSchoolYears(data);
+          const active = data.find(sy => sy.isActive);
+          if (active) setActiveYear(active.year);
+        }
+      }).catch(() => { });
+
+    fetch(`${API}/registrar/sections`, { headers: tok() })
+      .then(r => r.ok ? r.json() : [])
+      .then(data => {
+        if (Array.isArray(data)) setSectionsList(data);
+      }).catch(() => { });
+  }, []);
+
+  const fetchStudents = useCallback(async () => {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if (levelFilter) params.set('educationLevel', levelFilter);
+      if (gradeFilter) params.set('gradeLevel', gradeFilter);
+      if (programFilter) params.set('strand', programFilter);
+      if (sectionFilter) params.set('sectionName', sectionFilter);
+      if (search) params.set('search', search);
+      if (yearFilter) params.set('academicYear', yearFilter);
+      const res = await fetch(`${API}/registrar/students?${params}`, { headers: tok() });
+      if (!res.ok) throw new Error('Failed to fetch students');
+      const data = await res.json();
+      setAllStudents(Array.isArray(data) ? data : []);
+      setPage(1);
+    } catch (err) {
+      toast.error(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [levelFilter, gradeFilter, programFilter, sectionFilter, search, yearFilter]);
+
+  useEffect(() => {
+    const t = setTimeout(fetchStudents, 300);
+    return () => clearTimeout(t);
+  }, [fetchStudents]);
+
+  // Split into Active vs Archived (Dropped / Transferred Out)
+  const activeStudents = useMemo(
+    () => allStudents.filter(s => !ARCHIVED_STATUSES.includes(s.lifeStatus)),
+    [allStudents]
+  );
+  const archivedStudents = useMemo(
+    () => allStudents.filter(s => ARCHIVED_STATUSES.includes(s.lifeStatus)),
+    [allStudents]
+  );
+
+  const students = useMemo(() => {
+    const pool = viewMode === 'archived' ? archivedStudents : activeStudents;
+    if (!lifeStatusFilter || lifeStatusFilter === 'all') return pool;
+    if (lifeStatusFilter === 'enrolled') {
+      return pool.filter(s => !s.lifeStatus || s.lifeStatus === 'enrolled' || s.lifeStatus === 'transferred_in');
+    }
+    return pool.filter(s => s.lifeStatus === lifeStatusFilter);
+  }, [viewMode, activeStudents, archivedStudents, lifeStatusFilter]);
 
   async function exportToExcel() {
     if (students.length === 0) { toast.error('No students to export'); return; }
@@ -147,9 +213,9 @@ export function StudentsTab() {
         'Student Type': s.studentType || '',
         'School Year': s.academicYear || '',
         'App. Status': s.status || '',
-        'Life Status': s.lifeStatus
-          ? (LIFE_STATUS_CFG[s.lifeStatus]?.label || s.lifeStatus)
-          : 'Active',
+        'Life Status': s.lifeStatus === 'transferred_in' || !s.lifeStatus
+          ? 'Enrolled'
+          : (LIFE_STATUS_CFG[s.lifeStatus]?.label || s.lifeStatus),
         'Status Date': s.lifeStatusDate || '',
         'Status Reason': s.lifeStatusReason || '',
         'Destination School': s.destinationSchool || '',
@@ -158,8 +224,6 @@ export function StudentsTab() {
       }));
 
       const ws = XLSX.utils.json_to_sheet(rows);
-
-      // Column widths
       ws['!cols'] = [
         { wch: 4 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 13 }, { wch: 14 },
         { wch: 7 }, { wch: 13 }, { wch: 13 }, { wch: 12 }, { wch: 16 }, { wch: 14 },
@@ -168,10 +232,10 @@ export function StudentsTab() {
       ];
 
       const wb = XLSX.utils.book_new();
-      const sheetName = `Students ${yearFilter || activeYear || 'All'}`;
+      const sheetName = `${viewMode === 'archived' ? 'Archived' : 'Students'} ${yearFilter || activeYear || 'All'}`;
       XLSX.utils.book_append_sheet(wb, ws, sheetName.slice(0, 31));
 
-      const parts = ['EMC_Students'];
+      const parts = [viewMode === 'archived' ? 'EMC_Archived_Students' : 'EMC_Students'];
       if (yearFilter === 'all') {
         parts.push('AllYears');
       } else if (yearFilter) {
@@ -202,93 +266,59 @@ export function StudentsTab() {
     }
   }
 
-  useEffect(() => {
-    fetch(`${API}/academic/school-years`)
-      .then(r => r.ok ? r.json() : [])
-      .then(data => {
-        if (Array.isArray(data)) {
-          setSchoolYears(data);
-          const active = data.find(sy => sy.isActive);
-          if (active) setActiveYear(active.year);
-        }
-      }).catch(() => { });
-
-    fetch(`${API}/registrar/sections`, { headers: tok() })
-      .then(r => r.ok ? r.json() : [])
-      .then(data => {
-        if (Array.isArray(data)) setSectionsList(data);
-      }).catch(() => { });
-  }, []);
-
-  const fetchStudents = useCallback(async () => {
-    setLoading(true);
-    try {
-      const params = new URLSearchParams();
-      if (lifeStatusFilter && lifeStatusFilter !== 'all') params.set('lifeStatus', lifeStatusFilter);
-      if (levelFilter) params.set('educationLevel', levelFilter);
-      if (gradeFilter) params.set('gradeLevel', gradeFilter);
-      if (programFilter) params.set('strand', programFilter);
-      if (sectionFilter) params.set('sectionName', sectionFilter);
-      if (search) params.set('search', search);
-      if (yearFilter) params.set('academicYear', yearFilter);
-      const res = await fetch(`${API}/registrar/students?${params}`, { headers: tok() });
-      if (!res.ok) throw new Error('Failed to fetch students');
-      const data = await res.json();
-      setStudents(Array.isArray(data) ? data : []);
-      setPage(1);
-    } catch (err) {
-      toast.error(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }, [lifeStatusFilter, levelFilter, gradeFilter, programFilter, sectionFilter, search, yearFilter]);
-
-  useEffect(() => {
-    const t = setTimeout(fetchStudents, 300);
-    return () => clearTimeout(t);
-  }, [fetchStudents]);
-
   // Summary counts
-  const totalCount = students.length;
-  const noStatus = students.filter(s => !s.lifeStatus).length;
+  const activeCount = activeStudents.length;
+  const archivedCount = archivedStudents.length;
+  const droppedCount = archivedStudents.filter(s => s.lifeStatus === 'dropped').length;
+  const transferredOutCount = archivedStudents.filter(s => s.lifeStatus === 'transferred_out').length;
+  const retainedCount = activeStudents.filter(s => s.lifeStatus === 'retained').length;
 
   const totalPages = Math.ceil(students.length / pageSize);
   const paginated = students.slice((page - 1) * pageSize, page * pageSize);
+
+  const statusFilterOptions = viewMode === 'archived' ? ARCHIVED_STATUS_OPTIONS : ACTIVE_STATUS_OPTIONS;
 
   const statsPills = (
     <div className="flex flex-wrap items-center justify-end gap-1.5 sm:gap-2 ml-auto">
       <button
         type="button"
-        onClick={() => { setLifeStatusFilter('all'); setPage(1); }}
-        className={`inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1 rounded-full border text-[11px] font-semibold transition-all ${lifeStatusFilter === 'all'
+        onClick={() => handleSwitchViewMode('active')}
+        className={`inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1 rounded-full border text-[11px] font-semibold transition-all ${
+          viewMode === 'active' && lifeStatusFilter === 'all'
             ? 'border-[#001840] bg-[#001840] text-white shadow-xs'
             : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
-          }`}
+        }`}
       >
-        <Users size={12} /> Total Students: {totalCount}
+        <Users size={12} /> Active Students: {activeCount}
       </button>
-      {noStatus > 0 && (
-        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-gray-200 bg-gray-50 text-gray-700 text-[11px] font-semibold">
-          <span className="w-2 h-2 rounded-full bg-gray-400" /> No Status: {noStatus}
-        </span>
+      {retainedCount > 0 && (
+        <button
+          type="button"
+          onClick={() => {
+            setViewMode('active');
+            setLifeStatusFilter(viewMode === 'active' && lifeStatusFilter === 'retained' ? 'all' : 'retained');
+            setPage(1);
+          }}
+          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px] font-semibold transition-all ${
+            viewMode === 'active' && lifeStatusFilter === 'retained'
+              ? 'border-[#001840] bg-[#001840]/10 text-[#001840] ring-1 ring-[#001840]'
+              : `border-gray-200 ${LIFE_STATUS_CFG.retained.color} hover:opacity-80`
+          }`}
+        >
+          <span className={`w-2 h-2 rounded-full ${LIFE_STATUS_CFG.retained.dot}`} /> Retained: {retainedCount}
+        </button>
       )}
-      {Object.entries(LIFE_STATUS_CFG).map(([key, cfg]) => {
-        const count = students.filter(s => s.lifeStatus === key).length;
-        if (count === 0) return null;
-        return (
-          <button
-            key={key}
-            type="button"
-            onClick={() => { setLifeStatusFilter(lifeStatusFilter === key ? 'all' : key); setPage(1); }}
-            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px] font-semibold transition-all ${lifeStatusFilter === key
-                ? 'border-[#001840] bg-[#001840]/10 text-[#001840] ring-1 ring-[#001840]'
-                : `border-gray-200 ${cfg.color} hover:opacity-80`
-              }`}
-          >
-            <span className={`w-2 h-2 rounded-full ${cfg.dot}`} /> {cfg.label}: {count}
-          </button>
-        );
-      })}
+      <button
+        type="button"
+        onClick={() => handleSwitchViewMode('archived')}
+        className={`inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1 rounded-full border text-[11px] font-semibold transition-all ${
+          viewMode === 'archived'
+            ? 'border-amber-700 bg-amber-600 text-white shadow-xs'
+            : 'border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100'
+        }`}
+      >
+        <Archive size={12} /> Archived (Dropped / Transferred Out): {archivedCount}
+      </button>
     </div>
   );
 
@@ -298,6 +328,75 @@ export function StudentsTab() {
       {headerContainer ? createPortal(statsPills, headerContainer) : (
         <div className="flex justify-end">{statsPills}</div>
       )}
+
+      {/* Active vs Archived Segmented Toggle Bar */}
+      <div className="flex flex-wrap items-center justify-between gap-3 bg-white rounded-2xl border border-gray-100 px-3.5 py-2.5">
+        <div className="inline-flex items-center rounded-xl bg-gray-100 p-1 gap-1">
+          <button
+            type="button"
+            onClick={() => handleSwitchViewMode('active')}
+            className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition-all ${
+              viewMode === 'active'
+                ? 'bg-[#001840] text-white shadow-xs'
+                : 'text-gray-600 hover:text-[#001840]'
+            }`}
+          >
+            <Users size={14} />
+            Active Students
+            <span className={`px-1.5 py-0.5 rounded-full text-[11px] ${
+              viewMode === 'active' ? 'bg-white/20 text-white' : 'bg-gray-200 text-gray-700'
+            }`}>
+              {activeCount}
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => handleSwitchViewMode('archived')}
+            className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition-all ${
+              viewMode === 'archived'
+                ? 'bg-[#001840] text-white shadow-xs'
+                : 'text-gray-600 hover:text-[#001840]'
+            }`}
+          >
+            <Archive size={14} />
+            Archived (Dropped / Transferred Out)
+            <span className={`px-1.5 py-0.5 rounded-full text-[11px] ${
+              viewMode === 'archived' ? 'bg-[#F5C400] text-[#001840] font-bold' : 'bg-amber-100 text-amber-800'
+            }`}>
+              {archivedCount}
+            </span>
+          </button>
+        </div>
+
+        {viewMode === 'archived' && (
+          <div className="flex items-center gap-2 text-xs">
+            <button
+              type="button"
+              onClick={() => { setLifeStatusFilter(lifeStatusFilter === 'dropped' ? 'all' : 'dropped'); setPage(1); }}
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border font-semibold transition-all ${
+                lifeStatusFilter === 'dropped'
+                  ? 'border-red-600 bg-red-600 text-white'
+                  : 'border-red-200 bg-red-50 text-red-700 hover:bg-red-100'
+              }`}
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-current" />
+              Dropped: {droppedCount}
+            </button>
+            <button
+              type="button"
+              onClick={() => { setLifeStatusFilter(lifeStatusFilter === 'transferred_out' ? 'all' : 'transferred_out'); setPage(1); }}
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border font-semibold transition-all ${
+                lifeStatusFilter === 'transferred_out'
+                  ? 'border-orange-600 bg-orange-600 text-white'
+                  : 'border-orange-200 bg-orange-50 text-orange-700 hover:bg-orange-100'
+              }`}
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-current" />
+              Transferred Out: {transferredOutCount}
+            </button>
+          </div>
+        )}
+      </div>
 
       {/* Filters Card - Single Horizontal Line */}
       <div className="bg-white rounded-2xl border border-gray-100 p-2.5 sm:p-3">
@@ -309,7 +408,7 @@ export function StudentsTab() {
               type="text"
               value={search}
               onChange={e => { setSearch(e.target.value); setPage(1); }}
-              placeholder="Search by name, LRN, or student number..."
+              placeholder={viewMode === 'archived' ? "Search archived students by name, LRN, or ID..." : "Search by name, LRN, or student number..."}
               className="w-full pl-9 pr-8 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#001840]/20 focus:border-[#001840] placeholder:text-gray-400 bg-white"
             />
             {search && (
@@ -328,18 +427,20 @@ export function StudentsTab() {
             <select
               value={lifeStatusFilter}
               onChange={e => { setLifeStatusFilter(e.target.value); setPage(1); }}
-              className={`px-2.5 sm:px-3 py-2 border rounded-lg text-xs sm:text-sm focus:outline-none transition-colors shrink-0 ${lifeStatusFilter !== 'all' ? 'border-[#001840] bg-[#001840]/5 font-medium text-[#001840]' : 'border-gray-200 bg-white text-gray-700'
-                }`}
+              className={`px-2.5 sm:px-3 py-2 border rounded-lg text-xs sm:text-sm focus:outline-none transition-colors shrink-0 ${
+                lifeStatusFilter !== 'all' ? 'border-[#001840] bg-[#001840]/5 font-medium text-[#001840]' : 'border-gray-200 bg-white text-gray-700'
+              }`}
             >
-              {LIFE_STATUS_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+              {statusFilterOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
 
             {/* Combined Level & Grade */}
             <select
               value={selectedLevelGrade}
               onChange={e => handleLevelGradeChange(e.target.value)}
-              className={`px-2.5 sm:px-3 py-2 border rounded-lg text-xs sm:text-sm focus:outline-none transition-colors shrink-0 ${selectedLevelGrade ? 'border-[#001840] bg-[#001840]/5 font-medium text-[#001840]' : 'border-gray-200 bg-white text-gray-700'
-                }`}
+              className={`px-2.5 sm:px-3 py-2 border rounded-lg text-xs sm:text-sm focus:outline-none transition-colors shrink-0 ${
+                selectedLevelGrade ? 'border-[#001840] bg-[#001840]/5 font-medium text-[#001840]' : 'border-gray-200 bg-white text-gray-700'
+              }`}
             >
               <option value="">All Levels</option>
               <optgroup label="Junior High School (JHS)">
@@ -360,8 +461,9 @@ export function StudentsTab() {
             <select
               value={programFilter}
               onChange={e => { handleProgramChange(e.target.value); setPage(1); }}
-              className={`px-2.5 sm:px-3 py-2 border rounded-lg text-xs sm:text-sm focus:outline-none transition-colors shrink-0 max-w-[150px] truncate ${programFilter ? 'border-[#001840] bg-[#001840]/5 font-medium text-[#001840]' : 'border-gray-200 bg-white text-gray-700'
-                }`}
+              className={`px-2.5 sm:px-3 py-2 border rounded-lg text-xs sm:text-sm focus:outline-none transition-colors shrink-0 max-w-[150px] truncate ${
+                programFilter ? 'border-[#001840] bg-[#001840]/5 font-medium text-[#001840]' : 'border-gray-200 bg-white text-gray-700'
+              }`}
             >
               <option value="">
                 {levelFilter === 'SHS' ? 'All Strands' : 'All Programs'}
@@ -375,8 +477,9 @@ export function StudentsTab() {
             <select
               value={sectionFilter}
               onChange={e => { setSectionFilter(e.target.value); setPage(1); }}
-              className={`px-2.5 sm:px-3 py-2 border rounded-lg text-xs sm:text-sm focus:outline-none transition-colors shrink-0 max-w-[140px] truncate ${sectionFilter ? 'border-[#001840] bg-[#001840]/5 font-medium text-[#001840]' : 'border-gray-200 bg-white text-gray-700'
-                }`}
+              className={`px-2.5 sm:px-3 py-2 border rounded-lg text-xs sm:text-sm focus:outline-none transition-colors shrink-0 max-w-[140px] truncate ${
+                sectionFilter ? 'border-[#001840] bg-[#001840]/5 font-medium text-[#001840]' : 'border-gray-200 bg-white text-gray-700'
+              }`}
             >
               <option value="">All Sections</option>
               {availableSections.map(sec => (
@@ -431,11 +534,25 @@ export function StudentsTab() {
           </div>
         ) : students.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-gray-400">
-            <Users size={36} className="mb-3 opacity-40" />
-            <p className="text-sm">No students found</p>
-            <p className="text-xs mt-1 text-gray-300">
-              {hasActiveFilters ? 'Try adjusting your filters' : 'Students appear here once their enrollment is approved'}
-            </p>
+            {viewMode === 'archived' ? (
+              <>
+                <Archive size={36} className="mb-3 opacity-40" />
+                <p className="text-sm font-medium text-gray-600">No archived students found</p>
+                <p className="text-xs mt-1 text-gray-400">
+                  {hasActiveFilters
+                    ? 'Try adjusting your filters'
+                    : 'Students marked as Dropped or Transferred Out will be archived here.'}
+                </p>
+              </>
+            ) : (
+              <>
+                <Users size={36} className="mb-3 opacity-40" />
+                <p className="text-sm font-medium text-gray-600">No active students found</p>
+                <p className="text-xs mt-1 text-gray-400">
+                  {hasActiveFilters ? 'Try adjusting your filters' : 'Students appear here once their enrollment is approved'}
+                </p>
+              </>
+            )}
           </div>
         ) : (
           <>
@@ -443,7 +560,10 @@ export function StudentsTab() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-gray-50 bg-gray-50/60">
-                    {['Student', 'Level / Grade', 'Section', 'Enrollment Type', 'Life Status', 'Actions'].map(h => (
+                    {(viewMode === 'archived'
+                      ? ['Student', 'Level / Grade', 'Previous Section', 'Archive Status', 'Reason & Details']
+                      : ['Student', 'Level / Grade', 'Section', 'Enrollment Type', 'Life Status', 'Actions']
+                    ).map(h => (
                       <th key={h} className="text-left px-5 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wider whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
@@ -453,7 +573,9 @@ export function StudentsTab() {
                     const name = (s.firstName || s.familyName)
                       ? `${s.firstName || ''} ${s.familyName || ''}`.trim()
                       : (s.user_name || `Student #${s.id}`);
-                    const canUpdate = !['dropped', 'transferred_out'].includes(s.lifeStatus);
+                    const canUpdate = !ARCHIVED_STATUSES.includes(s.lifeStatus);
+                    const normalizedLifeStatus = s.lifeStatus === 'transferred_in' || !s.lifeStatus ? 'enrolled' : s.lifeStatus;
+
                     return (
                       <tr key={s.id} className="hover:bg-gray-50/50 transition-colors">
                         <td className="px-5 py-3">
@@ -467,7 +589,7 @@ export function StudentsTab() {
                             <span className="font-medium text-gray-800">{s.educationLevel}</span>
                             {s.gradeLevel && <span>· {s.gradeLevel}</span>}
                             {s.educationLevel === 'JHS' ? (
-                              s.strand === 'SSC' ? (
+                              s.strand === 'SSC' || s.sscClass === 'SSC' ? (
                                 <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-purple-50 text-purple-700 border border-purple-200">
                                   SSC
                                 </span>
@@ -484,30 +606,51 @@ export function StudentsTab() {
                           </div>
                         </td>
                         <td className="px-5 py-3 text-gray-500">{s.sectionName || '—'}</td>
-                        <td className="px-5 py-3 capitalize text-gray-500">{s.enrollmentType || '—'}</td>
-                        <td className="px-5 py-3">
-                          {s.lifeStatus
-                            ? <LifeStatusBadge status={s.lifeStatus} />
-                            : <span className="text-xs text-gray-300 italic">not set</span>}
-                          {s.lifeStatusDate && (
-                            <p className="text-[10px] text-gray-400 mt-0.5">{new Date(s.lifeStatusDate).toLocaleDateString('en-PH')}</p>
-                          )}
-                          {s.destinationSchool && (
-                            <p className="text-[10px] text-gray-500 mt-0.5">→ {s.destinationSchool}</p>
-                          )}
-                        </td>
-                        <td className="px-5 py-3">
-                          <div className="flex flex-col gap-1.5">
-                            {canUpdate ? (
-                              <button onClick={() => setSelectedStudent(s)}
-                                className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-[#001840] text-white rounded-lg text-xs font-medium hover:bg-[#102A71] transition-colors">
-                                <UserX size={11} /> Update Status
-                              </button>
-                            ) : (
-                              <span className="text-xs text-gray-300 italic">finalized</span>
-                            )}
-                          </div>
-                        </td>
+
+                        {viewMode === 'archived' ? (
+                          <>
+                            <td className="px-5 py-3">
+                              <LifeStatusBadge status={s.lifeStatus} />
+                              {s.lifeStatusDate && (
+                                <p className="text-[11px] text-gray-400 mt-1">
+                                  Effective: {new Date(s.lifeStatusDate).toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' })}
+                                </p>
+                              )}
+                            </td>
+                            <td className="px-5 py-3 max-w-xs">
+                              {s.destinationSchool && (
+                                <p className="text-xs font-semibold text-[#001840] mb-0.5">
+                                  Destination: {s.destinationSchool}
+                                </p>
+                              )}
+                              <p className="text-xs text-gray-600 leading-snug">
+                                {s.lifeStatusReason || <span className="text-gray-300 italic">No reason recorded</span>}
+                              </p>
+                            </td>
+                          </>
+                        ) : (
+                          <>
+                            <td className="px-5 py-3 capitalize text-gray-500">{s.enrollmentType || '—'}</td>
+                            <td className="px-5 py-3">
+                              <LifeStatusBadge status={normalizedLifeStatus} />
+                              {s.lifeStatusDate && s.lifeStatus === 'retained' && (
+                                <p className="text-[10px] text-gray-400 mt-0.5">{new Date(s.lifeStatusDate).toLocaleDateString('en-PH')}</p>
+                              )}
+                            </td>
+                            <td className="px-5 py-3">
+                              <div className="flex flex-col gap-1.5">
+                                {canUpdate ? (
+                                  <button onClick={() => setSelectedStudent(s)}
+                                    className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-[#001840] text-white rounded-lg text-xs font-medium hover:bg-[#102A71] transition-colors">
+                                    <UserX size={11} /> Update Status
+                                  </button>
+                                ) : (
+                                  <span className="text-xs text-gray-300 italic">archived</span>
+                                )}
+                              </div>
+                            </td>
+                          </>
+                        )}
                       </tr>
                     );
                   })}
@@ -522,7 +665,7 @@ export function StudentsTab() {
               totalItems={students.length}
               pageSize={pageSize}
               onPageChange={setPage}
-              itemName="items"
+              itemName="students"
             />
           </>
         )}
@@ -539,4 +682,3 @@ export function StudentsTab() {
     </div>
   );
 }
-

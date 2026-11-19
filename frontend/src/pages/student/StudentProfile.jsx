@@ -20,10 +20,11 @@ import { useAuth } from "../../contexts/authState";
 import { ProfileDetailsForm } from "../../components/ProfileDetailsForm";
 import { getUserEnrollments } from "../../services/enrollmentApi";
 import { API } from "../../config/api";
+import { autoCapitalizeWords } from "../../utils/phLocations";
 
 const keepDigits = (value, maxLength) => (value || "").replace(/\D/g, "").slice(0, maxLength);
 const keepNameChars = (value, maxLength) =>
-  (value || "").replace(/[^\p{L}\p{M}\s\-'.]/gu, "").slice(0, maxLength);
+  autoCapitalizeWords((value || "").replace(/[^\p{L}\p{M}\s\-'.]/gu, "").slice(0, maxLength));
 
 export function StudentProfile() {
   const { user, updateUser } = useAuth();
@@ -250,9 +251,6 @@ export function StudentProfile() {
           </span>
           <div>
             <h1 className="text-2xl font-bold text-[#001840]">Student Profile</h1>
-            <p className="text-sm text-gray-500">
-              Your account credentials, academic placement, personal information, and family background.
-            </p>
           </div>
         </div>
 
@@ -275,12 +273,7 @@ export function StudentProfile() {
             <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#102A71]/10 text-[#102A71]">
               <GraduationCap size={19} />
             </span>
-            <div>
-              <h2 className="font-bold text-[#001840]">Account &amp; Academic Placement</h2>
-              <p className="text-xs text-gray-500">
-                Sign-in credentials, grade level, and official section assignment.
-              </p>
-            </div>
+            <h2 className="font-bold text-[#001840]">Account &amp; Academic Placement</h2>
           </div>
 
           {!editingAccount && !currentEnrollment && (
@@ -403,24 +396,14 @@ export function StudentProfile() {
         )}
       </section>
 
-      {/* 2. Step 2: Personal Information Section */}
+      {/* 2. Personal Information Section */}
       <section className="rounded-2xl border border-gray-200 bg-white p-5 sm:p-7 shadow-sm space-y-5">
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div className="flex items-center gap-2.5">
             <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#102A71]/10 text-[#102A71]">
               <IdCard size={19} />
             </span>
-            <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <h2 className="font-bold text-[#001840]">Personal Information</h2>
-                <span className="text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">
-                  Enrollment Step 2
-                </span>
-              </div>
-              <p className="text-xs text-gray-500">
-                Full legal name, Learner Reference Number (LRN), birth details, and contact number.
-              </p>
-            </div>
+            <h2 className="font-bold text-[#001840]">Personal Information</h2>
           </div>
 
           {currentEnrollment ? (
@@ -574,7 +557,7 @@ export function StudentProfile() {
                   maxLength={200}
                   placeholder="City / Municipality, Province"
                   value={personalForm.placeOfBirth}
-                  onChange={(e) => setPersonalForm((p) => ({ ...p, placeOfBirth: e.target.value }))}
+                  onChange={(e) => setPersonalForm((p) => ({ ...p, placeOfBirth: autoCapitalizeWords(e.target.value) }))}
                   className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm text-[#001840] focus:outline-none focus:ring-2 focus:ring-[#102A71]/20"
                 />
               </div>
@@ -632,24 +615,14 @@ export function StudentProfile() {
         )}
       </section>
 
-      {/* 3. Step 3: Family & Guardian Background Section */}
+      {/* 3. Family & Guardian Background Section */}
       <section className="rounded-2xl border border-gray-200 bg-white p-5 sm:p-7 shadow-sm space-y-5">
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div className="flex items-center gap-2.5">
             <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#102A71]/10 text-[#102A71]">
               <Users size={19} />
             </span>
-            <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <h2 className="font-bold text-[#001840]">Family &amp; Guardian Background</h2>
-                <span className="text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">
-                  Enrollment Step 3
-                </span>
-              </div>
-              <p className="text-xs text-gray-500">
-                Parents&apos; names, occupations, home address, and emergency guardian contact.
-              </p>
-            </div>
+            <h2 className="font-bold text-[#001840]">Family &amp; Guardian Background</h2>
           </div>
 
           {currentEnrollment ? (
@@ -693,7 +666,7 @@ export function StudentProfile() {
           <div className="p-6 rounded-xl bg-gray-50 border border-dashed border-gray-200 text-center space-y-2">
             <p className="text-sm font-medium text-gray-600">No enrollment record submitted yet</p>
             <p className="text-xs text-gray-400">
-              Once you submit your 5-step enrollment form, your Family &amp; Guardian details will
+              Once you submit your enrollment form, your Family &amp; Guardian details will
               automatically appear here.
             </p>
             <Link
@@ -745,7 +718,7 @@ export function StudentProfile() {
                     placeholder="Occupation"
                     value={familyForm.fatherOccupation}
                     onChange={(e) =>
-                      setFamilyForm((p) => ({ ...p, fatherOccupation: e.target.value }))
+                      setFamilyForm((p) => ({ ...p, fatherOccupation: autoCapitalizeWords(e.target.value) }))
                     }
                     className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm text-[#001840] focus:outline-none focus:ring-2 focus:ring-[#102A71]/20"
                   />
@@ -787,7 +760,7 @@ export function StudentProfile() {
                     placeholder="Occupation"
                     value={familyForm.motherOccupation}
                     onChange={(e) =>
-                      setFamilyForm((p) => ({ ...p, motherOccupation: e.target.value }))
+                      setFamilyForm((p) => ({ ...p, motherOccupation: autoCapitalizeWords(e.target.value) }))
                     }
                     className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm text-[#001840] focus:outline-none focus:ring-2 focus:ring-[#102A71]/20"
                   />
@@ -805,7 +778,7 @@ export function StudentProfile() {
                 maxLength={500}
                 placeholder="Complete home address"
                 value={familyForm.parentsAddress}
-                onChange={(e) => setFamilyForm((p) => ({ ...p, parentsAddress: e.target.value }))}
+                onChange={(e) => setFamilyForm((p) => ({ ...p, parentsAddress: autoCapitalizeWords(e.target.value) }))}
                 className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm text-[#001840] focus:outline-none focus:ring-2 focus:ring-[#102A71]/20"
               />
             </div>
@@ -844,7 +817,7 @@ export function StudentProfile() {
                     placeholder="Guardian's occupation"
                     value={familyForm.guardianOccupation}
                     onChange={(e) =>
-                      setFamilyForm((p) => ({ ...p, guardianOccupation: e.target.value }))
+                      setFamilyForm((p) => ({ ...p, guardianOccupation: autoCapitalizeWords(e.target.value) }))
                     }
                     className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm text-[#001840] focus:outline-none focus:ring-2 focus:ring-[#102A71]/20"
                   />
@@ -859,7 +832,7 @@ export function StudentProfile() {
                     placeholder="Guardian's address"
                     value={familyForm.guardianAddress}
                     onChange={(e) =>
-                      setFamilyForm((p) => ({ ...p, guardianAddress: e.target.value }))
+                      setFamilyForm((p) => ({ ...p, guardianAddress: autoCapitalizeWords(e.target.value) }))
                     }
                     className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm text-[#001840] focus:outline-none focus:ring-2 focus:ring-[#102A71]/20"
                   />

@@ -2,7 +2,7 @@ const PROFILE_FIELDS = ['firstName', 'middleName', 'lastName', 'mobileNumber'];
 const explicitFalse = value => value === false || value === 0 || value === '0';
 
 export function needsProfileCompletion(user) {
-  return user?.authProvider === 'google' && explicitFalse(user.profileCompleted);
+  return explicitFalse(user?.profileCompleted);
 }
 
 // Only safe account fields belong in authentication and profile responses.

@@ -19,7 +19,8 @@ test('existing accounts remain completed and serialization never leaks credentia
   for (const key of ['password', 'googleId', 'verificationToken']) assert.equal(key in user, false);
   assert.equal(serializeUser({ ...original, profileCompleted: 0 }).profileCompleted, false);
   assert.equal(needsProfileCompletion({ ...original, profileCompleted: '0' }), true);
-  assert.equal(needsProfileCompletion({ ...original, authProvider: 'password', profileCompleted: false }), false);
+  assert.equal(needsProfileCompletion({ ...original, authProvider: 'password', profileCompleted: false }), true);
+  assert.equal(needsProfileCompletion({ ...original, authProvider: 'password', profileCompleted: true }), false);
 });
 
 test('valid profiles normalize optional names, preserve local mobile numbers and compose the display name', () => {

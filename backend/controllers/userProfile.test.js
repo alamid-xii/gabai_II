@@ -8,9 +8,10 @@ import { PendingRegistration } from '../models/pendingRegistrationModel.js';
 // Controller imports authenticate once. No test connects to or mutates MySQL.
 const authenticate = sequelize.authenticate;
 sequelize.authenticate = async () => {};
-const { completeGoogleAuth, updateProfile, getCurrentUser } = await import('./authController.js');
+const { completeGoogleAuth, registerUser, verifyEmail, updateProfile, getCurrentUser } = await import('./authController.js');
 const { requireAuth } = await import('./enrollmentController.js');
 const { authenticateToken } = await import('../middleware/auth.js');
+const { validateRegister } = await import('../middleware/validate.js');
 sequelize.authenticate = authenticate;
 
 const response = () => ({ code: 200, status(code) { this.code = code; return this; }, json(body) { this.body = body; return this; }, redirect(url) { this.url = url; return this; } });
@@ -94,5 +95,48 @@ test('JWT auth permits account restoration and profile completion but blocks oth
     });
     assert.equal(nextCalled, allowed);
     if (!allowed) assert.equal(res.body.needsProfileCompletion, true);
+  }
+});
+
+test('manual email+password signup omits name, creates incomplete profile after OTP, and blocks enrollment until completed', async t => {
+  const originalEmailUser = process.env.EMAIL_USER;
+  delete process.env.EMAIL_USER;
+  try {
+    let nextCalled = false;
+    validateRegister({ body: { email: 'newstudent@example.com', password: 'StrongPassword123' } }, response(), () => { nextCalled = true; });
+    assert.equal(nextCalled, true);
+
+    let savedPending;
+    t.mock.method(User, 'findOne', async () => null);
+    t.mock.method(PendingRegistration, 'upsert', async values => { savedPending = values; return [values, true]; });
+    const regRes = response();
+    await registerUser({ body: { email: 'newstudent@example.com', password: 'StrongPassword123' } }, regRes);
+    assert.equal(regRes.code, 201);
+    assert.equal(savedPending.email, 'newstudent@example.com');
+    assert.ok(savedPending.verificationToken);
+
+    let createdUser;
+    t.mock.method(sequelize, 'transaction', async callback => callback({ LOCK: { UPDATE: 'UPDATE' } }));
+    t.mock.method(PendingRegistration, 'findOne', async () => ({
+      ...savedPending,
+      async destroy() {},
+    }));
+    t.mock.method(User, 'create', async values => { createdUser = { ...values, id: 99, role: 'student' }; return createdUser; });
+    const verifyRes = response();
+    await verifyEmail({ body: { email: 'newstudent@example.com', otp: savedPending.verificationToken } }, verifyRes);
+    assert.equal(verifyRes.code, 200);
+    assert.equal(createdUser.profileCompleted, false);
+    assert.equal(createdUser.authProvider, 'password');
+
+    t.mock.method(User, 'findByPk', async () => ({ ...createdUser, isActive: true }));
+    const token = jwt.sign({ id: 99 }, process.env.JWT_SECRET || 'emc-secret-key-2025');
+    const blocked = response();
+    let allowed = false;
+    await requireAuth({ headers: { authorization: `Bearer ${token}` } }, blocked, () => { allowed = true; });
+    assert.equal(allowed, false);
+    assert.equal(blocked.code, 403);
+    assert.equal(blocked.body.needsProfileCompletion, true);
+  } finally {
+    if (originalEmailUser === undefined) delete process.env.EMAIL_USER; else process.env.EMAIL_USER = originalEmailUser;
   }
 });

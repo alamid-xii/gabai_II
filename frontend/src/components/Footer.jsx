@@ -96,8 +96,8 @@ export function Footer() {
           <div className="flex flex-col sm:flex-row justify-between items-center gap-4 text-sm text-[#FFFDF0]">
             <p>© {currentYear} {profile?.schoolName || 'School'}. All rights reserved.</p>
             <div className="flex gap-6">
-              <span className="text-[#FFFDF0]/60">Privacy Policy</span>
-              <span className="text-[#FFFDF0]/60">Terms of Service</span>
+              <Link to="/privacy" className="text-[#FFFDF0]/80 hover:text-[#FFDC5F] transition-colors duration-200">Privacy Policy</Link>
+              <Link to="/terms" className="text-[#FFFDF0]/80 hover:text-[#FFDC5F] transition-colors duration-200">Terms and Conditions</Link>
             </div>
           </div>
         </div>

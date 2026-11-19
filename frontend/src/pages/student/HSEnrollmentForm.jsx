@@ -1,15 +1,22 @@
 import { Calendar as BirthdayCalendar } from "../../components/ui/calendar";
 import { Popover, PopoverTrigger, PopoverContent } from "../../components/ui/popover";
-import { CalendarDays } from "lucide-react";
+import { CalendarDays, MapPin } from "lucide-react";
 import { useAuth } from "../../contexts/authState";
 import { useAdmissionSettings, admissionChecklist } from "../../hooks/useAdmissionSettings";
-import { Fragment, useState, useEffect, useRef } from "react";
+import { Fragment, useState, useEffect, useRef, useMemo } from "react";
 import { useNavigate, useParams, useLocation } from "react-router";
 import { toast } from "sonner";
 import { CheckCircle2, Upload, X, Loader2, FileText, ArrowLeft } from "lucide-react";
 import { uploadEnrollmentDocuments, getEnrollmentById, getEnrollmentDocuments } from "../../services/enrollmentApi";
 import { API } from "../../config/api";
 import { allowedEnrollmentTypes, normalizeEnrollmentType as normalizeTypeForGrade, ENROLLMENT_TYPE_LABELS } from "../../utils/enrollmentTypes";
+import {
+  PH_ADDRESS_SUGGESTIONS,
+  PH_BIRTHPLACE_SUGGESTIONS,
+  LOCAL_ELEMENTARY_SCHOOLS,
+  autoCapitalizeWords,
+  computeDefaultGrade6SY,
+} from "../../utils/phLocations";
 const JHS_GRADES = ["Grade 7", "Grade 8", "Grade 9", "Grade 10"];
 const SHS_GRADES = ["Grade 11", "Grade 12"];
 
@@ -21,27 +28,372 @@ function normalizeEnrollmentType(educationLevel, gradeLevel, enrollmentType) {
 const onlyDigits = (e) => { if (!/[0-9]/.test(e.key) && !["Backspace", "Tab", "ArrowLeft", "ArrowRight", "Delete"].includes(e.key)) e.preventDefault(); };
 const onlyLetters = (e) => { if (!e.ctrlKey && !e.metaKey && e.key.length === 1 && !/[\p{L}\p{M}\s.\-'\u2019]/u.test(e.key)) e.preventDefault(); };
 const keepDigits = (value, maxLength) => value.replace(/\D/g, "").slice(0, maxLength);
-const keepNameCharacters = (value, maxLength) => value.replace(/[^\p{L}\p{M}\s.\-'\u2019]/gu, "").slice(0, maxLength);
+const keepNameCharacters = (value, maxLength) =>
+  autoCapitalizeWords(value.replace(/[^\p{L}\p{M}\s.\-'\u2019]/gu, "").slice(0, maxLength));
+
+const MONTH_NAMES = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December"
+];
+
+function formatYMD(year, monthIndex, day) {
+  const maxDay = new Date(year, monthIndex + 1, 0).getDate();
+  const safeDay = Math.min(Math.max(1, day), maxDay);
+  return `${year}-${String(monthIndex + 1).padStart(2, "0")}-${String(safeDay).padStart(2, "0")}`;
+}
+
 function BirthdayPicker({ value, onChange, error }) {
   const [open, setOpen] = useState(false);
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const selected = value ? new Date(`${value.slice(0, 10)}T00:00:00`) : undefined;
-  const validSelected = selected && !Number.isNaN(selected.getTime()) ? selected : undefined;
-  return <Popover open={open} onOpenChange={setOpen}>
-    <PopoverTrigger asChild><button type="button" aria-label="Choose date of birth" aria-invalid={!!error}
-      className={`flex w-full items-center justify-between gap-2 rounded-xl border bg-white px-4 py-2.5 text-left text-sm ${error ? 'border-red-400' : 'border-gray-200'} focus:outline-none focus:ring-2 focus:ring-[#102A71]/20`}>
-      <span className={validSelected ? 'text-[#001840]' : 'text-gray-400'}>{validSelected ? validSelected.toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' }) : 'Select your birthday'}</span><CalendarDays size={18} className="shrink-0 text-[#102A71]" />
-    </button></PopoverTrigger>
-    <PopoverContent align="start" className="w-auto max-w-[calc(100vw-2rem)] rounded-xl bg-white p-1 shadow-xl">
-      <BirthdayCalendar mode="single" captionLayout="dropdown" startMonth={new Date(1900, 0)} endMonth={today}
-        defaultMonth={validSelected || new Date(today.getFullYear() - 12, 0)} selected={validSelected}
-        disabled={{ after: today }} autoFocus
-        classNames={{ dropdowns: 'flex items-center justify-center gap-2', dropdown_root: 'relative rounded-md border border-gray-200 bg-white px-2 py-1', dropdown: 'absolute inset-0 w-full cursor-pointer opacity-0', caption_label: 'flex items-center gap-1 text-sm font-semibold text-[#001840]' }}
-        onSelect={date => { if (!date) return; onChange(`${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`); setOpen(false); }} />
-      <p className="px-3 pb-3 text-center text-xs text-gray-500">Choose the year and month, then select a day.</p>
-    </PopoverContent>
-  </Popover>;
+  const today = useMemo(() => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }, []);
+  const currentYear = today.getFullYear();
+  const defaultYear = currentYear - 12;
+
+  const parsed = useMemo(() => {
+    if (!value) return null;
+    const match = String(value).slice(0, 10).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!match) return null;
+    const y = Number(match[1]);
+    const m = Number(match[2]) - 1;
+    const d = Number(match[3]);
+    const dt = new Date(y, m, d);
+    if (Number.isNaN(dt.getTime()) || dt.getFullYear() !== y || dt.getMonth() !== m || dt.getDate() !== d) {
+      return null;
+    }
+    return { year: y, month: m, day: d, date: dt };
+  }, [value]);
+
+  const [viewMonth, setViewMonth] = useState(() =>
+    parsed ? new Date(parsed.year, parsed.month, 1) : new Date(defaultYear, 0, 1)
+  );
+
+  const activeYear = parsed ? parsed.year : viewMonth.getFullYear();
+  const activeMonth = parsed ? parsed.month : viewMonth.getMonth();
+  const activeDay = parsed ? parsed.day : 1;
+  const displayMonth = parsed ? new Date(parsed.year, parsed.month, 1) : viewMonth;
+  const daysInActiveMonth = new Date(activeYear, activeMonth + 1, 0).getDate();
+
+  const years = useMemo(() => {
+    const list = [];
+    for (let y = currentYear; y >= 1950; y -= 1) list.push(y);
+    return list;
+  }, [currentYear]);
+
+  function applyDateParts(nextYear, nextMonth, nextDay) {
+    let y = Number(nextYear);
+    let m = Number(nextMonth);
+    let d = Number(nextDay);
+    const maxDay = new Date(y, m + 1, 0).getDate();
+    if (d > maxDay) d = maxDay;
+    const candidate = new Date(y, m, d);
+    if (candidate > today) {
+      y = today.getFullYear();
+      m = today.getMonth();
+      d = today.getDate();
+    }
+    setViewMonth(new Date(y, m, 1));
+    onChange(formatYMD(y, m, d));
+  }
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          aria-label="Choose date of birth"
+          aria-invalid={!!error}
+          className={`flex w-full items-center justify-between gap-2 rounded-xl border bg-white px-4 py-2.5 text-left text-sm ${
+            error ? "border-red-400" : "border-gray-200"
+          } focus:outline-none focus:ring-2 focus:ring-[#102A71]/20`}
+        >
+          <span className={parsed ? "text-[#001840]" : "text-gray-400"}>
+            {parsed
+              ? parsed.date.toLocaleDateString("en-PH", {
+                  month: "long",
+                  day: "numeric",
+                  year: "numeric",
+                })
+              : "Select your birthday"}
+          </span>
+          <CalendarDays size={18} className="shrink-0 text-[#102A71]" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="start"
+        className="w-auto max-w-[calc(100vw-2rem)] rounded-xl bg-white p-3 shadow-xl border border-gray-200 space-y-2"
+      >
+        {/* Direct Month / Day / Year Selectors — always updates date immediately */}
+        <div className="grid grid-cols-3 gap-1.5 pb-2 border-b border-gray-100">
+          <div>
+            <label className="block text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-0.5">
+              Month
+            </label>
+            <select
+              aria-label="Birth month"
+              value={activeMonth}
+              onChange={(e) => applyDateParts(activeYear, Number(e.target.value), activeDay)}
+              className="w-full rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs font-semibold text-[#001840] focus:outline-none focus:border-[#102A71]"
+            >
+              {MONTH_NAMES.map((name, idx) => (
+                <option
+                  key={name}
+                  value={idx}
+                  disabled={activeYear === currentYear && idx > today.getMonth()}
+                >
+                  {name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-0.5">
+              Day
+            </label>
+            <select
+              aria-label="Birth day"
+              value={Math.min(activeDay, daysInActiveMonth)}
+              onChange={(e) => applyDateParts(activeYear, activeMonth, Number(e.target.value))}
+              className="w-full rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs font-semibold text-[#001840] focus:outline-none focus:border-[#102A71]"
+            >
+              {Array.from({ length: daysInActiveMonth }, (_, i) => i + 1).map((d) => (
+                <option
+                  key={d}
+                  value={d}
+                  disabled={
+                    activeYear === currentYear &&
+                    activeMonth === today.getMonth() &&
+                    d > today.getDate()
+                  }
+                >
+                  {d}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-0.5">
+              Year
+            </label>
+            <select
+              aria-label="Birth year"
+              value={activeYear}
+              onChange={(e) => applyDateParts(Number(e.target.value), activeMonth, activeDay)}
+              className="w-full rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs font-semibold text-[#001840] focus:outline-none focus:border-[#102A71]"
+            >
+              {years.map((y) => (
+                <option key={y} value={y}>
+                  {y}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <BirthdayCalendar
+          mode="single"
+          required
+          month={displayMonth}
+          onMonthChange={(nextMonth) => {
+            if (!nextMonth) return;
+            setViewMonth(nextMonth);
+            if (parsed) {
+              applyDateParts(nextMonth.getFullYear(), nextMonth.getMonth(), parsed.day);
+            }
+          }}
+          startMonth={new Date(1950, 0)}
+          endMonth={today}
+          selected={parsed?.date}
+          disabled={{ after: today }}
+          onSelect={(date) => {
+            if (!date) {
+              if (parsed) setOpen(false);
+              return;
+            }
+            onChange(formatYMD(date.getFullYear(), date.getMonth(), date.getDate()));
+            setOpen(false);
+          }}
+        />
+
+        <div className="flex items-center justify-between pt-1 border-t border-gray-100">
+          <span className="text-[11px] text-gray-500">
+            {parsed
+              ? parsed.date.toLocaleDateString("en-PH", {
+                  month: "short",
+                  day: "numeric",
+                  year: "numeric",
+                })
+              : "Pick month, year & day"}
+          </span>
+          <button
+            type="button"
+            onClick={() => {
+              if (!parsed) {
+                applyDateParts(activeYear, activeMonth, activeDay);
+              }
+              setOpen(false);
+            }}
+            className="px-3 py-1 rounded-lg bg-[#102A71] text-white text-xs font-semibold hover:bg-[#001840] transition-colors"
+          >
+            Done
+          </button>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function PhAutocompleteInput({
+  value,
+  onChange,
+  suggestions = [],
+  onSelectSuggestion,
+  preserveStreetPrefix = false,
+  error,
+  maxLength = 200,
+  placeholder,
+  ...rest
+}) {
+  const [open, setOpen] = useState(false);
+  const [highlightIndex, setHighlightIndex] = useState(0);
+  const containerRef = useRef(null);
+
+  // Extract search query (if preserveStreetPrefix is enabled and user typed "Purok 2, anilao", search on "anilao")
+  const { prefix, query } = useMemo(() => {
+    const raw = String(value || "");
+    if (preserveStreetPrefix && raw.includes(",")) {
+      const firstComma = raw.indexOf(",");
+      const candidatePrefix = raw.slice(0, firstComma).trim();
+      const restPart = raw.slice(firstComma + 1).trim();
+      if (
+        candidatePrefix &&
+        /^(purok|sitio|blk|block|lot|phase|zone|street|st\.?|#|\d)/i.test(candidatePrefix) &&
+        !candidatePrefix.toLowerCase().startsWith("brgy")
+      ) {
+        return { prefix: candidatePrefix, query: restPart };
+      }
+    }
+    return { prefix: "", query: raw.trim() };
+  }, [value, preserveStreetPrefix]);
+
+  const matches = useMemo(() => {
+    const q = query.toLowerCase().replace(/^brgy\.?\s*/i, "").trim();
+    if (!q) return suggestions.slice(0, 8);
+    const normalize = (item) => (typeof item === "string" ? item : item.name);
+    const exactOrStarts = [];
+    const contains = [];
+    for (const item of suggestions) {
+      const label = normalize(item);
+      const lower = label.toLowerCase();
+      const cleanBrgy = lower.replace(/^brgy\.?\s*/i, "");
+      if (lower === q) continue;
+      if (cleanBrgy.startsWith(q) || lower.startsWith(q)) {
+        exactOrStarts.push(item);
+      } else if (lower.includes(q)) {
+        contains.push(item);
+      }
+      if (exactOrStarts.length + contains.length >= 12) break;
+    }
+    return [...exactOrStarts, ...contains].slice(0, 8);
+  }, [query, suggestions]);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (containerRef.current && !containerRef.current.contains(e.target)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  function commitSelection(item) {
+    const text = typeof item === "string" ? item : item.name;
+    const finalValue = prefix ? `${prefix}, ${text}` : text;
+    onChange(finalValue.slice(0, maxLength));
+    if (onSelectSuggestion) onSelectSuggestion(item);
+    setOpen(false);
+  }
+
+  return (
+    <div ref={containerRef} className="relative">
+      <input
+        {...rest}
+        value={value}
+        maxLength={maxLength}
+        placeholder={placeholder}
+        autoComplete="off"
+        onFocus={() => {
+          setOpen(true);
+          setHighlightIndex(0);
+        }}
+        onChange={(e) => {
+          const formatted = autoCapitalizeWords(e.target.value).slice(0, maxLength);
+          onChange(formatted);
+          setOpen(true);
+          setHighlightIndex(0);
+        }}
+        onKeyDown={(e) => {
+          if (!open || matches.length === 0) return;
+          if (e.key === "ArrowDown") {
+            e.preventDefault();
+            setHighlightIndex((i) => (i + 1) % matches.length);
+          } else if (e.key === "ArrowUp") {
+            e.preventDefault();
+            setHighlightIndex((i) => (i - 1 + matches.length) % matches.length);
+          } else if (e.key === "Enter" && open && matches[highlightIndex]) {
+            e.preventDefault();
+            commitSelection(matches[highlightIndex]);
+          } else if (e.key === "Escape") {
+            setOpen(false);
+          }
+        }}
+        className={`w-full px-4 py-2.5 rounded-xl border text-sm focus:outline-none focus:ring-2 transition-all ${
+          error
+            ? "border-red-400 focus:ring-red-200"
+            : "border-gray-200 focus:ring-[#102A71]/20 focus:border-[#102A71]"
+        } bg-white text-[#001840]`}
+      />
+      {open && matches.length > 0 && (
+        <ul
+          role="listbox"
+          className="absolute z-50 left-0 right-0 mt-1 max-h-52 overflow-y-auto rounded-xl border border-gray-200 bg-white py-1 shadow-xl"
+        >
+          <li className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400 bg-gray-50/80 border-b border-gray-100">
+            Philippine Locations / Suggestions
+          </li>
+          {matches.map((item, idx) => {
+            const label = typeof item === "string" ? item : item.name;
+            const sublabel = typeof item === "object" && item.address ? item.address : null;
+            const active = idx === highlightIndex;
+            return (
+              <li
+                key={label}
+                role="option"
+                aria-selected={active}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  commitSelection(item);
+                }}
+                onMouseEnter={() => setHighlightIndex(idx)}
+                className={`flex items-start gap-2 px-3 py-2 text-xs cursor-pointer transition-colors ${
+                  active ? "bg-[#EEF2FF] text-[#001840] font-semibold" : "text-gray-700 hover:bg-gray-50"
+                }`}
+              >
+                <MapPin size={13} className="mt-0.5 shrink-0 text-[#102A71]" />
+                <div className="min-w-0">
+                  <p className="truncate">{prefix ? `${prefix}, ${label}` : label}</p>
+                  {sublabel && <p className="text-[11px] text-gray-400 truncate">{sublabel}</p>}
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
 }
 
 function F({ label, required, error, children }) { return (<div className="flex flex-col gap-1"><label className="text-sm font-semibold text-[#001840]">{label}{required && <span className="text-red-500 ml-1">*</span>}</label>{children}{error && <p className="text-xs text-red-500 mt-0.5">{error}</p>}</div>); }
@@ -120,20 +472,29 @@ export function HSEnrollmentForm({ enrollmentId: propId, readOnly = false }) {
 
   // educationLevel passed from LevelSelection — lock it for the entire session
   const initialLevel = location.state?.educationLevel || 'JHS';
+  const initialGrade = location.state?.gradeLevel || (initialLevel === 'SHS' ? 'Grade 11' : 'Grade 7');
+  const initialG6SY = computeDefaultGrade6SY("2026-2027", initialGrade);
 
-  const defaultForm = { educationLevel: initialLevel, gradeLevel: "", strand: "", studentType: "New", academicYear: "2025-2026", dateEnrolled: "", studentNumber: "", lrn: "", familyName: user?.lastName || "", firstName: user?.firstName || "", middleName: user?.middleName || "", sex: "", dateOfBirth: "", placeOfBirth: "", fatherName: "", fatherOccupation: "", fatherMobileNumber: "", motherMobileNumber: "", motherName: "", motherOccupation: "", parentsAddress: "", guardianName: "", guardianOccupation: "", guardianAddress: "", guardianTelephone: "", grade6School: "", grade6SchoolAddress: "", grade6Section: "", grade6SYStart: "", grade6SYEnd: "", grade6Average: "", grade6Remarks: "", lastHSSchool: "", lastHSCurriculumYear: "", lastHSSection: "", lastHSSYStart: "", lastHSSYEnd: "", sscApplied: false, studentSignature: "", parentGuardianSignature: "", credentials: {}, docFiles: {} };
+  const defaultForm = { educationLevel: initialLevel, gradeLevel: "", strand: "", studentType: "New", academicYear: "2026-2027", dateEnrolled: "", studentNumber: "", lrn: "", familyName: user?.lastName || "", firstName: user?.firstName || "", middleName: user?.middleName || "", sex: "", dateOfBirth: "", placeOfBirth: "", fatherName: "", fatherOccupation: "", fatherMobileNumber: "", motherMobileNumber: "", motherName: "", motherOccupation: "", parentsAddress: "", guardianName: "", guardianOccupation: "", guardianAddress: "", guardianTelephone: "", grade6School: "", grade6SchoolAddress: "", grade6Section: "", grade6SYStart: initialG6SY.syStart, grade6SYEnd: initialG6SY.syEnd, grade6Average: "", grade6Remarks: "", lastHSSchool: "", lastHSCurriculumYear: "", lastHSSection: "", lastHSSYStart: "", lastHSSYEnd: "", sscApplied: false, studentSignature: "", parentGuardianSignature: "", credentials: {}, docFiles: {} };
 
   // Load saved draft on mount — skipped in edit mode or carry-over
   const [form, setF] = useState(() => {
     if (isEditMode) return defaultForm;
     const draft = readDraft();
-    if (draft?.form) return {
-      ...defaultForm, ...prefill, ...draft.form,
-      educationLevel: initialLevel,
-      gradeLevel: location.state?.gradeLevel || draft.form.gradeLevel,
-      ...(isCarryOver ? { sscClass: prefill?.sscClass || null, sscApplied: false, enrollmentType: 'old', studentType: 'Old', academicYear: prefill?.academicYear || draft.form.academicYear } : {}),
-      docFiles: {},
-    };
+    if (draft?.form) {
+      const effectiveGrade = location.state?.gradeLevel || draft.form.gradeLevel || initialGrade;
+      const effectiveYear = draft.form.academicYear || "2026-2027";
+      const g6Defaults = computeDefaultGrade6SY(effectiveYear, effectiveGrade);
+      return {
+        ...defaultForm, ...prefill, ...draft.form,
+        educationLevel: initialLevel,
+        gradeLevel: location.state?.gradeLevel || draft.form.gradeLevel,
+        grade6SYStart: draft.form.grade6SYStart || g6Defaults.syStart,
+        grade6SYEnd: draft.form.grade6SYEnd || g6Defaults.syEnd,
+        ...(isCarryOver ? { sscClass: prefill?.sscClass || null, sscApplied: false, enrollmentType: 'old', studentType: 'Old', academicYear: prefill?.academicYear || draft.form.academicYear } : {}),
+        docFiles: {},
+      };
+    }
     // Carry-over: pre-fill from previous enrollment
     if (isCarryOver && prefill) {
       const educationLevel = prefill.educationLevel || initialLevel;
@@ -149,12 +510,18 @@ export function HSEnrollmentForm({ enrollmentId: propId, readOnly = false }) {
     }
     // Grade level + applicant type chosen in the LevelSelection modal
     const presetGrade = location.state?.gradeLevel || null;
-    const applyPreset = (base) => presetGrade ? {
-      ...base,
-      gradeLevel: presetGrade,
-      strand: base.gradeLevel === presetGrade ? base.strand : "",
-      enrollmentType: normalizeEnrollmentType(initialLevel, presetGrade, location.state?.enrollmentType),
-    } : base;
+    const applyPreset = (base) => {
+      if (!presetGrade) return base;
+      const g6 = computeDefaultGrade6SY(base.academicYear, presetGrade);
+      return {
+        ...base,
+        gradeLevel: presetGrade,
+        strand: base.gradeLevel === presetGrade ? base.strand : "",
+        enrollmentType: normalizeEnrollmentType(initialLevel, presetGrade, location.state?.enrollmentType),
+        grade6SYStart: g6.syStart,
+        grade6SYEnd: g6.syEnd,
+      };
+    };
     return applyPreset(defaultForm);
   });
 
@@ -162,6 +529,33 @@ export function HSEnrollmentForm({ enrollmentId: propId, readOnly = false }) {
   const [isSSCCompletion, setIsSSCCompletion] = useState(false);
 
   const [sscChosenClass, setSscChosenClass] = useState(null); // 'SSC' | 'Regular'
+
+  // Sync active school year from backend for new enrollments and adjust default Grade 6 SY
+  useEffect(() => {
+    if (isEditMode || readOnly) return;
+    let cancelled = false;
+    fetch(`${API}/academic/school-years/active`)
+      .then(r => r.ok ? r.json() : null)
+      .then(sy => {
+        if (cancelled || !sy?.year) return;
+        setF(prev => {
+          const prevDefaults = computeDefaultGrade6SY(prev.academicYear, prev.gradeLevel || initialGrade);
+          const nextDefaults = computeDefaultGrade6SY(sy.year, prev.gradeLevel || initialGrade);
+          const shouldSyncG6 =
+            (!prev.grade6SYStart && !prev.grade6SYEnd) ||
+            (prev.grade6SYStart === prevDefaults.syStart && prev.grade6SYEnd === prevDefaults.syEnd);
+          return {
+            ...prev,
+            academicYear: sy.year,
+            ...(shouldSyncG6
+              ? { grade6SYStart: nextDefaults.syStart, grade6SYEnd: nextDefaults.syEnd }
+              : {}),
+          };
+        });
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [isEditMode, readOnly, initialGrade]);
 
   // Guard against direct access to /hs-enrollment-form while an SSC application is pending exam or active enrollment exists
   useEffect(() => {
@@ -229,6 +623,9 @@ export function HSEnrollmentForm({ enrollmentId: propId, readOnly = false }) {
       }
       setIsSSCCompletion(sscPlaceholder);
       if (sscPlaceholder) setSscChosenClass(e.sscClass || 'SSC'); // default SSC if somehow null
+      const loadedYear = e.academicYear || '2026-2027';
+      const loadedGrade = e.gradeLevel || (sscPlaceholder ? 'Grade 7' : initialGrade);
+      const loadedG6Defaults = computeDefaultGrade6SY(loadedYear, loadedGrade);
       setF(prev => ({
         ...prev,
         educationLevel: e.educationLevel || 'JHS',
@@ -237,7 +634,7 @@ export function HSEnrollmentForm({ enrollmentId: propId, readOnly = false }) {
         strand: e.strand || '',
         enrollmentType: normalizeEnrollmentType(e.educationLevel || 'JHS', e.gradeLevel || (sscPlaceholder ? 'Grade 7' : ''), e.enrollmentType || 'new'),
         studentType: e.studentType || 'New',
-        academicYear: e.academicYear || '2025-2026',
+        academicYear: loadedYear,
         dateEnrolled: e.dateEnrolled || '',
         studentNumber: e.studentNumber || '',
         lrn: e.lrn || '',
@@ -261,8 +658,8 @@ export function HSEnrollmentForm({ enrollmentId: propId, readOnly = false }) {
         grade6School: e.grade6School || '',
         grade6SchoolAddress: e.grade6SchoolAddress || '',
         grade6Section: e.grade6Section || '',
-        grade6SYStart: e.grade6SYStart || '',
-        grade6SYEnd: e.grade6SYEnd || '',
+        grade6SYStart: e.grade6SYStart || loadedG6Defaults.syStart,
+        grade6SYEnd: e.grade6SYEnd || loadedG6Defaults.syEnd,
         grade6Average: e.grade6Average || '',
         grade6Remarks: e.grade6Remarks || '',
         lastHSSchool: e.lastHSSchool || '',
@@ -703,7 +1100,7 @@ export function HSEnrollmentForm({ enrollmentId: propId, readOnly = false }) {
                     </button>
                   ))}
                 </div>
-                <F label="Grade Level" required error={errors.gradeLevel}><S value={form.gradeLevel} error={errors.gradeLevel} onChange={e => { const gradeLevel = e.target.value; setF(prev => ({ ...prev, gradeLevel, strand: "", enrollmentType: normalizeEnrollmentType(prev.educationLevel, gradeLevel, prev.enrollmentType) })); }}><option value="">Select grade level</option>{grades.map(g => <option key={g} value={g}>{g}</option>)}</S></F>
+                <F label="Grade Level" required error={errors.gradeLevel}><S value={form.gradeLevel} error={errors.gradeLevel} onChange={e => { const gradeLevel = e.target.value; setF(prev => { const prevDef = computeDefaultGrade6SY(prev.academicYear, prev.gradeLevel || initialGrade); const nextDef = computeDefaultGrade6SY(prev.academicYear, gradeLevel || initialGrade); const syncG6 = (!prev.grade6SYStart && !prev.grade6SYEnd) || (prev.grade6SYStart === prevDef.syStart && prev.grade6SYEnd === prevDef.syEnd); return { ...prev, gradeLevel, strand: "", enrollmentType: normalizeEnrollmentType(prev.educationLevel, gradeLevel, prev.enrollmentType), ...(syncG6 ? { grade6SYStart: nextDef.syStart, grade6SYEnd: nextDef.syEnd } : {}) }; }); }}><option value="">Select grade level</option>{grades.map(g => <option key={g} value={g}>{g}</option>)}</S></F>
                 {isSHS && (<F label="Strand" required error={errors.strand}><S value={form.strand} error={errors.strand} onChange={e => set("strand", e.target.value)}><option value="">Select strand</option>{SHS_STRANDS.map(s => <option key={s} value={s}>{s}</option>)}</S></F>)}
               </>
             )}
@@ -722,7 +1119,7 @@ export function HSEnrollmentForm({ enrollmentId: propId, readOnly = false }) {
               </F>
             )}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <F label="School Year"><I value={form.academicYear} placeholder="2025-2026" maxLength={20} onChange={e => set("academicYear", e.target.value)} /></F>
+              <F label="School Year"><I value={form.academicYear} placeholder="2026-2027" maxLength={20} onChange={e => { const nextSY = e.target.value; setF(prev => { const prevDef = computeDefaultGrade6SY(prev.academicYear, prev.gradeLevel || initialGrade); const nextDef = computeDefaultGrade6SY(nextSY, prev.gradeLevel || initialGrade); const syncG6 = (!prev.grade6SYStart && !prev.grade6SYEnd) || (prev.grade6SYStart === prevDef.syStart && prev.grade6SYEnd === prevDef.syEnd); return { ...prev, academicYear: nextSY, ...(syncG6 ? { grade6SYStart: nextDef.syStart, grade6SYEnd: nextDef.syEnd } : {}) }; }); }} /></F>
               {!isIncomingGrade7 && (
               <F label="Student ID Number" required={form.enrollmentType === 'old'} error={errors.studentNumber}>
                 <I
@@ -754,7 +1151,16 @@ export function HSEnrollmentForm({ enrollmentId: propId, readOnly = false }) {
               <F label="Sex" required error={errors.sex}><S value={form.sex} error={errors.sex} onChange={e => set("sex", e.target.value)}><option value="">Select</option><option value="Male">Male</option><option value="Female">Female</option></S></F>
               <F label="Date of Birth" required error={errors.dateOfBirth}><BirthdayPicker value={form.dateOfBirth} error={errors.dateOfBirth} onChange={value => set("dateOfBirth", value)} /></F>
             </div>
-            <F label="Place of Birth" required error={errors.placeOfBirth}><I error={errors.placeOfBirth} value={form.placeOfBirth} placeholder="Place of birth" onChange={e => set("placeOfBirth", e.target.value)} /></F>
+            <F label="Place of Birth" required error={errors.placeOfBirth}>
+              <PhAutocompleteInput
+                error={errors.placeOfBirth}
+                value={form.placeOfBirth}
+                placeholder="e.g. Bongabong, Oriental Mindoro"
+                suggestions={PH_BIRTHPLACE_SUGGESTIONS}
+                maxLength={200}
+                onChange={val => set("placeOfBirth", val)}
+              />
+            </F>
           </div>)}
           {step === 3 && (<div className="space-y-5">
             {['father', 'mother', 'guardian'].map(key => {
@@ -762,31 +1168,159 @@ export function HSEnrollmentForm({ enrollmentId: propId, readOnly = false }) {
               return <Fragment key={key}><section className="rounded-xl border border-gray-200 p-4 space-y-4"><h3 className="border-b pb-2 text-sm font-bold capitalize text-[#001840]">{key} details <span className="ml-2 text-xs font-normal normal-case text-gray-500">{familySections[key] ? 'Contact details provided' : 'Leave blank if not applicable'}</span></h3><div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <F label="Full Name" required={familySections[key]} error={errors[`${key}Name`]}><I value={form[`${key}Name`]} error={errors[`${key}Name`]} maxLength={200} onKeyDown={onlyLetters} onChange={event => set(`${key}Name`, keepNameCharacters(event.target.value, 200))} /></F>
                 <F label="Mobile Number" required={familySections[key]} error={errors[phoneKey]}><I value={form[phoneKey] || ''} error={errors[phoneKey]} placeholder="09XXXXXXXXX" maxLength={11} inputMode="numeric" onKeyDown={onlyDigits} onChange={event => set(phoneKey, keepDigits(event.target.value, 11))} /></F>
-                <F label="Occupation (optional)"><I value={form[`${key}Occupation`]} maxLength={100} onChange={event => set(`${key}Occupation`, event.target.value)} /></F>
-                {key === 'guardian' && <F label="Guardian Address" required={familySections.guardian} error={errors.guardianAddress}><I value={form.guardianAddress} error={errors.guardianAddress} maxLength={500} onChange={event => set('guardianAddress', event.target.value)} /></F>}
+                <F label="Occupation (optional)"><I value={form[`${key}Occupation`]} maxLength={100} onChange={event => set(`${key}Occupation`, autoCapitalizeWords(event.target.value))} /></F>
+                {key === 'guardian' && (
+                  <F label="Guardian Address" required={familySections.guardian} error={errors.guardianAddress}>
+                    <PhAutocompleteInput
+                      value={form.guardianAddress}
+                      error={errors.guardianAddress}
+                      maxLength={500}
+                      placeholder="e.g. Brgy. Bagong Bayan II, Bongabong, Oriental Mindoro"
+                      suggestions={PH_ADDRESS_SUGGESTIONS}
+                      preserveStreetPrefix
+                      onChange={val => set('guardianAddress', val)}
+                    />
+                  </F>
+                )}
               </div></section>
-              {key === 'mother' && (<F label="Parent Address" required={familySections.father || familySections.mother} error={errors.parentsAddress}><I value={form.parentsAddress} error={errors.parentsAddress} maxLength={500} placeholder="Complete address" onChange={event => set('parentsAddress', event.target.value)} /></F>)}
+              {key === 'mother' && (
+                <F label="Parent Address" required={familySections.father || familySections.mother} error={errors.parentsAddress}>
+                  <PhAutocompleteInput
+                    value={form.parentsAddress}
+                    error={errors.parentsAddress}
+                    maxLength={500}
+                    placeholder="e.g. Brgy. Bagong Bayan II, Bongabong, Oriental Mindoro"
+                    suggestions={PH_ADDRESS_SUGGESTIONS}
+                    preserveStreetPrefix
+                    onChange={val => set('parentsAddress', val)}
+                  />
+                </F>
+              )}
               </Fragment>;
             })}
 
           </div>)}
           {step === 4 && (<div className="space-y-5">
-            <div><h3 className="text-sm font-bold text-[#001840] mb-3 pb-2 border-b border-gray-100">Grade VI School</h3><div className="grid grid-cols-1 sm:grid-cols-2 gap-4"><F label="School Name"><I value={form.grade6School} maxLength={200} placeholder="School name" onChange={e => set("grade6School", e.target.value)} /></F><F label="School Address"><I value={form.grade6SchoolAddress} maxLength={200} placeholder="Address" onChange={e => set("grade6SchoolAddress", e.target.value)} /></F><F label="Section"><I value={form.grade6Section} maxLength={50} placeholder="Section" onChange={e => set("grade6Section", e.target.value)} /></F><F label="General Average" error={errors.grade6Average}><I type="number" min="0" max="100" step="0.01" inputMode="decimal" value={form.grade6Average} placeholder="e.g. 88" error={errors.grade6Average} onChange={e => set("grade6Average", e.target.value)} /></F><F label="SY Start" error={errors.grade6SYStart}><I value={form.grade6SYStart} placeholder="2020" maxLength={4} inputMode="numeric" onKeyDown={onlyDigits} error={errors.grade6SYStart} onChange={e => set("grade6SYStart", keepDigits(e.target.value, 4))} /></F><F label="SY End" error={errors.grade6SYEnd}><I value={form.grade6SYEnd} placeholder="2021" maxLength={4} inputMode="numeric" onKeyDown={onlyDigits} error={errors.grade6SYEnd} onChange={e => set("grade6SYEnd", keepDigits(e.target.value, 4))} /></F></div></div>
-            {!isGrade7 && (
-            <div>
-              <h3 className="text-sm font-bold text-[#001840] mb-1 pb-2 border-b border-gray-100">
-                Last High School Attended
-                {isTransferee && <span className="ml-2 text-[10px] font-bold uppercase tracking-wide bg-orange-100 text-orange-600 px-1.5 py-0.5 rounded-full">Required for Transferees</span>}
-              </h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <F label="School Name" required={isTransferee} error={errors.lastHSSchool}><I value={form.lastHSSchool} maxLength={200} placeholder="School name" error={errors.lastHSSchool} onChange={e => set("lastHSSchool", e.target.value)} /></F>
-                <F label="Curriculum Year" required={isTransferee} error={errors.lastHSCurriculumYear}><I value={form.lastHSCurriculumYear} maxLength={20} placeholder="e.g. G7" error={errors.lastHSCurriculumYear} onChange={e => set("lastHSCurriculumYear", e.target.value)} /></F>
-                <F label="Section"><I value={form.lastHSSection} maxLength={50} placeholder="Section" onChange={e => set("lastHSSection", e.target.value)} /></F>
-                <F label="SY Start" required={isTransferee} error={errors.lastHSSYStart}><I value={form.lastHSSYStart} placeholder="2023" maxLength={4} inputMode="numeric" onKeyDown={onlyDigits} error={errors.lastHSSYStart} onChange={e => set("lastHSSYStart", keepDigits(e.target.value, 4))} /></F>
-                <F label="SY End" required={isTransferee} error={errors.lastHSSYEnd}><I value={form.lastHSSYEnd} placeholder="2024" maxLength={4} inputMode="numeric" onKeyDown={onlyDigits} error={errors.lastHSSYEnd} onChange={e => set("lastHSSYEnd", keepDigits(e.target.value, 4))} /></F>
-              </div>
-            </div>
-            )}
+            {(() => {
+              const g6Default = computeDefaultGrade6SY(form.academicYear, form.gradeLevel || initialGrade);
+              const hsStartDefault = String((Number(String(form.academicYear || '').slice(0, 4)) || new Date().getFullYear()) - 1);
+              const hsEndDefault = String(Number(hsStartDefault) + 1);
+              return (
+                <>
+                  <div>
+                    <h3 className="text-sm font-bold text-[#001840] mb-3 pb-2 border-b border-gray-100">Grade VI School</h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <F label="School Name">
+                        <PhAutocompleteInput
+                          value={form.grade6School}
+                          maxLength={200}
+                          placeholder="e.g. Bongabong Central School"
+                          suggestions={LOCAL_ELEMENTARY_SCHOOLS}
+                          onChange={val => set("grade6School", val)}
+                          onSelectSuggestion={item => {
+                            if (typeof item === "object" && item.address && !form.grade6SchoolAddress?.trim()) {
+                              set("grade6SchoolAddress", item.address);
+                            }
+                          }}
+                        />
+                      </F>
+                      <F label="School Address">
+                        <PhAutocompleteInput
+                          value={form.grade6SchoolAddress}
+                          maxLength={200}
+                          placeholder="e.g. Brgy. Poblacion, Bongabong, Oriental Mindoro"
+                          suggestions={PH_ADDRESS_SUGGESTIONS}
+                          preserveStreetPrefix
+                          onChange={val => set("grade6SchoolAddress", val)}
+                        />
+                      </F>
+                      <F label="Section"><I value={form.grade6Section} maxLength={50} placeholder="Section" onChange={e => set("grade6Section", autoCapitalizeWords(e.target.value))} /></F>
+                      <F label="General Average" error={errors.grade6Average}><I type="number" min="0" max="100" step="0.01" inputMode="decimal" value={form.grade6Average} placeholder="e.g. 88" error={errors.grade6Average} onChange={e => set("grade6Average", e.target.value)} /></F>
+                      <F label="SY Start" error={errors.grade6SYStart}>
+                        <I
+                          value={form.grade6SYStart}
+                          placeholder={g6Default.syStart}
+                          maxLength={4}
+                          inputMode="numeric"
+                          onKeyDown={onlyDigits}
+                          error={errors.grade6SYStart}
+                          onChange={e => {
+                            const startVal = keepDigits(e.target.value, 4);
+                            setF(prev => ({
+                              ...prev,
+                              grade6SYStart: startVal,
+                              ...(startVal.length === 4 ? { grade6SYEnd: String(Number(startVal) + 1) } : {}),
+                            }));
+                          }}
+                        />
+                      </F>
+                      <F label="SY End" error={errors.grade6SYEnd}>
+                        <I
+                          value={form.grade6SYEnd}
+                          placeholder={g6Default.syEnd}
+                          maxLength={4}
+                          inputMode="numeric"
+                          onKeyDown={onlyDigits}
+                          error={errors.grade6SYEnd}
+                          onChange={e => {
+                            const endVal = keepDigits(e.target.value, 4);
+                            setF(prev => ({
+                              ...prev,
+                              grade6SYEnd: endVal,
+                              ...(endVal.length === 4 && (!prev.grade6SYStart || prev.grade6SYStart.length < 4)
+                                ? { grade6SYStart: String(Number(endVal) - 1) }
+                                : {}),
+                            }));
+                          }}
+                        />
+                      </F>
+                    </div>
+                  </div>
+                  {!isGrade7 && (
+                  <div>
+                    <h3 className="text-sm font-bold text-[#001840] mb-1 pb-2 border-b border-gray-100">
+                      Last High School Attended
+                      {isTransferee && <span className="ml-2 text-[10px] font-bold uppercase tracking-wide bg-orange-100 text-orange-600 px-1.5 py-0.5 rounded-full">Required for Transferees</span>}
+                    </h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <F label="School Name" required={isTransferee} error={errors.lastHSSchool}><I value={form.lastHSSchool} maxLength={200} placeholder="School name" error={errors.lastHSSchool} onChange={e => set("lastHSSchool", autoCapitalizeWords(e.target.value))} /></F>
+                      <F label="Curriculum Year" required={isTransferee} error={errors.lastHSCurriculumYear}><I value={form.lastHSCurriculumYear} maxLength={20} placeholder="e.g. G7" error={errors.lastHSCurriculumYear} onChange={e => set("lastHSCurriculumYear", autoCapitalizeWords(e.target.value))} /></F>
+                      <F label="Section"><I value={form.lastHSSection} maxLength={50} placeholder="Section" onChange={e => set("lastHSSection", autoCapitalizeWords(e.target.value))} /></F>
+                      <F label="SY Start" required={isTransferee} error={errors.lastHSSYStart}>
+                        <I
+                          value={form.lastHSSYStart}
+                          placeholder={hsStartDefault}
+                          maxLength={4}
+                          inputMode="numeric"
+                          onKeyDown={onlyDigits}
+                          error={errors.lastHSSYStart}
+                          onChange={e => {
+                            const startVal = keepDigits(e.target.value, 4);
+                            setF(prev => ({
+                              ...prev,
+                              lastHSSYStart: startVal,
+                              ...(startVal.length === 4 ? { lastHSSYEnd: String(Number(startVal) + 1) } : {}),
+                            }));
+                          }}
+                        />
+                      </F>
+                      <F label="SY End" required={isTransferee} error={errors.lastHSSYEnd}>
+                        <I
+                          value={form.lastHSSYEnd}
+                          placeholder={hsEndDefault}
+                          maxLength={4}
+                          inputMode="numeric"
+                          onKeyDown={onlyDigits}
+                          error={errors.lastHSSYEnd}
+                          onChange={e => set("lastHSSYEnd", keepDigits(e.target.value, 4))}
+                        />
+                      </F>
+                    </div>
+                  </div>
+                  )}
+                </>
+              );
+            })()}
           </div>)}
           {step === docStep && (<div className="space-y-4">
             <div>

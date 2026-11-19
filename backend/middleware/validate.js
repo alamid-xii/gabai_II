@@ -252,8 +252,9 @@ export function validateRegister(req, res, next) {
   const { name, email, password } = req.body;
   const errors = [];
 
-  if (!name?.trim())     errors.push({ field: 'name',     message: 'Name is required' });
-  if (name?.length > 100) errors.push({ field: 'name',   message: 'Name must be 100 characters or less' });
+  if (name !== undefined && name !== null && String(name).length > 100) {
+    errors.push({ field: 'name', message: 'Name must be 100 characters or less' });
+  }
   if (!email?.trim())    errors.push({ field: 'email',    message: 'Email is required' });
   else if (!isValidEmail(email)) errors.push({ field: 'email', message: 'Invalid email format' });
   if (!password)         errors.push({ field: 'password', message: 'Password is required' });
@@ -301,7 +302,7 @@ export function validateFAQ(req, res, next) {
 // ── Section middleware ────────────────────────────────────────────────────────
 
 export function validateSection(req, res, next) {
-  const { code, course, yearLevel, semester, schoolYear, capacity } = req.body;
+  const { code, course, yearLevel, schoolYear, capacity } = req.body;
   const errors = [];
 
   if (!code?.trim())       errors.push({ field: 'code',       message: 'Section code is required' });
@@ -310,7 +311,6 @@ export function validateSection(req, res, next) {
   if (!['JHS', 'SHS'].includes(course)) errors.push({ field: 'course', message: 'Course must be JHS or SHS' });
   if (!yearLevel)          errors.push({ field: 'yearLevel',  message: 'Year level is required' });
   try { validateProgramGrade(course, yearLevel); } catch (error) { errors.push({ field: 'yearLevel', message: error.message }); }
-  if (!semester?.trim())   errors.push({ field: 'semester',   message: 'Semester is required' });
   if (!schoolYear?.trim()) errors.push({ field: 'schoolYear', message: 'School year is required' });
   if (capacity !== undefined) {
     const cap = Number(capacity);

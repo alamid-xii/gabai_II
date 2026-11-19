@@ -6,8 +6,8 @@ import { EnrollmentRecord } from './models/enrollmentRecordModel.js';
 import { Section } from './models/sectionModel.js';
 
 const academicYear = process.env.SEED_SCHOOL_YEAR || '2026-2027';
-const defaultPassword = process.env.SEED_PASSWORD || 'Password123!';
-const passwordHash = await bcrypt.hash(defaultPassword, 10);
+const studentsPerSection = Number(process.env.SEED_STUDENTS_PER_SECTION || 45);
+const defaultPassword = process.env.SEED_PASSWORD || 'EmcStudent@2026';
 
 const firstNames = {
   Male: [
@@ -28,405 +28,346 @@ const familyNames = [
   'Abad', 'Aguirre', 'Alcala', 'Alvarez', 'Aquino', 'Arenas', 'Bautista', 'Bermudez', 'Buenaventura', 'Calderon',
   'Castro', 'Cruz', 'Dela Cruz', 'Delos Santos', 'Dumagat', 'Espiritu', 'Fernandez', 'Flores', 'Garcia', 'Gonzales',
   'Hernandez', 'Lacson', 'Lagasca', 'Lanting', 'Ledesma', 'Lopez', 'Magno', 'Manuel', 'Mendoza', 'Montes',
-  'Navarro', 'Nicolas', 'Ortega', 'Padilla', 'Palma', 'Panganiban', 'Perez', 'Reyes', 'Riviera', 'Rosales',
+  'Navarro', 'Nicolas', 'Ortega', 'Padilla', 'Palma', 'Panganiban', 'Perez', 'Reyes', 'Rivera', 'Rosales',
   'Santos', 'Serrano', 'Sison', 'Suarez', 'Tolentino', 'Umali', 'Valdez', 'Velasco', 'Villanueva', 'Yap'
 ];
 
 const middleNames = [
-  'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'J', 'L', 'M', 'N', 'P', 'R', 'S', 'T', 'V', 'Y'
+  'Abalos', 'Bautista', 'Castillo', 'De Guzman', 'Estrada', 'Fabian', 'Galvez', 'Herrera', 'Ilagan', 'Jimenez',
+  'Lim', 'Manalo', 'Navarro', 'Ocampo', 'Pascual', 'Quijano', 'Ramos', 'Salazar', 'Torres', 'Vargas'
 ];
 
 const barangays = [
-  'Brgy. San Isidro, Calapan City, Oriental Mindoro',
-  'Brgy. Sta. Maria, Puerto Galera, Oriental Mindoro',
-  'Brgy. Baco, Baco, Oriental Mindoro',
-  'Brgy. Alangan, Naujan, Oriental Mindoro',
-  'Brgy. Poblacion, Roxas, Oriental Mindoro',
-  'Brgy. San Vicente, Gloria, Oriental Mindoro',
-  'Brgy. Masaguisi, Pinamalayan, Oriental Mindoro',
-  'Brgy. Bagong Bayan, Socorro, Oriental Mindoro',
-  'Brgy. Caguisan, Victoria, Oriental Mindoro',
-  'Brgy. Lantuyang, Bongabong, Oriental Mindoro'
+  'Brgy. Bagong Bayan I, Bongabong, Oriental Mindoro',
+  'Brgy. Bagong Bayan II, Bongabong, Oriental Mindoro',
+  'Brgy. Poblacion, Bongabong, Oriental Mindoro',
+  'Brgy. Anilao, Bongabong, Oriental Mindoro',
+  'Brgy. Labasan, Bongabong, Oriental Mindoro',
+  'Brgy. Masaguisi, Bongabong, Oriental Mindoro',
+  'Brgy. Morente, Bongabong, Oriental Mindoro',
+  'Brgy. San Isidro, Bongabong, Oriental Mindoro',
+  'Brgy. Dayhagan, Bongabong, Oriental Mindoro',
+  'Brgy. Ipil, Bongabong, Oriental Mindoro'
 ];
 
 const schools = [
-  'EMC Integrated School',
-  'Calapan Central School',
+  'Eastern Mindoro College, Inc.',
+  'Bongabong Central School',
+  'Anilao Elementary School',
+  'Labasan Elementary School',
+  'Masaguisi Elementary School',
   'San Isidro Elementary School',
   'Bongabong National High School',
-  'Pinamalayan Academy',
-  'Roxas Community High School',
-  'Puerto Galera National High School',
-  'Naujan Elementary School',
-  'Mindoro State University Laboratory School',
-  'Magsaysay Elementary School'
+  'Pinamalayan Central School',
+  'Roxas Central School',
+  'Gloria Central School'
 ];
 
 const occupations = [
-  'Teacher', 'Farmer', 'Engineer', 'OFW', 'Driver', 'Nurse', 'Business Owner', 'Vendor', 'Government Employee', 'Housewife', 'Househusband', 'Fisherman'
+  'Teacher', 'Farmer', 'Engineer', 'OFW', 'Driver', 'Nurse', 'Business Owner', 'Vendor', 'Government Employee', 'Housewife', 'Fisherman', 'Technician'
 ];
 
-const strandNames = ['STEM', 'ABM', 'HUMSS'];
-const roomAssignments = ['JHS-101', 'JHS-102', 'JHS-103', 'JHS-104', 'JHS-105', 'JHS-106', 'SHS-201', 'SHS-202', 'SHS-203', 'SHS-204', 'SHS-205', 'SHS-206'];
+const birthPlaces = [
+  'Bongabong, Oriental Mindoro',
+  'Pinamalayan, Oriental Mindoro',
+  'Roxas, Oriental Mindoro',
+  'Gloria, Oriental Mindoro',
+  'Calapan City, Oriental Mindoro',
+  'Bansud, Oriental Mindoro',
+  'Mansalay, Oriental Mindoro',
+  'Socorro, Oriental Mindoro'
+];
 
-function pick(list) {
-  return list[Math.floor(Math.random() * list.length)];
+function at(list, index) {
+  return list[Math.abs(index) % list.length];
 }
 
-function sanitizeEmailName(value) {
-  return value.toLowerCase().replace(/[^a-z0-9]+/g, '.').replace(/^\.|\.$/g, '');
+function sanitizeEmailPart(value) {
+  return String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, '.').replace(/^\.|\.$/g, '');
 }
 
-function ensureRange(value, min, max) {
-  return Math.min(max, Math.max(min, value));
+function deterministicPhone(seed) {
+  const num = String(100000000 + ((seed * 7919 + 1234567) % 899999999)).slice(0, 9);
+  return `09${num}`;
 }
 
-function formatPhone() {
-  const digits = Array.from({ length: 9 }, () => Math.floor(Math.random() * 10));
-  return `09${digits.join('')}`;
-}
-
-function birthDateForGrade(gradeLevel, offset = 0) {
+function birthDateForGrade(gradeLevel, seed) {
   const baseYear = Number(academicYear.split('-')[0]);
   const ageMap = { 7: 12, 8: 13, 9: 14, 10: 15, 11: 16, 12: 17 };
-  const age = ageMap[gradeLevel] ?? 15;
-  const year = baseYear - age + offset;
-  const month = 1 + Math.floor(Math.random() * 12);
-  const day = 1 + Math.floor(Math.random() * 27);
+  const age = ageMap[gradeLevel] ?? 14;
+  const year = baseYear - age - (seed % 2);
+  const month = 1 + (seed % 12);
+  const day = 1 + ((seed * 5) % 28);
   return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 }
 
-function generateStudent(seedIndex, gradeLevel, sectionKind, strand = null) {
-  const sex = seedIndex % 2 === 0 ? 'Male' : 'Female';
-  const firstName = pick(firstNames[sex]);
-  const familyName = pick(familyNames);
-  const middleName = pick(middleNames);
+function generateStudent(seedNumber, slotIndex, section) {
+  const sex = slotIndex % 2 === 0 ? 'Male' : 'Female';
+  const firstName = at(firstNames[sex], seedNumber * 3 + slotIndex);
+  const familyName = at(familyNames, seedNumber * 7 + slotIndex * 2);
+  const middleName = at(middleNames, seedNumber * 5 + slotIndex);
+  const sectionSlug = section.code.toLowerCase().replace(/[^a-z0-9]+/g, '').slice(0, 18);
+  const startYear = Number(academicYear.split('-')[0]);
+  const isSSC = section.strand === 'SSC';
+  const isGrade7 = Number(section.yearLevel) === 7;
+  const enrollmentType = isGrade7 ? 'new' : 'old';
+  const studentType = isGrade7 ? 'New' : 'Old';
+  const grade6Average = isSSC
+    ? (86 + ((seedNumber * 3) % 11) + ((seedNumber % 9) * 0.1)).toFixed(1)
+    : (80 + ((seedNumber * 7) % 15) + ((seedNumber % 9) * 0.1)).toFixed(1);
+  const sscExamScore = isSSC ? Number((82 + (seedNumber % 16)).toFixed(1)) : null;
 
-  const student = {
-    familyName,
+  const fatherFirst = at(firstNames.Male, seedNumber * 11 + 3);
+  const motherFirst = at(firstNames.Female, seedNumber * 13 + 5);
+  const guardianName = slotIndex % 2 === 0 ? `${fatherFirst} ${familyName}` : `${motherFirst} ${familyName}`;
+  const address = at(barangays, seedNumber);
+  const prevSchool = isGrade7 ? at(schools, seedNumber + 1) : 'Eastern Mindoro College, Inc.';
+
+  return {
     firstName,
     middleName,
+    familyName,
+    fullName: `${firstName} ${familyName}`,
     sex,
-    dateOfBirth: birthDateForGrade(gradeLevel, Math.floor(seedIndex / 40) % 2),
-    placeOfBirth: pick(['Calapan City', 'Puerto Galera', 'Naujan', 'Bongabong', 'Pinamalayan', 'Victoria', 'Roxas', 'Socorro']),
-    email: `${sanitizeEmailName(firstName)}.${sanitizeEmailName(familyName)}.${String(seedIndex + 1).padStart(4, '0')}@emcseed.test`,
-    mobileNumber: formatPhone(),
-    parentsAddress: pick(barangays),
-    guardianTelephone: formatPhone(),
-    guardianName: `${pick(firstNames[sex])} ${familyName}`,
-    guardianOccupation: pick(occupations),
-    guardianAddress: pick(barangays),
-    fatherName: `${pick(firstNames.Male)} ${familyName}`,
-    fatherOccupation: pick(occupations),
-    fatherAddress: pick(barangays),
-    motherName: `${pick(firstNames.Female)} ${familyName}`,
-    motherOccupation: pick(occupations),
-    motherAddress: pick(barangays),
-    gradeLevel: `Grade ${gradeLevel}`,
-    educationLevel: sectionKind === 'SHS' ? 'SHS' : 'JHS',
-    enrollmentType: 'new',
-    studentType: 'New',
-    semester: '1st',
-    academicYear,
-    dateEnrolled: `${Number(academicYear.split('-')[0])}-06-15`,
-    strand: strand || null,
-    sectionKind,
-    lrn: `${String(100000000000 + seedIndex + 1).slice(-12)}`,
-    schoolName: pick(schools),
-    grade6School: pick(schools),
-    grade6SchoolAddress: pick(barangays),
-    grade6Average: String((80 + ((seedIndex * 7) % 18)).toFixed(1)),
-    guardianNameDisplay: `${pick(firstNames[sex])} ${familyName}`,
-    studentNumber: `${Number(academicYear.split('-')[0])}-${String(seedIndex + 1).padStart(5, '0')}`,
+    dateOfBirth: birthDateForGrade(Number(section.yearLevel), seedNumber),
+    placeOfBirth: at(birthPlaces, seedNumber),
+    email: `${sanitizeEmailPart(firstName)}.${sanitizeEmailPart(familyName)}.${sectionSlug}.${String(slotIndex).padStart(2, '0')}@emcseed.test`,
+    mobileNumber: deterministicPhone(seedNumber * 2 + 1),
+    parentsAddress: address,
+    guardianTelephone: deterministicPhone(seedNumber * 2 + 2),
+    guardianName,
+    guardianOccupation: at(occupations, seedNumber + 2),
+    guardianAddress: address,
+    fatherName: `${fatherFirst} ${familyName}`,
+    fatherOccupation: at(occupations, seedNumber),
+    fatherAddress: address,
+    motherName: `${motherFirst} ${familyName}`,
+    motherOccupation: at(occupations, seedNumber + 4),
+    motherAddress: address,
+    educationLevel: section.course,
+    gradeLevel: `Grade ${section.yearLevel}`,
+    strand: section.course === 'SHS' ? (section.strand || null) : null,
+    lrn: String(109202600000 + seedNumber).slice(-12),
+    studentNumber: `${startYear}-${String(seedNumber).padStart(5, '0')}`,
+    enrollmentType,
+    studentType,
+    semester: section.semester || '1st Trimester',
+    academicYear: section.schoolYear,
+    dateEnrolled: `${startYear}-06-15`,
+    grade6School: at(schools, seedNumber + 1),
+    grade6SchoolAddress: at(barangays, seedNumber + 3),
+    grade6Section: at(['A', 'B', 'C', 'D'], seedNumber),
+    grade6SYStart: String(startYear - (Number(section.yearLevel) - 6)),
+    grade6SYEnd: String(startYear - (Number(section.yearLevel) - 7)),
+    grade6Average,
+    grade6Remarks: 'Promoted',
+    lastHSSchool: prevSchool,
+    lastHSCurriculumYear: isGrade7 ? 'Grade 6' : `Grade ${Number(section.yearLevel) - 1}`,
+    lastHSSection: isGrade7 ? 'A' : section.code,
+    lastHSSYStart: String(startYear - 1),
+    lastHSSYEnd: String(startYear),
+    sscApplied: isSSC,
+    sscQualified: isSSC,
+    sscExamDate: isSSC ? `${startYear}-05-15` : null,
+    sscExamScore,
+    sscPassingScore: 75.0,
+    sscResult: isSSC ? 'passed' : null,
+    sscClass: isSSC ? 'SSC' : 'Regular',
+    sscChoiceMade: isSSC,
   };
-
-  return student;
-}
-
-const sectionTemplates = [];
-
-for (let gradeLevel = 7; gradeLevel <= 10; gradeLevel += 1) {
-  for (let sectionNumber = 1; sectionNumber <= 5; sectionNumber += 1) {
-    sectionTemplates.push({
-      course: 'JHS',
-      yearLevel: gradeLevel,
-      strand: null,
-      sectionCode: `JHS${gradeLevel}-${String.fromCharCode(64 + sectionNumber)}`,
-      type: 'regular',
-      capacity: 40,
-      instructor: `${pick(['Ms.', 'Mrs.', 'Mr.'])} ${pick(['Mendoza', 'Cruz', 'Velasco', 'Bautista', 'Santos', 'De Leon'])}`,
-      room: pick(roomAssignments),
-      schedule: pick(['MWF 8:00-9:00 AM', 'TTh 9:00-10:30 AM', 'MWF 10:30-12:00 PM', 'TTh 1:00-2:30 PM'])
-    });
-  }
-
-  sectionTemplates.push({
-    course: 'JHS',
-    yearLevel: gradeLevel,
-    strand: 'SSC',
-    sectionCode: `JHS${gradeLevel}-SSC`,
-    type: 'ssc',
-    capacity: 40,
-    instructor: `${pick(['Ms.', 'Mrs.', 'Mr.'])} ${pick(['Aguinaldo', 'Reyes', 'Ledesma', 'Nicolas', 'Tolentino'])}`,
-    room: pick(roomAssignments),
-    schedule: pick(['MWF 7:30-8:30 AM', 'TTh 8:00-9:00 AM', 'MWF 1:00-2:30 PM'])
-  });
-}
-
-for (const strand of strandNames) {
-  for (const gradeLevel of [11, 12]) {
-    sectionTemplates.push({
-      course: 'SHS',
-      yearLevel: gradeLevel,
-      strand,
-      sectionCode: `SHS${gradeLevel}-${strand}`,
-      type: 'shs',
-      capacity: 40,
-      instructor: `${pick(['Ms.', 'Mrs.', 'Mr.'])} ${pick(['Mendoza', 'Sison', 'Garcia', 'Lacson', 'Dela Cruz'])}`,
-      room: pick(roomAssignments),
-      schedule: pick(['MWF 8:00-9:30 AM', 'TTh 9:30-11:00 AM', 'MWF 1:00-2:30 PM'])
-    });
-  }
-}
-
-let studentSeedNumber = 1;
-const enrollmentPlan = [];
-
-for (const section of sectionTemplates) {
-  const sectionType = section.course === 'SHS' ? 'SHS' : (section.strand === 'SSC' ? 'JHS-SSC' : 'JHS');
-  for (let index = 1; index <= section.capacity; index += 1) {
-    const student = generateStudent(studentSeedNumber, section.yearLevel, sectionType, section.strand || null);
-    enrollmentPlan.push({
-      ...student,
-      sectionCode: section.sectionCode,
-      sectionId: null,
-      sectionType,
-      sectionCourse: section.course,
-    });
-    studentSeedNumber += 1;
-  }
 }
 
 try {
   await sequelize.authenticate();
-  await sequelize.sync();
 
-  // ── 1. Create User accounts for all unique advisers/teachers ─────────────────
-  const uniqueInstructors = [...new Set(sectionTemplates.map((s) => s.instructor.trim()))];
-  const teacherMap = new Map();
+  const sections = await Section.findAll({
+    where: { isActive: true, schoolYear: academicYear },
+    order: [['yearLevel', 'ASC'], ['id', 'ASC']],
+  });
 
-  for (const instructorName of uniqueInstructors) {
-    const emailPrefix = sanitizeEmailName(instructorName);
-    const email = `${emailPrefix}@emc.edu.ph`;
-    const [teacherUser] = await User.findOrCreate({
-      where: { name: instructorName },
-      defaults: {
-        name: instructorName,
-        email,
-        password: passwordHash,
-        role: 'teacher',
-        department: 'High School Faculty',
-        isActive: true,
-        isVerified: true,
-        authProvider: 'password',
-      },
-    });
-    teacherMap.set(instructorName, teacherUser);
+  if (sections.length === 0) {
+    throw new Error(`No active sections found for school year ${academicYear}. Run "npm run seed:sections" first.`);
   }
 
-  const createdSections = [];
-  for (const section of sectionTemplates) {
-    const teacherUser = teacherMap.get(section.instructor.trim());
-    const teacherId = teacherUser ? teacherUser.id : null;
+  const passwordHash = await bcrypt.hash(defaultPassword, 10);
+  const now = new Date();
 
-    const [record, created] = await Section.findOrCreate({
-      where: {
-        code: section.sectionCode,
-        course: section.course,
-        yearLevel: section.yearLevel,
-        strand: section.strand || null,
-        schoolYear: academicYear,
-      },
-      defaults: {
-        code: section.sectionCode,
-        course: section.course,
-        yearLevel: section.yearLevel,
-        strand: section.strand || null,
-        semester: '1st',
-        schoolYear: academicYear,
-        instructor: section.instructor,
-        teacherId,
-        schedule: section.schedule,
-        room: section.room,
-        capacity: section.capacity,
-        currentEnrollment: 0,
-        isActive: true,
-      },
-    });
-
-    await record.update({
-      code: section.sectionCode,
-      course: section.course,
-      yearLevel: section.yearLevel,
-      strand: section.strand || null,
-      semester: '1st',
-      schoolYear: academicYear,
-      instructor: section.instructor,
-      teacherId,
-      schedule: section.schedule,
-      room: section.room,
-      capacity: section.capacity,
-      currentEnrollment: 0,
-      isActive: true,
-    });
-
-    createdSections.push(record);
-  }
-
-  const sectionMap = new Map(createdSections.map((section) => [section.code, section]));
+  let seedNumber = 1;
   let createdUsers = 0;
+  let updatedUsers = 0;
   let createdEnrollments = 0;
+  let updatedEnrollments = 0;
 
-  for (const student of enrollmentPlan) {
-    const [user, userCreated] = await User.findOrCreate({
-      where: { email: student.email },
-      defaults: {
-        name: `${student.firstName} ${student.familyName}`,
-        email: student.email,
-        password: passwordHash,
-        authProvider: 'password',
-        role: 'student',
-        isActive: true,
-        isVerified: true,
-        department: null,
-      },
-    });
+  for (const section of sections) {
+    const planned = [];
+    for (let slot = 1; slot <= studentsPerSection; slot += 1) {
+      planned.push(generateStudent(seedNumber, slot, section));
+      seedNumber += 1;
+    }
 
-    if (userCreated) {
-      createdUsers += 1;
-    } else {
-      await user.update({
-        name: `${student.firstName} ${student.familyName}`,
-        password: passwordHash,
-        authProvider: 'password',
-        role: 'student',
-        isActive: true,
-        isVerified: true,
+    await sequelize.transaction(async (transaction) => {
+      const emails = planned.map((s) => s.email);
+      const existingUsers = await User.findAll({
+        where: { email: { [Op.in]: emails } },
+        transaction,
       });
-    }
+      const userByEmail = new Map(existingUsers.map((u) => [u.email, u]));
 
-    const section = sectionMap.get(student.sectionCode);
-    if (!section) {
-      throw new Error(`Section not found: ${student.sectionCode}`);
-    }
+      const usersToCreate = [];
+      for (const s of planned) {
+        if (!userByEmail.has(s.email)) {
+          usersToCreate.push({
+            name: s.fullName,
+            firstName: s.firstName,
+            middleName: s.middleName,
+            lastName: s.familyName,
+            mobileNumber: s.mobileNumber,
+            profileCompleted: true,
+            email: s.email,
+            password: passwordHash,
+            authProvider: 'password',
+            role: 'student',
+            department: null,
+            isActive: true,
+            isVerified: true,
+          });
+        }
+      }
 
-    const existingEnrollment = await EnrollmentRecord.findOne({
-      where: {
-        [Op.or]: [
-          { userId: user.id },
-          { studentNumber: student.studentNumber },
-          { lrn: student.lrn },
-        ],
-      },
-    });
+      if (usersToCreate.length > 0) {
+        const inserted = await User.bulkCreate(usersToCreate, { transaction });
+        for (const u of inserted) userByEmail.set(u.email, u);
+        createdUsers += inserted.length;
+      }
 
-    const enrollmentData = {
-      userId: user.id,
-      admissionId: null,
-      educationLevel: student.educationLevel,
-      gradeLevel: student.gradeLevel,
-      strand: student.strand,
-      lrn: student.lrn,
-      parentsAddress: student.parentsAddress,
-      guardianTelephone: student.guardianTelephone,
-      grade6School: student.grade6School,
-      grade6SchoolAddress: student.grade6SchoolAddress,
-      grade6Section: 'A',
-      grade6SYStart: String(Number(academicYear.split('-')[0]) - 1),
-      grade6SYEnd: String(Number(academicYear.split('-')[0])),
-      grade6Average: student.grade6Average,
-      grade6Remarks: 'Promoted',
-      lastHSSchool: student.schoolName,
-      lastHSCurriculumYear: `Grade ${section.yearLevel - 1}`,
-      lastHSSection: section.sectionCode,
-      lastHSSYStart: String(Number(academicYear.split('-')[0]) - 1),
-      lastHSSYEnd: String(Number(academicYear.split('-')[0])),
-      enrollmentType: student.enrollmentType,
-      studentType: student.studentType,
-      studentNumber: student.studentNumber,
-      semester: student.semester,
-      academicYear: student.academicYear,
-      dateEnrolled: student.dateEnrolled,
-      familyName: student.familyName,
-      firstName: student.firstName,
-      middleName: student.middleName,
-      sex: student.sex,
-      dateOfBirth: student.dateOfBirth,
-      placeOfBirth: student.placeOfBirth,
-      email: student.email,
-      mobileNumber: student.mobileNumber,
-      fatherName: student.fatherName,
-      fatherOccupation: student.fatherOccupation,
-      fatherAddress: student.fatherAddress,
-      motherName: student.motherName,
-      motherOccupation: student.motherOccupation,
-      motherAddress: student.motherAddress,
-      guardianName: student.guardianName,
-      guardianOccupation: student.guardianOccupation,
-      guardianAddress: student.guardianAddress,
-      educationalBackground: {
-        previousSchool: student.schoolName,
-        previousGrade: `Grade ${section.yearLevel - 1}`,
-      },
-      subjects: [],
-      studentSignature: `${student.firstName} ${student.familyName}`,
-      referredBy: 'Seeded enrollment',
-      sscApplied: section.strand === 'SSC',
-      sscQualified: section.strand === 'SSC',
-      sscExamDate: null,
-      sscExamScore: null,
-      sscPassingScore: 75.0,
-      sscResult: section.strand === 'SSC' ? 'passed' : null,
-      sscClass: section.strand === 'SSC' ? 'SSC' : 'Regular',
-      sscChoiceMade: section.strand === 'SSC',
-      status: 'enrolled',
-      sectionId: section.id,
-      sectionName: section.code,
-      completion_percentage: 100,
-      lifeStatus: 'enrolled',
-      lifeStatusReason: 'Seeded active student',
-      lifeStatusDate: student.dateEnrolled,
-      lifeStatusUpdatedBy: null,
-      destinationSchool: null,
-    };
+      for (const u of existingUsers) {
+        const s = planned.find((item) => item.email === u.email);
+        await u.update({
+          name: s.fullName,
+          firstName: s.firstName,
+          middleName: s.middleName,
+          lastName: s.familyName,
+          mobileNumber: s.mobileNumber,
+          profileCompleted: true,
+          password: passwordHash,
+          authProvider: 'password',
+          role: 'student',
+          isActive: true,
+          isVerified: true,
+        }, { transaction });
+        updatedUsers += 1;
+      }
 
-    if (existingEnrollment) {
-      await existingEnrollment.update(enrollmentData);
-    } else {
-      await EnrollmentRecord.create(enrollmentData);
-      createdEnrollments += 1;
-    }
+      const userIds = planned.map((s) => userByEmail.get(s.email).id);
+      const existingEnrollments = await EnrollmentRecord.findAll({
+        where: { userId: { [Op.in]: userIds }, academicYear: section.schoolYear },
+        transaction,
+      });
+      const enrollmentByUserId = new Map(existingEnrollments.map((er) => [er.userId, er]));
 
-    await section.update({
-      currentEnrollment: await EnrollmentRecord.count({ where: { sectionId: section.id } }),
+      const enrollmentsToCreate = [];
+      for (const s of planned) {
+        const user = userByEmail.get(s.email);
+        const enrollmentData = {
+          userId: user.id,
+          admissionId: null,
+          educationLevel: s.educationLevel,
+          gradeLevel: s.gradeLevel,
+          strand: s.strand,
+          lrn: s.lrn,
+          parentsAddress: s.parentsAddress,
+          guardianTelephone: s.guardianTelephone,
+          grade6School: s.grade6School,
+          grade6SchoolAddress: s.grade6SchoolAddress,
+          grade6Section: s.grade6Section,
+          grade6SYStart: s.grade6SYStart,
+          grade6SYEnd: s.grade6SYEnd,
+          grade6Average: s.grade6Average,
+          grade6Remarks: s.grade6Remarks,
+          lastHSSchool: s.lastHSSchool,
+          lastHSCurriculumYear: s.lastHSCurriculumYear,
+          lastHSSection: s.lastHSSection,
+          lastHSSYStart: s.lastHSSYStart,
+          lastHSSYEnd: s.lastHSSYEnd,
+          enrollmentType: s.enrollmentType,
+          studentType: s.studentType,
+          studentNumber: s.studentNumber,
+          semester: s.semester,
+          academicYear: s.academicYear,
+          dateEnrolled: s.dateEnrolled,
+          familyName: s.familyName,
+          firstName: s.firstName,
+          middleName: s.middleName,
+          sex: s.sex,
+          dateOfBirth: s.dateOfBirth,
+          placeOfBirth: s.placeOfBirth,
+          email: s.email,
+          mobileNumber: s.mobileNumber,
+          fatherName: s.fatherName,
+          fatherOccupation: s.fatherOccupation,
+          fatherAddress: s.fatherAddress,
+          motherName: s.motherName,
+          motherOccupation: s.motherOccupation,
+          motherAddress: s.motherAddress,
+          guardianName: s.guardianName,
+          guardianOccupation: s.guardianOccupation,
+          guardianAddress: s.guardianAddress,
+          educationalBackground: {
+            previousSchool: s.lastHSSchool,
+            previousGrade: s.lastHSCurriculumYear,
+          },
+          subjects: [],
+          studentSignature: s.fullName,
+          parentGuardianSignature: s.guardianName,
+          referredBy: 'Seeded enrollment',
+          sscApplied: s.sscApplied,
+          sscQualified: s.sscQualified,
+          sscExamDate: s.sscExamDate,
+          sscExamScore: s.sscExamScore,
+          sscPassingScore: s.sscPassingScore,
+          sscResult: s.sscResult,
+          sscClass: s.sscClass,
+          sscChoiceMade: s.sscChoiceMade,
+          status: 'enrolled',
+          approved_at: now,
+          sectionId: section.id,
+          sectionName: section.code,
+          completion_percentage: 100,
+          lifeStatus: 'enrolled',
+          lifeStatusReason: 'Seeded active student',
+          lifeStatusDate: s.dateEnrolled,
+          lifeStatusUpdatedBy: null,
+          destinationSchool: null,
+        };
+
+        const existing = enrollmentByUserId.get(user.id);
+        if (existing) {
+          await existing.update(enrollmentData, { transaction });
+          updatedEnrollments += 1;
+        } else {
+          enrollmentsToCreate.push(enrollmentData);
+        }
+      }
+
+      if (enrollmentsToCreate.length > 0) {
+        await EnrollmentRecord.bulkCreate(enrollmentsToCreate, { transaction });
+        createdEnrollments += enrollmentsToCreate.length;
+      }
+
+      const count = await EnrollmentRecord.count({
+        where: { sectionId: section.id, academicYear: section.schoolYear, status: ['enrolled', 'active'] },
+        transaction,
+      });
+      await section.update({ currentEnrollment: count }, { transaction });
+      console.log(`Seeded ${section.code} (Grade ${section.yearLevel} ${section.strand || 'Regular'}): ${count}/${section.capacity} enrolled`);
     });
   }
 
-  const sectionCounts = new Map();
-  for (const section of createdSections) {
-    const count = await EnrollmentRecord.count({ where: { sectionId: section.id } });
-    sectionCounts.set(section.code, count);
-    await section.update({ currentEnrollment: count });
-  }
-
-  const totalSeeded = enrollmentPlan.length;
-  console.log('✅ Student seeding complete');
-  console.log(`Generated or updated ${totalSeeded} student records`);
-  console.log(`Sections: ${createdSections.length}`);
-  console.log(`Student accounts linked: ${createdUsers + createdEnrollments}`);
-  console.log(`Total section enrollment: ${Array.from(sectionCounts.values()).reduce((sum, count) => sum + count, 0)}`);
+  console.log(`\nDone! Seeded ${studentsPerSection} students across ${sections.length} sections (${sections.length * studentsPerSection} total).`);
+  console.log(`Student users: ${createdUsers} created, ${updatedUsers} updated`);
+  console.log(`Enrollment records: ${createdEnrollments} created, ${updatedEnrollments} updated`);
 } catch (error) {
-  console.error('Student seeding failed:', error.message);
+  console.error('Student seeding failed:', error);
   process.exitCode = 1;
 } finally {
   await sequelize.close();

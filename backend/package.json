@@ -9,6 +9,8 @@
     "xian": "nodemon index.js",
     "migrate": "node migrate.js",
     "seed:users": "node seed-users.js",
+    "seed:teachers": "node seed-teachers.js",
+    "seed:sections": "node seed-sections.js",
     "seed:students": "node seed-students.js",
     "db:refresh": "node scripts/refresh-database.js",
     "create:model": "node create.js model",

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Loader2, Save } from "lucide-react";
 import { API } from "../config/api";
+import { autoCapitalizeWords } from "../utils/phLocations";
 
 const NAME_PATTERN = /^[\p{L}\p{M}\s.'\u2019-]+$/u;
 const fields = [
@@ -57,7 +58,7 @@ export function ProfileDetailsForm({ user, onSaved, onCancel, submitLabel = "Sav
       {fields.map(({ key, label, required, autoComplete }) => <div key={key} className="space-y-2">
         <label htmlFor={`profile-${key}`} className="block text-sm font-semibold text-[#001840]">{label}{required && <span className="text-red-500 ml-1" aria-hidden="true">*</span>}</label>
         <input id={`profile-${key}`} name={key} value={values[key]} onChange={(event) => {
-          const value = key === "mobileNumber" ? event.target.value.replace(/[^0-9]/g, "").slice(0, 11) : event.target.value.slice(0, 100);
+          const value = key === "mobileNumber" ? event.target.value.replace(/[^0-9]/g, "").slice(0, 11) : autoCapitalizeWords(event.target.value.slice(0, 100));
           setValues((previous) => ({ ...previous, [key]: value }));
         }} onPaste={(event) => {
           if (key !== "mobileNumber") event.preventDefault();

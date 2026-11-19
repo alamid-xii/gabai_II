@@ -124,7 +124,7 @@ export async function moveToSection(enrollmentId, newSectionId) {
       }
       await query(`UPDATE enrollment_records SET sectionId = ?, sectionName = ?, status = 'enrolled', studentNumber = COALESCE(?, studentNumber),
         lifeStatus = COALESCE(lifeStatus, ?), updatedAt = NOW() WHERE id = ?`, {
-        replacements: [section.id, section.code, studentNumber, enrollment.enrollmentType === 'transferee' ? 'transferred_in' : 'enrolled', enrollmentId],
+        replacements: [section.id, section.code, studentNumber, 'enrolled', enrollmentId],
       });
       for (const id of new Set([oldSectionId, targetSectionId].filter(Boolean))) {
         await query('UPDATE sections SET currentEnrollment = ?, updatedAt = NOW() WHERE id = ?', { replacements: [await sectionCount(query, id), id] });
