@@ -991,11 +991,11 @@ export function AerialPinPicker({ position, onPositionChange, onClose }) {
         <div className="flex-1 min-h-0 p-3 flex items-center justify-center bg-gray-100 overflow-hidden select-none">
           <div
             onClick={handleImageClick}
-            className="relative shadow-md rounded-xl overflow-hidden border border-gray-200 aspect-[1922/2048] h-full w-auto max-w-full max-h-full cursor-crosshair"
+            className="relative shadow-md rounded-xl overflow-hidden border border-gray-200 bg-white aspect-[1024/1012] h-full w-auto max-w-full max-h-full cursor-crosshair"
           >
             <img
               ref={imgRef}
-              src="/emc_aerial.jpg"
+              src="/emc_campus_map.webp"
               alt="EMC Campus"
               className="w-full h-full object-contain block pointer-events-none select-none"
               draggable={false}

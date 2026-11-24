@@ -30,7 +30,7 @@ import { Input } from "../../components/ui/input";
 import { API } from "../../config/api";
 import { AerialPinPicker } from "./AdminUsers";
 
-const aerialPhoto = "/emc_aerial.jpg";
+const aerialPhoto = "/emc_campus_map.webp";
 
 export function AdminBuildings({ buildings = [], onRefresh }) {
   const [showForm, setShowForm] = useState(false);
@@ -614,28 +614,28 @@ export function AdminBuildings({ buildings = [], onRefresh }) {
           </div>
 
           {/* Building List */}
-          <div className="bg-[#102A71] rounded-2xl overflow-hidden flex flex-col lg:flex-1 lg:min-h-0 shadow-md">
-            <div className="px-4 py-2.5 border-b border-[#001840]/30 shrink-0 flex items-center justify-between">
+          <div className="bg-white rounded-2xl border border-gray-200/90 overflow-hidden flex flex-col lg:flex-1 lg:min-h-0 shadow-2xs">
+            <div className="px-4 py-2.5 border-b border-gray-100 bg-gray-50/60 shrink-0 flex items-center justify-between">
               <div>
-                <h3 className="text-[#FFDC5F] font-semibold text-xs uppercase tracking-wider">
+                <h3 className="text-[#001840] font-bold text-xs uppercase tracking-wider">
                   Buildings &amp; Facilities
                 </h3>
-                <p className="text-[#FFFDF0]/50 text-xs">{filtered.length} found</p>
+                <p className="text-gray-500 text-xs">{filtered.length} found</p>
               </div>
               {selectedBuilding && (
                 <button
                   type="button"
                   onClick={() => setSelectedBuildingId(null)}
-                  className="text-xs font-semibold text-[#FFDC5F] hover:underline cursor-pointer"
+                  className="text-xs font-semibold text-[#102A71] hover:underline cursor-pointer"
                 >
                   Show Map
                 </button>
               )}
             </div>
 
-            <div className="overflow-y-auto max-h-56 lg:max-h-none lg:flex-1 lg:min-h-0 overscroll-contain">
+            <div className="overflow-y-auto max-h-56 lg:max-h-none lg:flex-1 lg:min-h-0 divide-y divide-gray-100 overscroll-contain">
               {filtered.length === 0 ? (
-                <div className="px-4 py-8 text-center text-[#FFFDF0]/50 text-sm">
+                <div className="px-4 py-8 text-center text-gray-400 text-sm">
                   {buildings.length === 0
                     ? "No buildings added yet. Click '+ Add Building' in the top header."
                     : "No buildings match your search."}
@@ -649,32 +649,30 @@ export function AdminBuildings({ buildings = [], onRefresh }) {
                       onClick={() =>
                         setSelectedBuildingId(isSelected ? null : building.id)
                       }
-                      className={`w-full text-left px-3.5 py-3 border-b border-[#001840]/20 flex items-center gap-3 transition-colors cursor-pointer ${
-                        isSelected ? "bg-[#F5C400]/20" : "hover:bg-[#001840]/20"
+                      className={`w-full text-left px-3.5 py-3 flex items-center gap-3 transition-colors cursor-pointer border-l-4 ${
+                        isSelected
+                          ? "bg-[#EEF2FF] border-l-[#102A71]"
+                          : "hover:bg-gray-50 border-l-transparent"
                       }`}
                     >
                       <div
                         className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
-                          isSelected ? "bg-[#F5C400]" : "bg-[#001840]/40"
+                          isSelected ? "bg-[#F5C400] text-[#001840]" : "bg-[#EEF2FF] text-[#102A71]"
                         }`}
                       >
-                        <Building2
-                          className={`w-4 h-4 ${
-                            isSelected ? "text-[#001840]" : "text-[#FFDC5F]"
-                          }`}
-                        />
+                        <Building2 className="w-4 h-4" />
                       </div>
 
                       <div className="min-w-0 flex-1">
                         <p
-                          className={`text-sm font-medium truncate ${
-                            isSelected ? "text-[#F5C400]" : "text-[#FFFDF0]"
+                          className={`text-sm font-semibold truncate ${
+                            isSelected ? "text-[#001840]" : "text-gray-800"
                           }`}
                         >
                           {building.name || building.shortName}
                         </p>
                         {building.category && (
-                          <p className="text-xs text-[#FFFDF0]/50 truncate">
+                          <p className="text-xs text-gray-500 truncate">
                             {building.category}
                           </p>
                         )}
@@ -691,7 +689,7 @@ export function AdminBuildings({ buildings = [], onRefresh }) {
                             setShowForm(false);
                           }}
                           title="Edit building"
-                          className="w-7 h-7 min-h-0 p-0 inline-flex items-center justify-center rounded-md text-[#FFDC5F]/80 hover:text-[#001840] hover:bg-[#F5C400] transition-colors cursor-pointer"
+                          className="w-7 h-7 min-h-0 p-0 inline-flex items-center justify-center rounded-md text-[#102A71] hover:text-[#001840] hover:bg-[#F5C400] transition-colors cursor-pointer"
                         >
                           <Edit className="w-3.5 h-3.5 block" />
                         </button>
@@ -699,7 +697,7 @@ export function AdminBuildings({ buildings = [], onRefresh }) {
                           type="button"
                           onClick={() => handleDelete(building.id)}
                           title="Delete building"
-                          className="w-7 h-7 min-h-0 p-0 inline-flex items-center justify-center rounded-md text-red-300 hover:text-white hover:bg-red-600/80 transition-colors cursor-pointer"
+                          className="w-7 h-7 min-h-0 p-0 inline-flex items-center justify-center rounded-md text-red-500 hover:text-white hover:bg-red-600 transition-colors cursor-pointer"
                         >
                           <Trash2 className="w-3.5 h-3.5 block" />
                         </button>
@@ -709,8 +707,8 @@ export function AdminBuildings({ buildings = [], onRefresh }) {
                           }
                           className={`w-4 h-4 ml-0.5 transition-transform ${
                             isSelected
-                              ? "text-[#F5C400] rotate-90"
-                              : "text-[#FFFDF0]/30"
+                              ? "text-[#102A71] rotate-90"
+                              : "text-gray-300"
                           }`}
                         />
                       </div>
@@ -728,26 +726,26 @@ export function AdminBuildings({ buildings = [], onRefresh }) {
             /* ── Building Details (Same as public Virtual Tour + Admin Edit/Delete buttons) ── */
             <div
               ref={detailsRef}
-              className="bg-[#102A71] text-white rounded-2xl lg:overflow-y-auto shadow-xl flex-1 lg:min-h-0 flex flex-col"
+              className="bg-white text-[#001840] border border-gray-200/90 rounded-2xl lg:overflow-y-auto shadow-sm flex-1 lg:min-h-0 flex flex-col"
             >
               {/* Header */}
-              <div className="flex items-start justify-between gap-3 p-4 sm:p-6 pb-4 shrink-0 flex-wrap">
+              <div className="flex items-start justify-between gap-3 p-4 sm:p-6 pb-4 border-b border-gray-100 shrink-0 flex-wrap">
                 <div className="flex items-start gap-3 flex-1 min-w-0">
-                  <div className="bg-[#F5C400] w-12 h-12 rounded-xl flex items-center justify-center shrink-0 shadow-lg">
+                  <div className="bg-[#F5C400] w-12 h-12 rounded-xl flex items-center justify-center shrink-0 shadow-xs">
                     <Building2 className="w-6 h-6 text-[#001840]" />
                   </div>
                   <div>
                     {selectedBuilding.category && (
-                      <span className="bg-[#FFDC5F] text-[#001840] text-xs font-bold px-2.5 py-0.5 rounded-full">
+                      <span className="bg-[#FFF4C2] text-[#001840] border border-[#F5C400]/50 text-xs font-bold px-2.5 py-0.5 rounded-full">
                         {selectedBuilding.category}
                       </span>
                     )}
-                    <h3 className="font-bold text-lg sm:text-xl leading-snug mt-1 break-words">
+                    <h3 className="font-bold text-lg sm:text-xl leading-snug mt-1 break-words text-[#001840]">
                       {selectedBuilding.name || selectedBuilding.shortName}
                     </h3>
                     {selectedBuilding.shortName &&
                       selectedBuilding.shortName !== selectedBuilding.name && (
-                        <p className="text-[#FFDC5F]/60 text-xs mt-0.5">
+                        <p className="text-gray-500 text-xs mt-0.5">
                           Also known as: {selectedBuilding.shortName}
                         </p>
                       )}
@@ -767,30 +765,30 @@ export function AdminBuildings({ buildings = [], onRefresh }) {
                       setEditingBuilding(selectedBuilding);
                       setShowForm(false);
                     }}
-                    className="bg-[#F5C400] hover:bg-[#FFDC5F] text-[#001840] px-3 py-2 rounded-xl transition-colors flex items-center gap-1.5 text-xs font-bold shadow-sm cursor-pointer"
+                    className="bg-[#F5C400] hover:bg-[#FFDC5F] text-[#001840] px-3 py-2 rounded-xl transition-colors flex items-center gap-1.5 text-xs font-bold shadow-xs cursor-pointer"
                   >
                     <Edit className="w-3.5 h-3.5" /> Edit Building
                   </button>
                   <button
                     type="button"
                     onClick={() => handleDelete(selectedBuilding.id)}
-                    className="bg-red-500/20 hover:bg-red-600 text-red-200 hover:text-white border border-red-400/30 px-3 py-2 rounded-xl transition-colors flex items-center gap-1.5 text-xs font-semibold cursor-pointer"
+                    className="bg-red-50 hover:bg-red-600 text-red-600 hover:text-white border border-red-200 px-3 py-2 rounded-xl transition-colors flex items-center gap-1.5 text-xs font-semibold cursor-pointer"
                   >
                     <Trash2 className="w-3.5 h-3.5" /> Delete
                   </button>
                   <button
                     type="button"
                     onClick={() => setSelectedBuildingId(null)}
-                    className="bg-[#001840]/40 hover:bg-[#001840]/70 px-3 py-2 rounded-xl transition-colors flex items-center gap-1.5 text-xs font-semibold text-[#FFFDF0] cursor-pointer"
+                    className="bg-gray-100 hover:bg-gray-200 border border-gray-200 px-3 py-2 rounded-xl transition-colors flex items-center gap-1.5 text-xs font-semibold text-[#001840] cursor-pointer"
                   >
-                    <MapPin className="w-3.5 h-3.5" /> Map
+                    <MapPin className="w-3.5 h-3.5 text-[#102A71]" /> Map
                   </button>
                 </div>
               </div>
 
               {/* Description */}
               {selectedBuilding.description && (
-                <p className="text-[#FFFDF0]/80 text-sm leading-relaxed px-4 sm:px-6 pb-5">
+                <p className="text-gray-600 text-sm leading-relaxed px-4 sm:px-6 py-4">
                   {selectedBuilding.description}
                 </p>
               )}
@@ -798,17 +796,17 @@ export function AdminBuildings({ buildings = [], onRefresh }) {
               {/* Offices + Hours */}
               {(parseOffices(selectedBuilding.offices).length > 0 ||
                 selectedBuilding.hours) && (
-                <div className="grid sm:grid-cols-2 gap-5 px-4 sm:px-6 pb-5 border-t border-[#001840]/30 pt-5">
+                <div className="grid sm:grid-cols-2 gap-5 px-4 sm:px-6 pb-5 border-t border-gray-100 pt-5">
                   {parseOffices(selectedBuilding.offices).length > 0 && (
                     <div>
-                      <h4 className="text-[#FFDC5F] text-xs font-bold uppercase tracking-wider mb-3">
+                      <h4 className="text-[#102A71] text-xs font-bold uppercase tracking-wider mb-3">
                         Offices / Areas
                       </h4>
                       <ul className="space-y-2">
                         {parseOffices(selectedBuilding.offices).map((office, i) => (
                           <li
                             key={i}
-                            className="flex items-center gap-2 text-[#FFFDF0] text-sm"
+                            className="flex items-center gap-2 text-gray-700 text-sm"
                           >
                             <div className="w-1.5 h-1.5 rounded-full bg-[#F5C400] shrink-0" />
                             {office}
@@ -819,10 +817,10 @@ export function AdminBuildings({ buildings = [], onRefresh }) {
                   )}
                   {selectedBuilding.hours && (
                     <div>
-                      <h4 className="text-[#FFDC5F] text-xs font-bold uppercase tracking-wider mb-3">
+                      <h4 className="text-[#102A71] text-xs font-bold uppercase tracking-wider mb-3">
                         Operating Hours
                       </h4>
-                      <p className="text-[#FFFDF0] text-sm leading-relaxed">
+                      <p className="text-gray-700 text-sm leading-relaxed">
                         {selectedBuilding.hours}
                       </p>
                     </div>
@@ -832,14 +830,14 @@ export function AdminBuildings({ buildings = [], onRefresh }) {
 
               {/* 360° Panorama */}
               {selectedBuilding.imageUrl ? (
-                <div className="px-4 sm:px-6 pb-6 border-t border-[#001840]/30 pt-5">
+                <div className="px-4 sm:px-6 pb-6 border-t border-gray-100 pt-5">
                   <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
                     <div className="flex flex-wrap items-center gap-2">
                       <div className="w-2 h-2 bg-[#F5C400] rounded-full animate-pulse" />
-                      <h4 className="text-[#FFDC5F] text-xs font-bold uppercase tracking-wider">
+                      <h4 className="text-[#102A71] text-xs font-bold uppercase tracking-wider">
                         360° Virtual Tour (User View Preview)
                       </h4>
-                      <span className="text-[#FFFDF0]/50 text-xs">
+                      <span className="text-gray-400 text-xs">
                         — Click and drag to look around · Scroll to zoom
                       </span>
                     </div>
@@ -849,12 +847,12 @@ export function AdminBuildings({ buildings = [], onRefresh }) {
                         setEditingBuilding(selectedBuilding);
                         setShowForm(false);
                       }}
-                      className="text-xs font-semibold text-[#FFDC5F] hover:underline cursor-pointer"
+                      className="text-xs font-semibold text-[#102A71] hover:underline cursor-pointer"
                     >
                       Edit 360° Labels / Photo →
                     </button>
                   </div>
-                  <div className="rounded-xl overflow-hidden ring-2 ring-[#F5C400]/30">
+                  <div className="rounded-xl overflow-hidden ring-1 ring-gray-200">
                     <PanoramaViewer
                       key={`${selectedBuilding.id}-${selectedBuilding.imageUrl}-${JSON.stringify(selectedBuilding.panoramaLabels || [])}`}
                       src={selectedBuilding.imageUrl}
@@ -864,9 +862,9 @@ export function AdminBuildings({ buildings = [], onRefresh }) {
                   </div>
                 </div>
               ) : (
-                <div className="px-4 sm:px-6 pb-6 border-t border-[#001840]/30 pt-5">
-                  <div className="bg-[#001840]/30 rounded-xl p-4 text-center space-y-2">
-                    <p className="text-[#FFFDF0]/60 text-sm">
+                <div className="px-4 sm:px-6 pb-6 border-t border-gray-100 pt-5">
+                  <div className="bg-gray-50 border border-gray-100 rounded-xl p-4 text-center space-y-2">
+                    <p className="text-gray-500 text-sm">
                       No 360° photo available for this building yet.
                     </p>
                     <button
@@ -899,7 +897,7 @@ export function AdminBuildings({ buildings = [], onRefresh }) {
               </div>
 
               <div className="lg:flex-1 lg:min-h-0 p-2 sm:p-3 flex items-center justify-center bg-gray-50/60 overflow-hidden">
-                <div className="relative shadow-md rounded-xl overflow-hidden border border-gray-200 aspect-[1922/2048] w-full lg:w-auto lg:h-full max-w-full lg:max-h-full">
+                <div className="relative shadow-md rounded-xl overflow-hidden border border-gray-200 bg-white aspect-[1024/1012] w-full lg:w-auto lg:h-full max-w-full lg:max-h-full">
                   <img
                     src={aerialPhoto}
                     alt="Eastern Mindoro College Aerial View"
