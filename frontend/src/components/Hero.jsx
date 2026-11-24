@@ -1,5 +1,5 @@
 import { SchoolName } from "./SchoolName";
-import { ArrowRight, MapPin } from "lucide-react";
+import { ArrowRight, MapPin, Sparkles } from "lucide-react";
 import { Link } from "react-router";
 
 const heroImage = "/emc_building.jpg";
@@ -13,7 +13,7 @@ export function Hero() {
         <img
           src={heroImage}
           alt="Dr. Angel Francisco Hall - Eastern Mindoro College"
-          className="w-full h-full object-cover object-[center_top] scale-[4] sm:scale-[3.25] lg:scale-[1.5] lg:-translate-y-8 origin-top transition-transform duration-700"
+          className="w-full h-full object-cover object-center transition-transform duration-700"
         />
         {/* Dark overlay for readability */}
         <div className="absolute inset-0 bg-[#001840] opacity-80" />
@@ -36,8 +36,12 @@ export function Hero() {
 
       {/* Content */}
       <div className="relative z-10 max-w-7xl mx-auto px-10 sm:px-6 lg:px-8 py-24 lg:py-32 -translate-y-8 lg:-translate-y-12">
-        <div className="max-w-2xl lg:max-w-3xl space-y-8">
-
+        <div className="max-w-2xl lg:max-w-3xl space-y-6">
+          {/* Active Admissions Pill Badge */}
+          <div className="inline-flex items-center gap-2 bg-[#102A71]/80 border border-[#F5C400]/40 backdrop-blur-xs px-4 py-1.5 rounded-full text-xs sm:text-sm font-medium text-[#FFDC5F]">
+            <Sparkles className="w-4 h-4 text-[#F5C400] shrink-0" />
+            <span>JHS &amp; SHS Admissions &amp; Campus Guide · S.Y. 2026–2027</span>
+          </div>
 
           {/* Headline */}
           <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold leading-tight drop-shadow-lg">
@@ -48,8 +52,8 @@ export function Hero() {
 
           {/* Subtext */}
           <p className="text-lg sm:text-xl text-[#FFDC5F] leading-relaxed max-w-xl">
-            A smart admission and campus guide powered by Natural Language
-            Processing and Campus Virtual Tour (360 images) to simplify enrollment and campus
+            A smart Junior &amp; Senior High School admission and campus guide powered by Natural Language
+            Processing and a 360° Campus Virtual Tour to simplify enrollment and campus
             navigation at <SchoolName />.
           </p>
 
@@ -70,24 +74,28 @@ export function Hero() {
               Try Campus Navigation
             </Link>
           </div>
-
-
         </div>
       </div>
 
       {/* Floating Virtual Tour Card — bottom right */}
       <div className="absolute bottom-42 right-8 lg:right-16 z-10 hidden md:block">
-        <div className="bg-[#FFFDF0] p-5 rounded-xl shadow-2xl max-w-xs border border-[#F5C400]/30">
+        <Link
+          to="/ar-navigation"
+          className="group block bg-[#FFFDF0] hover:bg-white p-5 rounded-xl shadow-2xl max-w-xs border border-[#F5C400]/30 hover:border-[#F5C400] transition-all duration-200 hover:-translate-y-0.5"
+        >
           <div className="flex items-start gap-3">
-            <div className="bg-[#F5C400] p-3 rounded-lg shrink-0">
+            <div className="bg-[#F5C400] group-hover:bg-[#FFDC5F] p-3 rounded-lg shrink-0 transition-colors">
               <MapPin className="w-5 h-5 text-[#001840]" />
             </div>
             <div>
-              <h4 className="font-semibold text-[#001840]">Campus Virtual Tour Active</h4>
-              <p className="text-sm text-gray-600 mt-1">Explore campus with 360° images</p>
+              <h4 className="font-semibold text-[#001840] flex items-center gap-1.5">
+                Campus Virtual Tour Active
+                <ArrowRight className="w-4 h-4 text-[#102A71] transition-transform group-hover:translate-x-0.5" />
+              </h4>
+              <p className="text-sm text-gray-600 mt-1">Explore campus buildings with 360° views</p>
             </div>
           </div>
-        </div>
+        </Link>
       </div>
 
       {/* Wave Divider */}

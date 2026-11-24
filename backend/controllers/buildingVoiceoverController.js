@@ -29,6 +29,13 @@ export function createVoiceoverHandlers(deps = {}) {
       try {
         const building = await find(req);
         if (!building) return res.status(404).json({ error: 'Building not found' });
+        const incomingScript = typeof req.body?.script === 'string' ? req.body.script.trim() : null;
+        if (incomingScript !== null && incomingScript !== (building.voiceoverScript || '').trim()) {
+          if (!validateScript(incomingScript)) return res.status(400).json({ error: 'Save a custom voiceover script of 1–2,500 characters first.' });
+          await model.update({ voiceoverScript: incomingScript, voiceoverPublished: false }, { where: { id: building.id, isActive: true } });
+          building.voiceoverScript = incomingScript;
+          building.voiceoverPublished = false;
+        }
         const script = building.voiceoverScript?.trim();
         if (!validateScript(script)) return res.status(400).json({ error: 'Save a custom voiceover script of 1–2,500 characters first.' });
         const settings = config();

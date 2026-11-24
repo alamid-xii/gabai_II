@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Clock, Smile, TrendingUp, Heart, Target, Users, GraduationCap, UserCheck } from "lucide-react";
+import { Clock, Smile, TrendingUp, Heart, Target, Compass, Users, GraduationCap, UserCheck } from "lucide-react";
 import { API } from "../config/api";
 
 function AnimatedCounter({ end, duration = 2000, suffix = "+" }) {
@@ -110,9 +110,9 @@ export function Impact() {
       description: "Modern, supportive technology showcases EMC's commitment to students"
     },
     {
-      icon: Target,
-      title: "SDG 4 Aligned",
-      description: "Supports inclusive and equitable quality education for all"
+      icon: Compass,
+      title: "Easy Campus Orientation",
+      description: "Familiarize yourself with classrooms, offices, and campus landmarks before your first day"
     }
   ];
 
@@ -122,10 +122,10 @@ export function Impact() {
         {/* Header */}
         <div className="text-center max-w-3xl mx-auto mb-16">
           <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-[#001840] mb-6">
-            Impact & Benefits
+            Impact &amp; Benefits
           </h2>
           <p className="text-lg text-gray-700">
-            Real outcomes that make a difference in your college journey
+            Real outcomes that make a difference in your academic journey at Eastern Mindoro College
           </p>
         </div>
 

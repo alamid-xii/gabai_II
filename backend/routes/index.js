@@ -59,7 +59,7 @@ import {
   getPrograms, getSubjects, createSubject, updateSubject, deleteSubject,
   getSections, createSection, updateSection, deleteSection,
   getSchoolYears, getActiveSchoolYear, createSchoolYear, setActiveSchoolYear,
-  closeSchoolYear
+  updateSchoolYearEnrollmentTypes, closeSchoolYear
 } from "../controllers/academicController.js";
 
 const router = express.Router();
@@ -162,6 +162,7 @@ router.put("/api/admin/academic/sections/:id", requireAdmin, updateSection);
 router.delete("/api/admin/academic/sections/:id", requireAdmin, deleteSection);
 router.post("/api/admin/academic/school-years", requireAdmin, createSchoolYear);
 router.put("/api/admin/academic/school-years/:id/activate", requireAdmin, setActiveSchoolYear);
+router.put("/api/admin/academic/school-years/:id/enrollment-types", requireAdmin, updateSchoolYearEnrollmentTypes);
 router.post("/api/admin/academic/close-school-year", requireAdmin, closeSchoolYear);
 
 // ── Grading Period API (admin) ────────────────────────────────────────────────

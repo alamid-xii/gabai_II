@@ -417,7 +417,7 @@ export const QAChat = forwardRef(function QAChat({ isOverlay = false } = {}, ref
 
           {/* Input */}
           <div className="bg-white border border-gray-300 rounded-2xl p-2 sm:p-3 shadow-lg shrink-0 mb-[env(safe-area-inset-bottom)]">
-            <div className="flex gap-3">
+            <div className="flex items-center gap-2 sm:gap-3">
               <textarea
                 maxLength={2000}
                 aria-label="Ask GabAI about EMC admissions"
@@ -425,8 +425,8 @@ export const QAChat = forwardRef(function QAChat({ isOverlay = false } = {}, ref
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyPress}
-                placeholder="Ask about EMC admissions. Do not share passwords or personal records."
-                className="flex-1 min-w-0 px-2 sm:px-4 py-3 bg-transparent text-gray-800 placeholder-gray-400 focus:outline-none text-sm resize-none"
+                placeholder="Ask about EMC admissions..."
+                className="flex-1 min-w-0 px-2.5 sm:px-4 py-2.5 sm:py-3 bg-transparent text-gray-800 placeholder-gray-400 focus:outline-none text-xs sm:text-sm leading-5 resize-none"
                 disabled={typing}
                 rows={1}
                 style={{ maxHeight: '120px' }}

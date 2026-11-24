@@ -70,6 +70,7 @@ export function LevelSelection() {
   const activeStrands = settings?.content.strands.filter(item => item.active).map(item => item.name) || [];
   const maintainingAverage = Number(settings?.content?.ssc?.maintainingAverage ?? settings?.content?.ssc?.minimumAverage ?? 85);
   const [activeSchoolYear, setActiveSchoolYear] = useState('');
+  const [activeEnrollmentTypes, setActiveEnrollmentTypes] = useState(null);
   const [sscAverage, setSscAverage] = useState('');
   const [sscPreviousGwa, setSscPreviousGwa] = useState('');
   const [sscGwaError, setSscGwaError] = useState('');
@@ -92,6 +93,8 @@ export function LevelSelection() {
   const [jhsProgram, setJhsProgram] = useState('regular'); // 'regular' | 'ssc'
   const [selectedGrade, setSelectedGrade] = useState('');
   const [selectedType, setSelectedType] = useState('');
+  const [confirmOneClick, setConfirmOneClick] = useState(null);
+  const [submittingOneClick, setSubmittingOneClick] = useState(false);
 
   // Check if student already has an active enrollment for the current active school year
   useEffect(() => {
@@ -105,6 +108,7 @@ export function LevelSelection() {
     ]).then(([sy, data]) => {
       const currentActiveYear = sy?.year || null;
       setActiveSchoolYear(currentActiveYear || '');
+      setActiveEnrollmentTypes(sy?.activeEnrollmentTypes || null);
       const enrollments = Array.isArray(data) ? data : (data.enrollments || []);
 
       const passedSSC = enrollments.find(enrollment => enrollment.sscApplied && enrollment.sscResult === 'passed' && !enrollment.firstName && ['draft', 'submitted'].includes(enrollment.status) && (!currentActiveYear || enrollment.academicYear === currentActiveYear));
@@ -294,7 +298,7 @@ export function LevelSelection() {
     return null; // Grade 12 completed = no next level in this system
   }
 
-  const handleContinueEnrollment = (strand = null, overrideGrade = null, overrideLevel = null, overrideSscClass = null) => {
+  const handleContinueEnrollment = (strand = null, overrideGrade = null, overrideLevel = null, overrideSscClass = null, openFullForm = false) => {
     const record = completedEnrollment || pastRecord;
     if (!record) return;
     const next = getNextLevel(record) || {};
@@ -311,8 +315,93 @@ export function LevelSelection() {
       }
       setSscGwaError('');
     }
-    proceedContinuingEnrollment(finalLvl, finalG, finalS, finalSscClass, sscPreviousGwa || next.previousGwa);
+    const prevAvg = sscPreviousGwa || next.previousGwa;
+    if (openFullForm || !record.studentNumber) {
+      proceedContinuingEnrollment(finalLvl, finalG, finalS, finalSscClass, prevAvg);
+      return;
+    }
+    setConfirmOneClick({
+      educationLevel: finalLvl,
+      gradeLevel: finalG,
+      strand: finalLvl === 'SHS' ? finalS : null,
+      sscClass: finalLvl === 'JHS' ? (finalSscClass || record.sscClass || 'Regular') : null,
+      previousGeneralAverage: prevAvg ?? record.computedGwa ?? record.previousGeneralAverage ?? null,
+    });
   };
+
+  async function submitOneClickContinuing() {
+    const record = completedEnrollment || pastRecord;
+    if (!record || !confirmOneClick || submittingOneClick) return;
+    const token = localStorage.getItem('token');
+    const user = JSON.parse(localStorage.getItem('user') || '{}');
+    if (!token) { toast.error('Please sign in again.'); return; }
+    setSubmittingOneClick(true);
+    try {
+      const payload = {
+        educationLevel: confirmOneClick.educationLevel,
+        gradeLevel: confirmOneClick.gradeLevel,
+        strand: confirmOneClick.strand || null,
+        enrollmentType: 'old',
+        studentType: 'Old',
+        sscClass: confirmOneClick.sscClass,
+        sscApplied: false,
+        academicYear: activeSchoolYear || '',
+        studentNumber: record.studentNumber,
+        lrn: record.lrn || '',
+        familyName: record.familyName || user.lastName || '',
+        firstName: record.firstName || user.firstName || '',
+        middleName: record.middleName || user.middleName || '',
+        sex: record.sex || '',
+        dateOfBirth: record.dateOfBirth || '',
+        placeOfBirth: record.placeOfBirth || '',
+        fatherName: record.fatherName || '',
+        fatherOccupation: record.fatherOccupation || '',
+        fatherMobileNumber: record.fatherMobileNumber || '',
+        motherName: record.motherName || '',
+        motherOccupation: record.motherOccupation || '',
+        motherMobileNumber: record.motherMobileNumber || '',
+        parentsAddress: record.parentsAddress || '',
+        guardianName: record.guardianName || '',
+        guardianOccupation: record.guardianOccupation || '',
+        guardianAddress: record.guardianAddress || '',
+        guardianTelephone: record.guardianTelephone || '',
+        grade6School: record.grade6School || '',
+        grade6SchoolAddress: record.grade6SchoolAddress || '',
+        grade6Section: record.grade6Section || '',
+        grade6SYStart: record.grade6SYStart || '',
+        grade6SYEnd: record.grade6SYEnd || '',
+        grade6Average: record.grade6Average ?? null,
+        grade6Remarks: record.grade6Remarks || '',
+        lastHSSchool: record.lastHSSchool || '',
+        lastHSCurriculumYear: record.lastHSCurriculumYear || '',
+        lastHSSection: record.lastHSSection || '',
+        lastHSSYStart: record.lastHSSYStart || '',
+        lastHSSYEnd: record.lastHSSYEnd || '',
+        previousGeneralAverage: confirmOneClick.previousGeneralAverage,
+      };
+      const createRes = await fetch(`${API}/enrollments`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const created = await createRes.json();
+      if (!createRes.ok) throw new Error(created.message || created.error || 'Could not create continuing enrollment.');
+      const enrollmentId = created.enrollment?.id || created.id;
+      const submitRes = await fetch(`${API}/enrollments/${enrollmentId}/submit`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      });
+      const submitted = await submitRes.json();
+      if (!submitRes.ok) throw new Error(submitted.message || submitted.error || 'Could not submit continuing enrollment.');
+      toast.success(`Successfully enrolled for ${confirmOneClick.gradeLevel}! Your application has been submitted for Registrar approval.`);
+      setConfirmOneClick(null);
+      navigate('/my-enrollments');
+    } catch (err) {
+      toast.error(err.message);
+    } finally {
+      setSubmittingOneClick(false);
+    }
+  }
 
   function proceedContinuingEnrollment(educationLevel, gradeLevel, strand = null, sscClass = null, previousGeneralAverage = null) {
     const record = completedEnrollment || pastRecord || {};
@@ -337,6 +426,25 @@ export function LevelSelection() {
     });
   }
 
+  const isEnrollmentTypeActive = (typeKey) => !activeEnrollmentTypes || activeEnrollmentTypes[typeKey] !== false;
+
+  const sscAllowedTypes = (gradeLevel) => {
+    const base = gradeLevel === 'Grade 7' ? ['new', 'transferee'] : ['old', 'transferee'];
+    return base.filter(isEnrollmentTypeActive);
+  };
+
+  const resolveSscType = (gradeLevel, currentType = '') => {
+    const allowed = sscAllowedTypes(gradeLevel);
+    if (currentType && allowed.includes(currentType)) return currentType;
+    return allowed[0] || '';
+  };
+
+  const visibleEnrollmentTypes = (gradeLevel) => {
+    const allowed = allowedEnrollmentTypes(gradeLevel);
+    if (!activeEnrollmentTypes) return allowed;
+    return allowed.filter(typeKey => activeEnrollmentTypes[typeKey] !== false);
+  };
+
   const openRegularModal = (lvl, defaultGrade = '') => {
     if (pastRecord?.lifeStatus === 'retained' && (lvl === 'SHS' || (defaultGrade && defaultGrade !== pastRecord.gradeLevel))) {
       toast.error(`You were retained in ${pastRecord.gradeLevel || 'Grade 10'} due to failing grades. You cannot advance to Senior High School and must re-enroll in ${pastRecord.gradeLevel || 'Grade 10'}.`);
@@ -349,8 +457,8 @@ export function LevelSelection() {
     }
     const initialG = defaultGrade || (lvl === 'SHS' ? 'Grade 11' : (pastRecord?.lifeStatus === 'retained' ? pastRecord.gradeLevel : 'Grade 7'));
     setSelectedGrade(initialG);
-    const allowed = allowedEnrollmentTypes(initialG);
-    setSelectedType(allowed[0] || 'new');
+    const allowed = visibleEnrollmentTypes(initialG);
+    setSelectedType(allowed[0] || '');
     setSelectedRegularStrand(pastRecord?.strand || activeStrands[0] || '');
     setSscGwaError('');
     setSscFileError('');
@@ -385,11 +493,11 @@ export function LevelSelection() {
       }
       setSelectedGrade(initialGrade);
 
-      const allowed = allowedEnrollmentTypes(initialGrade);
+      const allowed = visibleEnrollmentTypes(initialGrade);
       if (initialProg === 'ssc') {
-        setSelectedType(initialGrade === 'Grade 7' ? 'new' : 'old');
+        setSelectedType(resolveSscType(initialGrade));
       } else {
-        const preferred = (pastRecord?.educationLevel === 'JHS' && allowed.includes('old')) ? 'old' : (allowed[0] || 'new');
+        const preferred = (pastRecord?.educationLevel === 'JHS' && allowed.includes('old')) ? 'old' : (allowed[0] || '');
         setSelectedType(preferred);
       }
 
@@ -417,7 +525,7 @@ export function LevelSelection() {
 
     // JHS Special Science Class (SSC) flow
     if (targetLevel === 'JHS' && jhsProgram === 'ssc') {
-      if (selectedGrade === 'Grade 7') {
+      if (selectedType === 'new' && selectedGrade === 'Grade 7') {
         // Incoming Grade 7 SSC Admission application must be processed by Registrar before enrollment form
         if (sscDone) {
           setShowRegularModal(false);
@@ -426,11 +534,22 @@ export function LevelSelection() {
         }
         await handleSubmitSSC();
         return;
-      } else {
-        // Continuing SSC (Grade 8-10)
-        await proceedContinuingEnrollment('JHS', selectedGrade, null, 'SSC');
+      }
+      if (selectedType === 'transferee') {
+        setShowRegularModal(false);
+        navigate('/hs-enrollment-form', {
+          state: {
+            educationLevel: 'JHS',
+            gradeLevel: selectedGrade,
+            enrollmentType: 'transferee',
+            sscClass: 'SSC',
+          }
+        });
         return;
       }
+      // Continuing SSC (Grade 8-10)
+      await proceedContinuingEnrollment('JHS', selectedGrade, null, 'SSC');
+      return;
     }
 
     if (selectedType === 'old') {
@@ -496,10 +615,11 @@ export function LevelSelection() {
       {/* Back button */}
       <button
         onClick={() => navigate('/my-enrollments')}
-        className="fixed top-20 left-6 flex items-center gap-2 text-[#102A71] hover:text-[#001840] font-medium text-sm transition-colors z-10"
+        aria-label="Back"
+        title="Back"
+        className="fixed top-20 left-4 sm:left-6 inline-flex items-center justify-center min-h-0 w-8 h-8 rounded-lg bg-[#001840]/[0.05] hover:bg-[#001840]/[0.1] text-[#102A71] hover:text-[#001840] transition-colors z-10"
       >
         <ArrowLeft className="w-4 h-4" />
-        Back
       </button>
 
       {/* Unified Enrollment Modal */}
@@ -552,9 +672,9 @@ export function LevelSelection() {
                       setJhsProgram('regular');
                       setSscGwaError('');
                       setSscFileError('');
-                      const allowed = allowedEnrollmentTypes(selectedGrade || 'Grade 7');
+                      const allowed = visibleEnrollmentTypes(selectedGrade || 'Grade 7');
                       if (!allowed.includes(selectedType)) {
-                        setSelectedType(allowed[0] || 'new');
+                        setSelectedType(allowed[0] || '');
                       }
                     }}
                     className={`p-3.5 rounded-xl border-2 text-left transition-all ${jhsProgram === 'regular'
@@ -581,11 +701,7 @@ export function LevelSelection() {
                         setJhsProgram('ssc');
                         setSscGwaError('');
                         setSscFileError('');
-                        if (selectedGrade === 'Grade 7') {
-                          setSelectedType('new');
-                        } else {
-                          setSelectedType('old');
-                        }
+                        setSelectedType(resolveSscType(selectedGrade || 'Grade 7'));
                       }}
                       className={`p-3.5 rounded-xl border-2 text-left transition-all ${jhsProgram === 'ssc'
                         ? 'border-[#F5C400] bg-[#FFFDF0] shadow-xs'
@@ -627,11 +743,11 @@ export function LevelSelection() {
                       setSscGwaError('');
                       setSscFileError('');
                       if (targetLevel === 'JHS' && jhsProgram === 'ssc') {
-                        setSelectedType(newG === 'Grade 7' ? 'new' : 'old');
+                        setSelectedType(resolveSscType(newG));
                       } else {
-                        const allowed = allowedEnrollmentTypes(newG);
+                        const allowed = visibleEnrollmentTypes(newG);
                         if (!allowed.includes(selectedType)) {
-                          setSelectedType(allowed[0] || 'new');
+                          setSelectedType(allowed[0] || '');
                         }
                       }
                     }}
@@ -653,34 +769,42 @@ export function LevelSelection() {
                   <label htmlFor="type-select" className="block text-xs font-semibold text-[#001840] mb-1.5">
                     Applicant Status *
                   </label>
-                  {targetLevel === 'JHS' && jhsProgram === 'ssc' ? (
-                    <div className="h-11 px-3 py-2 bg-gray-50 border-2 border-gray-200 rounded-xl text-xs font-semibold text-[#001840] flex items-center justify-between">
-                      <span>{selectedGrade === 'Grade 7' ? 'Grade 7 SSC Applicant' : 'Continuing SSC Student'}</span>
-                      <span className="text-[10px] text-yellow-700 font-bold bg-yellow-100 px-2 py-0.5 rounded">SSC</span>
-                    </div>
-                  ) : (
-                    <select
-                      id="type-select"
-                      value={selectedType}
-                      onChange={(e) => {
-                        setSelectedType(e.target.value);
-                      }}
-                      className="w-full h-11 px-3 py-2 bg-white border-2 border-gray-200 rounded-xl text-sm font-semibold text-[#001840] focus:outline-none focus:border-[#102A71] transition-all cursor-pointer"
-                    >
-                      {allowedEnrollmentTypes(selectedGrade || (targetLevel === 'SHS' ? 'Grade 11' : 'Grade 7')).map((typeKey) => (
-                        <option key={typeKey} value={typeKey}>
-                          {typeKey === 'old' ? 'Continuing Student' : ENROLLMENT_TYPE_LABELS[typeKey] || typeKey}
-                        </option>
-                      ))}
-                    </select>
-                  )}
+                  {(() => {
+                    const currentGrade = selectedGrade || (targetLevel === 'SHS' ? 'Grade 11' : 'Grade 7');
+                    const availableTypes = targetLevel === 'JHS' && jhsProgram === 'ssc'
+                      ? sscAllowedTypes(currentGrade)
+                      : visibleEnrollmentTypes(currentGrade);
+                    if (!availableTypes.length) {
+                      return (
+                        <div className="h-11 px-3 py-2 bg-red-50 border-2 border-red-200 rounded-xl text-xs font-semibold text-red-700 flex items-center">
+                          No active enrollment types for this grade level.
+                        </div>
+                      );
+                    }
+                    return (
+                      <select
+                        id="type-select"
+                        value={selectedType}
+                        onChange={(e) => {
+                          setSelectedType(e.target.value);
+                        }}
+                        className="w-full h-11 px-3 py-2 bg-white border-2 border-gray-200 rounded-xl text-sm font-semibold text-[#001840] focus:outline-none focus:border-[#102A71] transition-all cursor-pointer"
+                      >
+                        {availableTypes.map((typeKey) => (
+                          <option key={typeKey} value={typeKey}>
+                            {typeKey === 'old' ? 'Continuing Student' : ENROLLMENT_TYPE_LABELS[typeKey] || typeKey}
+                          </option>
+                        ))}
+                      </select>
+                    );
+                  })()}
                 </div>
               </div>
             </div>
 
             {/* 3. CONDITIONAL REQUIREMENTS & VERIFICATIONS */}
-            {/* Case A: JHS SSC Grade 7 Application */}
-            {targetLevel === 'JHS' && jhsProgram === 'ssc' && selectedGrade === 'Grade 7' && (
+            {/* Case A: JHS SSC Grade 7 New Application */}
+            {targetLevel === 'JHS' && jhsProgram === 'ssc' && selectedGrade === 'Grade 7' && selectedType === 'new' && (
               <div className="mb-5 space-y-3.5">
                 <div className="bg-yellow-50/90 border border-yellow-200 rounded-xl p-3 text-xs text-yellow-800 leading-relaxed">
                   Incoming Grade 7 students with a Grade 6 General Average of <strong>{settings?.content?.ssc?.minimumAverage ?? 85} or higher</strong> may apply for the Special Science Class. The registrar will review your report card and schedule an entrance examination.
@@ -766,6 +890,12 @@ export function LevelSelection() {
                 </div>
               )}
 
+            {targetLevel === 'JHS' && jhsProgram === 'ssc' && selectedType === 'transferee' && (
+              <div className="mb-5 bg-yellow-50/90 border border-yellow-200 rounded-xl p-3 text-xs text-yellow-800 leading-relaxed">
+                <strong>SSC Transferee Eligibility:</strong> The Special Science Class accepts transferees who were enrolled in an SSC program from their previous school. Please upload your report card and transfer credentials in the form for Registrar verification.
+              </div>
+            )}
+
             {/* Actions */}
             <div className="flex gap-3 pt-3 border-t border-gray-100">
               <button
@@ -783,7 +913,7 @@ export function LevelSelection() {
               >
                 {submittingSSC ? (
                   <><Loader2 size={15} className="animate-spin" /> Submitting...</>
-                ) : targetLevel === 'JHS' && jhsProgram === 'ssc' && selectedGrade === 'Grade 7' ? (
+                ) : targetLevel === 'JHS' && jhsProgram === 'ssc' && selectedGrade === 'Grade 7' && selectedType === 'new' ? (
                   sscDone ? <>View SSC Status <ArrowRight size={15} /></> : <><Upload size={15} /> Apply for SSC</>
                 ) : selectedType === 'old' ? (
                   <>Proceed to Form <ArrowRight size={15} /></>
@@ -950,32 +1080,44 @@ export function LevelSelection() {
                 </div>
               )}
 
-              <div className="flex flex-col sm:flex-row gap-3">
-                <button
-                  type="button"
-                  onClick={() => next.needsStrand ? setShowStrandPicker(true) : handleContinueEnrollment()}
-                  className="flex-1 py-3 bg-[#102A71] text-white rounded-xl font-bold hover:bg-[#001840] transition-all flex items-center justify-center gap-2 shadow-sm">
-                  <CheckCircle2 size={16} />
-                  {next.needsStrand
-                    ? 'Select Strand & Continue →'
-                    : next.isRetained
-                      ? `Continue Enrollment for ${next.gradeLevel}${next.sscDisqualified ? ' (Regular Class)' : next.sscClass === 'SSC' ? ' (SSC)' : ''}`
-                      : `Continue Enrollment for ${next.gradeLevel}${next.sscDisqualified ? ' (Regular Class)' : next.sscClass === 'SSC' ? ' (SSC)' : ''}`}
-                </button>
-
-              </div>
+              {activeEnrollmentTypes?.old === false ? (
+                <div className="p-3.5 rounded-xl border border-red-200 bg-red-50 text-xs font-semibold text-red-700 text-center">
+                  Continuing enrollment is currently deactivated for the active academic year.
+                </div>
+              ) : (
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <button
+                    type="button"
+                    onClick={() => next.needsStrand ? setShowStrandPicker(true) : handleContinueEnrollment()}
+                    className="flex-1 py-3 bg-[#102A71] text-white rounded-xl font-bold hover:bg-[#001840] transition-all flex items-center justify-center gap-2 shadow-sm">
+                    <CheckCircle2 size={16} />
+                    {next.needsStrand
+                      ? 'Select Strand & Enroll →'
+                      : `1-Click Enroll for ${next.gradeLevel}${next.sscDisqualified ? ' (Regular Class)' : next.sscClass === 'SSC' ? ' (SSC)' : ''}`}
+                  </button>
+                </div>
+              )}
 
               <p className="text-center text-xs text-gray-400 mt-3">
-                Enrolling as a <span className="font-semibold">continuing student{next.isRetained ? ' (retained)' : ''}</span> — review Grade & Type, Personal Info, and Family before submitting.
+                Enrolling as a <span className="font-semibold">continuing student{next.isRetained ? ' (retained)' : ''}</span> — your existing student record will be carried over automatically.
               </p>
 
-              <div className="text-center mt-3 pt-3 border-t border-gray-100">
+              <div className="flex flex-wrap items-center justify-center gap-4 mt-3 pt-3 border-t border-gray-100">
+                {!next.needsStrand && (
+                  <button
+                    type="button"
+                    onClick={() => handleContinueEnrollment(null, null, null, null, true)}
+                    className="text-xs text-[#102A71] hover:underline font-medium"
+                  >
+                    Need to update personal details? Open full form
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => setCompletedEnrollment(null)}
                   className="text-xs text-gray-400 hover:text-[#102A71] underline transition-colors"
                 >
-                  Need to choose a different grade level or program? Click here to select manually
+                  Select a different grade level or program manually
                 </button>
               </div>
             </div>
@@ -1015,21 +1157,57 @@ export function LevelSelection() {
               })}
             </div>
 
-            {/* SSC info note */}
-            {settings.content.ssc.enabled && <div className="mt-6 flex items-start gap-3 bg-yellow-50 border border-yellow-200 rounded-xl p-4">
-              <FlaskConical className="w-5 h-5 text-yellow-600 shrink-0 mt-0.5" />
-              <div>
-                <p className="text-sm font-semibold text-yellow-800">Applying for Grade 7 Special Science Class?</p>
-                <p className="text-xs text-yellow-700 mt-0.5">Select Junior High School — you'll be asked to upload your Grade 6 Report Card before proceeding to the enrollment form. The registrar will schedule your SSC entrance exam.</p>
-              </div>
-            </div>}
           </>
         )}
 
-        <p className="text-center text-sm text-gray-400 mt-6">
-          {completedEnrollment ? 'Continue your academic journey at Eastern Mindoro College.' : 'Select your education level to begin the enrollment process.'}
-        </p>
       </div>
+
+      {confirmOneClick && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 border border-gray-100">
+            <h3 className="text-lg font-bold text-[#001840]">Confirm Continuing Enrollment</h3>
+            <p className="text-xs text-gray-500 mt-1">
+              Your existing student, family, and academic records will be carried over and submitted directly to the Registrar.
+            </p>
+            <div className="mt-4 rounded-xl bg-[#FFFDF0] border border-[#F5C400]/40 p-4 space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span className="text-gray-500">School Year</span>
+                <span className="font-semibold text-[#001840]">{activeSchoolYear || 'Active Year'}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-500">Student ID</span>
+                <span className="font-semibold text-[#001840]">{completedEnrollment?.studentNumber || pastRecord?.studentNumber}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-500">Enrolling In</span>
+                <span className="font-bold text-[#102A71]">
+                  {confirmOneClick.educationLevel} — {confirmOneClick.gradeLevel}
+                  {confirmOneClick.strand ? ` (${confirmOneClick.strand})` : confirmOneClick.sscClass === 'SSC' ? ' (SSC)' : ''}
+                </span>
+              </div>
+            </div>
+            <div className="mt-5 flex flex-col sm:flex-row gap-2.5">
+              <button
+                type="button"
+                disabled={submittingOneClick}
+                onClick={() => setConfirmOneClick(null)}
+                className="flex-1 py-2.5 px-4 border border-gray-200 rounded-xl text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={submittingOneClick}
+                onClick={submitOneClickContinuing}
+                className="flex-1 py-2.5 px-4 bg-[#102A71] text-white rounded-xl text-sm font-bold hover:bg-[#001840] disabled:opacity-60 flex items-center justify-center gap-2"
+              >
+                <CheckCircle2 size={16} />
+                {submittingOneClick ? 'Submitting...' : 'Confirm & Submit'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

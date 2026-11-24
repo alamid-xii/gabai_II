@@ -1,4 +1,4 @@
-import { ensureAcademicTerms, ensureYearEndGrading, ensureSubjectTeacher } from "./services/academicTerms.js";
+import { ensureAcademicTerms, ensureYearEndGrading, ensureSubjectTeacher, ensureSchoolYearColumns, ensureSectionGradeRangeColumns } from "./services/academicTerms.js";
 import { documentPublicDirectory } from "./services/documentStorage.js";
 import { protectDocumentUploads } from "./middleware/privateDocuments.js";
 import { initializeAdmission } from "./services/admissionPolicy.js";
@@ -208,6 +208,8 @@ await addMissingColumns();
 await ensureAcademicTerms(sequelize);
 await ensureYearEndGrading(sequelize);
 await ensureSubjectTeacher(sequelize);
+await ensureSchoolYearColumns(sequelize);
+await ensureSectionGradeRangeColumns(sequelize);
 await ensureVoiceoverColumns(sequelize);
 await ensurePanoramaLabelColumn(sequelize);
 await initializeEnrollmentGuide();

@@ -1,38 +1,57 @@
 import { PanoramaLabelEditor } from "../../components/admin/PanoramaLabelEditor";
 import { BuildingVoiceoverEditor } from "../../components/admin/BuildingVoiceoverEditor";
-import { useState, useEffect, useCallback } from "react";
-import { Link } from "react-router";
+import { BuildingNarration } from "../../components/BuildingNarration";
 import {
-  MapPin, Users, MessageSquare, FileText, BarChart3, Settings, LogOut,
-  Bell, Search, TrendingUp, AlertCircle, CheckCircle2, Clock, Menu, X,
-  Plus, Edit, Trash2, Eye, Building2, Home, Target, BookOpen,
-  CheckCircle, XCircle, Download, Calendar, Filter, ChevronLeft, ChevronRight,
-  UserPlus, Archive
+  PanoramaViewer,
+  isEmbedTourUrl,
+  parseTourEmbedInput,
+  resolvePanoramaSrc,
+} from "../../components/PanoramaViewer";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { createPortal } from "react-dom";
+import { usePortalSlot } from "../../hooks/usePortalSlot";
+import {
+  MapPin,
+  Search,
+  X,
+  Plus,
+  Edit,
+  Trash2,
+  Building2,
+  ChevronRight,
+  Code,
+  Image as ImageIcon,
 } from "lucide-react";
-import { MapContainer, TileLayer, Marker } from "react-leaflet";
-import L from "leaflet";
-import "leaflet/dist/leaflet.css";
 import { toast } from "sonner";
 import { confirmAction } from "../../utils/confirmAction";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../components/ui/card";
-import { Badge } from "../../components/ui/badge";
-import { AcademicSetup } from "../../components/admin/AcademicSetup";
-import { SectionManagement } from "./SectionManagement";
 
-import { API, BACKEND_URL } from "../../config/api";
-
-
-import { AdminStatusBadge } from "./AdminShared";
+import { API } from "../../config/api";
 import { AerialPinPicker } from "./AdminUsers";
 
-export function AdminBuildings({ buildings, onRefresh }) {
+const aerialPhoto = "/emc_aerial.jpg";
+
+export function AdminBuildings({ buildings = [], onRefresh }) {
   const [showForm, setShowForm] = useState(false);
   const [editingBuilding, setEditingBuilding] = useState(null);
+  const [selectedBuildingId, setSelectedBuildingId] = useState(null);
+  const [search, setSearch] = useState("");
+  const [narrationMuted, setNarrationMuted] = useState(false);
   const [showMapPicker, setShowMapPicker] = useState(false);
   const [selectedFile, setSelectedFile] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
+  const [tourSourceMode, setTourSourceMode] = useState("upload"); // "upload" | "embed"
+  const [embedInput, setEmbedInput] = useState("");
+  const detailsRef = useRef(null);
+  const headerContainer = usePortalSlot(
+    "admin-header-slot",
+    true,
+    "flex items-center justify-end gap-2 flex-wrap ml-auto"
+  );
+
+  const selectedBuilding =
+    buildings.find((b) => b.id === selectedBuildingId) || null;
   const [formData, setFormData] = useState({
     name: "", shortName: "", category: "Academic",
     description: "", offices: "", hours: "", voiceoverScript: "", panoramaLabels: [],
@@ -42,6 +61,8 @@ export function AdminBuildings({ buildings, onRefresh }) {
   useEffect(() => {
     if (editingBuilding) {
       const coords = JSON.parse(editingBuilding.coordinates || '{"x":50,"y":50}');
+      const existingUrl = editingBuilding.imageUrl || "";
+      const isEmbed = isEmbedTourUrl(existingUrl);
       setFormData({
         name: editingBuilding.name || "",
         shortName: editingBuilding.shortName || "",
@@ -55,10 +76,12 @@ export function AdminBuildings({ buildings, onRefresh }) {
         hours: editingBuilding.hours || "",
         pinX: String(coords.x ?? coords.pinX ?? 50),
         pinY: String(coords.y ?? coords.pinY ?? 50),
-        imageUrl: editingBuilding.imageUrl || "",
+        imageUrl: existingUrl,
         color: editingBuilding.color || "#102A71"
       });
-      setPreviewUrl(editingBuilding.imageUrl ? `${BACKEND_URL}${editingBuilding.imageUrl}` : null);
+      setTourSourceMode(isEmbed ? "embed" : "upload");
+      setEmbedInput(isEmbed ? existingUrl : "");
+      setPreviewUrl(!isEmbed && existingUrl ? resolvePanoramaSrc(existingUrl) : null);
       setSelectedFile(null);
     } else {
       setFormData({
@@ -66,6 +89,8 @@ export function AdminBuildings({ buildings, onRefresh }) {
         description: "", offices: "", hours: "", voiceoverScript: "", panoramaLabels: [],
         pinX: "50", pinY: "50", imageUrl: "", color: "#102A71"
       });
+      setTourSourceMode("upload");
+      setEmbedInput("");
       setPreviewUrl(null);
       setSelectedFile(null);
     }
@@ -95,7 +120,7 @@ export function AdminBuildings({ buildings, onRefresh }) {
     // Use FormData for file upload
     const formDataToSend = new FormData();
     formDataToSend.append("name", formData.name);
-    formDataToSend.append("shortName", formData.shortName);
+    formDataToSend.append("shortName", formData.name);
     formDataToSend.append("category", formData.category);
     formDataToSend.append("description", formData.description);
     formDataToSend.append("voiceoverScript", formData.voiceoverScript);
@@ -108,8 +133,11 @@ export function AdminBuildings({ buildings, onRefresh }) {
     }));
     formDataToSend.append("color", formData.color);
 
-    // Add file if selected
-    if (selectedFile) {
+    // Add file or embed link
+    if (tourSourceMode === "embed") {
+      const normalizedEmbed = parseTourEmbedInput(embedInput);
+      formDataToSend.append("imageUrl", normalizedEmbed);
+    } else if (selectedFile) {
       formDataToSend.append("photo360", selectedFile);
     } else if (formData.imageUrl) {
       // Keep existing URL if no new file
@@ -132,9 +160,10 @@ export function AdminBuildings({ buildings, onRefresh }) {
 
       const saved = await response.json();
       if (response.ok) {
+        const wasEditing = Boolean(editingBuilding);
         setShowForm(false);
-        setEditingBuilding(saved);
-        toast.success("Building saved. You can now generate its voiceover.");
+        setEditingBuilding(null);
+        toast.success(wasEditing ? "Building updated successfully." : "Building created successfully.");
         setSelectedFile(null);
         setPreviewUrl(null);
         if (onRefresh) onRefresh();
@@ -155,29 +184,64 @@ export function AdminBuildings({ buildings, onRefresh }) {
         headers: { "Authorization": `Bearer ${token}` }
       });
 
-      if (response.ok && onRefresh) {
-        onRefresh();
+      if (response.ok) {
+        if (selectedBuildingId === id) setSelectedBuildingId(null);
+        if (onRefresh) onRefresh();
       }
     } catch (error) {
       console.error("Error deleting building:", error);
     }
   }
 
+  const filtered = buildings.filter((b) =>
+    (b.name || b.shortName || "").toLowerCase().includes(search.toLowerCase())
+  );
+
+  function getCoords(building) {
+    if (!building?.coordinates) return null;
+    try {
+      const c =
+        typeof building.coordinates === "string"
+          ? JSON.parse(building.coordinates)
+          : building.coordinates;
+      return c;
+    } catch {
+      return null;
+    }
+  }
+
+  function parseOffices(offices) {
+    if (!offices) return [];
+    if (Array.isArray(offices)) return offices;
+    try {
+      return JSON.parse(offices);
+    } catch {
+      return [offices];
+    }
+  }
+
+  const addBuildingBtn = (
+    <button
+      type="button"
+      onClick={() => {
+        setShowForm(true);
+        setEditingBuilding(null);
+      }}
+      className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#001840] text-white text-sm font-semibold hover:bg-[#102A71] transition-colors shadow-sm cursor-pointer"
+    >
+      <Plus className="w-4 h-4" />
+      Add Building
+    </button>
+  );
+
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div></div>
-        <Button
-          onClick={() => {
-            setShowForm(true);
-            setEditingBuilding(null);
-          }}
-          className="bg-[#001840] hover:bg-[#102A71]"
-        >
-          <Plus className="w-4 h-4 mr-2" />
-          Add Building
-        </Button>
-      </div>
+    <div className="space-y-4">
+      {/* Header Slot Action or Fallback */}
+      {headerContainer ? (
+        createPortal(addBuildingBtn, headerContainer)
+      ) : (
+        <div className="flex justify-end">{addBuildingBtn}</div>
+      )}
 
       {/* Building Form Modal */}
       {(showForm || editingBuilding) && (
@@ -233,25 +297,14 @@ export function AdminBuildings({ buildings, onRefresh }) {
               )}
 
               <form id="buildingForm" onSubmit={handleSubmit} className="space-y-4">
-                <div className="grid sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Full Name</label>
-                    <Input
-                      value={formData.name}
-                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                      placeholder="Administration Building"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Short Name</label>
-                    <Input
-                      value={formData.shortName}
-                      onChange={(e) => setFormData({ ...formData, shortName: e.target.value })}
-                      placeholder="Admin Hall"
-                      required
-                    />
-                  </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Name</label>
+                  <Input
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value, shortName: e.target.value })}
+                    placeholder="Administration Building"
+                    required
+                  />
                 </div>
 
                 <div>
@@ -265,12 +318,6 @@ export function AdminBuildings({ buildings, onRefresh }) {
                     required
                   />
                 </div>
-
-                {editingBuilding?.imageUrl && !selectedFile ? (
-                  <PanoramaLabelEditor key={`${editingBuilding.id}-${editingBuilding.imageUrl}`}
-                    src={`${BACKEND_URL}${editingBuilding.imageUrl}`} labels={formData.panoramaLabels}
-                    onChange={labels => setFormData(previous => ({ ...previous, panoramaLabels: labels }))} />
-                ) : <p className="text-xs text-gray-500 rounded-lg border p-3">Save the building with its 360? photo first to place labels on the image. Replacing the photo clears old labels.</p>}
 
                 <section className="rounded-xl border border-gray-200 bg-gray-50 p-4 space-y-3">
                   <label htmlFor="voiceover-script" className="block text-sm font-semibold text-[#001840]">Custom voiceover script (optional)</label>
@@ -355,12 +402,78 @@ export function AdminBuildings({ buildings, onRefresh }) {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    360° Panoramic Photo
-                  </label>
+                  <div className="flex items-center justify-between flex-wrap gap-2 mb-2">
+                    <label className="block text-sm font-medium text-gray-700">
+                      360° Virtual Tour Source
+                    </label>
+                    <div className="inline-flex rounded-lg border border-gray-200 bg-gray-100 p-0.5 text-xs font-semibold">
+                      <button
+                        type="button"
+                        onClick={() => setTourSourceMode("upload")}
+                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-colors cursor-pointer ${
+                          tourSourceMode === "upload"
+                            ? "bg-[#001840] text-[#FFDC5F] shadow-2xs"
+                            : "text-gray-600 hover:text-[#001840]"
+                        }`}
+                      >
+                        <ImageIcon className="w-3.5 h-3.5" />
+                        Upload 360° Photo
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setTourSourceMode("embed")}
+                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-colors cursor-pointer ${
+                          tourSourceMode === "embed"
+                            ? "bg-[#001840] text-[#FFDC5F] shadow-2xs"
+                            : "text-gray-600 hover:text-[#001840]"
+                        }`}
+                      >
+                        <Code className="w-3.5 h-3.5" />
+                        Paste Embed Code / Link
+                      </button>
+                    </div>
+                  </div>
 
                   <div className="space-y-3">
-                    {previewUrl ? (
+                    {tourSourceMode === "embed" ? (
+                      <div className="space-y-2.5">
+                        <textarea
+                          value={embedInput}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setEmbedInput(val);
+                            const parsed = parseTourEmbedInput(val);
+                            setFormData((prev) => ({ ...prev, imageUrl: parsed }));
+                          }}
+                          rows={4}
+                          placeholder={`Paste Travvir embed code or direct embed URL, e.g.:\n<div class="travvir-embed-tour" data-property="9LLVqe" data-scene="1"></div>\n<script src="https://travvir.com/travvir-embed.js"></script>`}
+                          className="w-full px-3 py-2.5 border border-gray-300 rounded-xl font-mono text-xs focus:ring-2 focus:ring-[#F5C400] focus:border-transparent"
+                        />
+                        {parseTourEmbedInput(embedInput) && (
+                          <div className="flex items-center justify-between gap-2 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 text-xs text-emerald-800">
+                            <span className="truncate">
+                              ✅ Embed Tour Resolved:{" "}
+                              <strong className="font-mono">
+                                {parseTourEmbedInput(embedInput)}
+                              </strong>
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEmbedInput("");
+                                setFormData((prev) => ({ ...prev, imageUrl: "" }));
+                              }}
+                              className="text-red-600 hover:underline font-semibold shrink-0"
+                            >
+                              Clear
+                            </button>
+                          </div>
+                        )}
+                        <p className="text-xs text-gray-500">
+                          Paste a Travvir embed snippet (`&lt;div class=&quot;travvir-embed-tour&quot; data-property=&quot;...&quot;&gt;`), an `&lt;iframe&gt;`, or a direct 360° tour URL. You can immediately add floating labels and audio narration below!
+                        </p>
+                      </div>
+                    ) : previewUrl ? (
                       /* Preview when image is selected — upload section is closed */
                       <div className="relative rounded-xl overflow-hidden border border-gray-200 bg-gray-50 shadow-inner group">
                         <img
@@ -415,9 +528,37 @@ export function AdminBuildings({ buildings, onRefresh }) {
                       </div>
                     )}
 
-                    <p className="text-xs text-gray-500">
-                      Upload an equirectangular 360° panoramic photo for interactive viewing
-                    </p>
+                    {tourSourceMode === "upload" && (
+                      <p className="text-xs text-gray-500">
+                        Upload an equirectangular 360° panoramic photo for interactive viewing
+                      </p>
+                    )}
+
+                    {(tourSourceMode === "embed" && parseTourEmbedInput(embedInput)) ||
+                    (tourSourceMode === "upload" && editingBuilding?.imageUrl && !selectedFile) ? (
+                      <PanoramaLabelEditor
+                        key={`${editingBuilding?.id || "new"}-${
+                          tourSourceMode === "embed"
+                            ? parseTourEmbedInput(embedInput)
+                            : editingBuilding?.imageUrl
+                        }`}
+                        src={
+                          tourSourceMode === "embed"
+                            ? parseTourEmbedInput(embedInput)
+                            : resolvePanoramaSrc(editingBuilding.imageUrl)
+                        }
+                        labels={formData.panoramaLabels}
+                        onChange={(labels) =>
+                          setFormData((previous) => ({ ...previous, panoramaLabels: labels }))
+                        }
+                      />
+                    ) : (
+                      <p className="text-xs text-gray-500 rounded-lg border p-3 bg-gray-50">
+                        {tourSourceMode === "embed"
+                          ? "Paste a valid Travvir embed code or 360° tour link above to preview the tour and place labels on it."
+                          : "Save the building with its 360° photo first to place labels on the image. Replacing the photo clears old labels."}
+                      </p>
+                    )}
                   </div>
                 </div>
               </form>
@@ -447,53 +588,362 @@ export function AdminBuildings({ buildings, onRefresh }) {
         </div>
       )}
 
-      {/* Buildings Grid */}
-      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {buildings.map((building) => (
-          <Card key={building.id}>
-            <CardContent className="p-6">
-              <div className="flex items-start justify-between mb-3">
-                <div className="flex items-center gap-3">
-                  <div
-                    className="w-10 h-10 rounded-lg flex items-center justify-center"
-                    style={{ backgroundColor: building.color || "#001840" }}
-                  >
-                    <Building2 className="w-5 h-5 text-white" />
+      {/* ── Live Virtual Tour Layout (Mirrors Public Campus Virtual Tour + Admin Controls) ── */}
+      <div className="flex gap-4 lg:gap-5 flex-col lg:flex-row items-stretch lg:h-[calc(100svh-7.5rem)]">
+        {/* ── Left Panel: Search & Buildings List ── */}
+        <aside className="lg:w-72 xl:w-80 shrink-0 flex flex-col gap-3 lg:h-full lg:min-h-0">
+          {/* Search */}
+          <div className="relative shrink-0">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search buildings…"
+              className="w-full bg-white border border-gray-200 rounded-xl pl-9 pr-8 py-2.5 text-sm text-[#001840] focus:outline-none focus:border-[#102A71] focus:ring-2 focus:ring-[#102A71]/10"
+            />
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch("")}
+                className="absolute right-3 top-1/2 -translate-y-1/2"
+              >
+                <X className="w-4 h-4 text-gray-400" />
+              </button>
+            )}
+          </div>
+
+          {/* Building List */}
+          <div className="bg-[#102A71] rounded-2xl overflow-hidden flex flex-col lg:flex-1 lg:min-h-0 shadow-md">
+            <div className="px-4 py-2.5 border-b border-[#001840]/30 shrink-0 flex items-center justify-between">
+              <div>
+                <h3 className="text-[#FFDC5F] font-semibold text-xs uppercase tracking-wider">
+                  Buildings &amp; Facilities
+                </h3>
+                <p className="text-[#FFFDF0]/50 text-xs">{filtered.length} found</p>
+              </div>
+              {selectedBuilding && (
+                <button
+                  type="button"
+                  onClick={() => setSelectedBuildingId(null)}
+                  className="text-xs font-semibold text-[#FFDC5F] hover:underline cursor-pointer"
+                >
+                  Show Map
+                </button>
+              )}
+            </div>
+
+            <div className="overflow-y-auto max-h-56 lg:max-h-none lg:flex-1 lg:min-h-0 overscroll-contain">
+              {filtered.length === 0 ? (
+                <div className="px-4 py-8 text-center text-[#FFFDF0]/50 text-sm">
+                  {buildings.length === 0
+                    ? "No buildings added yet. Click '+ Add Building' in the top header."
+                    : "No buildings match your search."}
+                </div>
+              ) : (
+                filtered.map((building) => {
+                  const isSelected = selectedBuilding?.id === building.id;
+                  return (
+                    <div
+                      key={building.id}
+                      onClick={() =>
+                        setSelectedBuildingId(isSelected ? null : building.id)
+                      }
+                      className={`w-full text-left px-3.5 py-3 border-b border-[#001840]/20 flex items-center gap-3 transition-colors cursor-pointer ${
+                        isSelected ? "bg-[#F5C400]/20" : "hover:bg-[#001840]/20"
+                      }`}
+                    >
+                      <div
+                        className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+                          isSelected ? "bg-[#F5C400]" : "bg-[#001840]/40"
+                        }`}
+                      >
+                        <Building2
+                          className={`w-4 h-4 ${
+                            isSelected ? "text-[#001840]" : "text-[#FFDC5F]"
+                          }`}
+                        />
+                      </div>
+
+                      <div className="min-w-0 flex-1">
+                        <p
+                          className={`text-sm font-medium truncate ${
+                            isSelected ? "text-[#F5C400]" : "text-[#FFFDF0]"
+                          }`}
+                        >
+                          {building.name || building.shortName}
+                        </p>
+                        {building.category && (
+                          <p className="text-xs text-[#FFFDF0]/50 truncate">
+                            {building.category}
+                          </p>
+                        )}
+                      </div>
+
+                      <div
+                        className="flex items-center gap-1 shrink-0"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingBuilding(building);
+                            setShowForm(false);
+                          }}
+                          title="Edit building"
+                          className="w-7 h-7 min-h-0 p-0 inline-flex items-center justify-center rounded-md text-[#FFDC5F]/80 hover:text-[#001840] hover:bg-[#F5C400] transition-colors cursor-pointer"
+                        >
+                          <Edit className="w-3.5 h-3.5 block" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDelete(building.id)}
+                          title="Delete building"
+                          className="w-7 h-7 min-h-0 p-0 inline-flex items-center justify-center rounded-md text-red-300 hover:text-white hover:bg-red-600/80 transition-colors cursor-pointer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5 block" />
+                        </button>
+                        <ChevronRight
+                          onClick={() =>
+                            setSelectedBuildingId(isSelected ? null : building.id)
+                          }
+                          className={`w-4 h-4 ml-0.5 transition-transform ${
+                            isSelected
+                              ? "text-[#F5C400] rotate-90"
+                              : "text-[#FFFDF0]/30"
+                          }`}
+                        />
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </aside>
+
+        {/* ── Right Panel: Building Details Preview OR Campus Aerial Map ── */}
+        <div className="flex-1 min-w-0 flex flex-col lg:h-full lg:min-h-0">
+          {selectedBuilding ? (
+            /* ── Building Details (Same as public Virtual Tour + Admin Edit/Delete buttons) ── */
+            <div
+              ref={detailsRef}
+              className="bg-[#102A71] text-white rounded-2xl lg:overflow-y-auto shadow-xl flex-1 lg:min-h-0 flex flex-col"
+            >
+              {/* Header */}
+              <div className="flex items-start justify-between gap-3 p-4 sm:p-6 pb-4 shrink-0 flex-wrap">
+                <div className="flex items-start gap-3 flex-1 min-w-0">
+                  <div className="bg-[#F5C400] w-12 h-12 rounded-xl flex items-center justify-center shrink-0 shadow-lg">
+                    <Building2 className="w-6 h-6 text-[#001840]" />
                   </div>
                   <div>
-                    <h4 className="font-semibold text-gray-900">{building.shortName}</h4>
-                    <Badge className="mt-1">{building.category}</Badge>
+                    {selectedBuilding.category && (
+                      <span className="bg-[#FFDC5F] text-[#001840] text-xs font-bold px-2.5 py-0.5 rounded-full">
+                        {selectedBuilding.category}
+                      </span>
+                    )}
+                    <h3 className="font-bold text-lg sm:text-xl leading-snug mt-1 break-words">
+                      {selectedBuilding.name || selectedBuilding.shortName}
+                    </h3>
+                    {selectedBuilding.shortName &&
+                      selectedBuilding.shortName !== selectedBuilding.name && (
+                        <p className="text-[#FFDC5F]/60 text-xs mt-0.5">
+                          Also known as: {selectedBuilding.shortName}
+                        </p>
+                      )}
                   </div>
                 </div>
+
+                <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                  <BuildingNarration
+                    key={`${selectedBuilding.id}-${selectedBuilding.voiceoverAudioUrl || ""}`}
+                    building={selectedBuilding}
+                    muted={narrationMuted}
+                    onMutedChange={setNarrationMuted}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingBuilding(selectedBuilding);
+                      setShowForm(false);
+                    }}
+                    className="bg-[#F5C400] hover:bg-[#FFDC5F] text-[#001840] px-3 py-2 rounded-xl transition-colors flex items-center gap-1.5 text-xs font-bold shadow-sm cursor-pointer"
+                  >
+                    <Edit className="w-3.5 h-3.5" /> Edit Building
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDelete(selectedBuilding.id)}
+                    className="bg-red-500/20 hover:bg-red-600 text-red-200 hover:text-white border border-red-400/30 px-3 py-2 rounded-xl transition-colors flex items-center gap-1.5 text-xs font-semibold cursor-pointer"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" /> Delete
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedBuildingId(null)}
+                    className="bg-[#001840]/40 hover:bg-[#001840]/70 px-3 py-2 rounded-xl transition-colors flex items-center gap-1.5 text-xs font-semibold text-[#FFFDF0] cursor-pointer"
+                  >
+                    <MapPin className="w-3.5 h-3.5" /> Map
+                  </button>
+                </div>
               </div>
-              <p className="text-sm text-gray-600 mb-3 line-clamp-2">{building.description}</p>
-              {building.imageUrl && (
-                <div className="mb-3 text-xs text-green-600 flex items-center gap-1">
-                  <Eye className="w-3 h-3" />
-                  360° Photo Available
+
+              {/* Description */}
+              {selectedBuilding.description && (
+                <p className="text-[#FFFDF0]/80 text-sm leading-relaxed px-4 sm:px-6 pb-5">
+                  {selectedBuilding.description}
+                </p>
+              )}
+
+              {/* Offices + Hours */}
+              {(parseOffices(selectedBuilding.offices).length > 0 ||
+                selectedBuilding.hours) && (
+                <div className="grid sm:grid-cols-2 gap-5 px-4 sm:px-6 pb-5 border-t border-[#001840]/30 pt-5">
+                  {parseOffices(selectedBuilding.offices).length > 0 && (
+                    <div>
+                      <h4 className="text-[#FFDC5F] text-xs font-bold uppercase tracking-wider mb-3">
+                        Offices / Areas
+                      </h4>
+                      <ul className="space-y-2">
+                        {parseOffices(selectedBuilding.offices).map((office, i) => (
+                          <li
+                            key={i}
+                            className="flex items-center gap-2 text-[#FFFDF0] text-sm"
+                          >
+                            <div className="w-1.5 h-1.5 rounded-full bg-[#F5C400] shrink-0" />
+                            {office}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {selectedBuilding.hours && (
+                    <div>
+                      <h4 className="text-[#FFDC5F] text-xs font-bold uppercase tracking-wider mb-3">
+                        Operating Hours
+                      </h4>
+                      <p className="text-[#FFFDF0] text-sm leading-relaxed">
+                        {selectedBuilding.hours}
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
-              <div className="flex gap-2">
-                <button
-                  onClick={() => {
-                    setEditingBuilding(building);
-                    setShowForm(false);
-                  }}
-                  className="flex-1 px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm font-medium transition-colors"
-                >
-                  <Edit className="w-4 h-4 inline mr-1" />
-                  Edit
-                </button>
-                <button
-                  onClick={() => handleDelete(building.id)}
-                  className="px-3 py-2 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg text-sm font-medium transition-colors"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
+
+              {/* 360° Panorama */}
+              {selectedBuilding.imageUrl ? (
+                <div className="px-4 sm:px-6 pb-6 border-t border-[#001840]/30 pt-5">
+                  <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="w-2 h-2 bg-[#F5C400] rounded-full animate-pulse" />
+                      <h4 className="text-[#FFDC5F] text-xs font-bold uppercase tracking-wider">
+                        360° Virtual Tour (User View Preview)
+                      </h4>
+                      <span className="text-[#FFFDF0]/50 text-xs">
+                        — Click and drag to look around · Scroll to zoom
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingBuilding(selectedBuilding);
+                        setShowForm(false);
+                      }}
+                      className="text-xs font-semibold text-[#FFDC5F] hover:underline cursor-pointer"
+                    >
+                      Edit 360° Labels / Photo →
+                    </button>
+                  </div>
+                  <div className="rounded-xl overflow-hidden ring-2 ring-[#F5C400]/30">
+                    <PanoramaViewer
+                      key={`${selectedBuilding.id}-${selectedBuilding.imageUrl}-${JSON.stringify(selectedBuilding.panoramaLabels || [])}`}
+                      src={selectedBuilding.imageUrl}
+                      labels={selectedBuilding.panoramaLabels}
+                      height="clamp(260px, 55vw, 420px)"
+                    />
+                  </div>
+                </div>
+              ) : (
+                <div className="px-4 sm:px-6 pb-6 border-t border-[#001840]/30 pt-5">
+                  <div className="bg-[#001840]/30 rounded-xl p-4 text-center space-y-2">
+                    <p className="text-[#FFFDF0]/60 text-sm">
+                      No 360° photo available for this building yet.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingBuilding(selectedBuilding);
+                        setShowForm(false);
+                      }}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#F5C400] text-[#001840] text-xs font-bold hover:bg-[#FFDC5F] transition-colors cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5" /> Upload 360° Photo
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            /* ── Aerial Photo with pins (shown when no building is selected) ── */
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden flex flex-col lg:flex-1 lg:min-h-0">
+              <div className="flex items-center justify-between px-5 py-2.5 border-b border-gray-100 shrink-0">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 bg-[#F5C400] rounded-full animate-pulse" />
+                  <span className="text-sm text-[#001840] font-semibold">
+                    Campus Aerial View (Live User Preview)
+                  </span>
+                </div>
+                <span className="text-xs text-gray-400">
+                  Click any pin or building on the left to preview &amp; edit
+                </span>
               </div>
-            </CardContent>
-          </Card>
-        ))}
+
+              <div className="lg:flex-1 lg:min-h-0 p-2 sm:p-3 flex items-center justify-center bg-gray-50/60 overflow-hidden">
+                <div className="relative shadow-md rounded-xl overflow-hidden border border-gray-200 aspect-[1922/2048] w-full lg:w-auto lg:h-full max-w-full lg:max-h-full">
+                  <img
+                    src={aerialPhoto}
+                    alt="Eastern Mindoro College Aerial View"
+                    className="w-full h-full object-contain block select-none pointer-events-none"
+                    draggable={false}
+                  />
+
+                  {/* Building pins overlay */}
+                  {buildings.map((building) => {
+                    const coords = getCoords(building);
+                    if (!coords) return null;
+                    return (
+                      <button
+                        key={building.id}
+                        type="button"
+                        onClick={() => setSelectedBuildingId(building.id)}
+                        title={building.name || building.shortName}
+                        style={{
+                          position: "absolute",
+                          left: `${coords.x}%`,
+                          top: `${coords.y}%`,
+                          transform: "translate(-50%, -100%)",
+                          zIndex: 10,
+                        }}
+                        className="group flex flex-col items-center cursor-pointer"
+                      >
+                        <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full border-2 bg-[#001840] border-[#F5C400] flex items-center justify-center shadow-lg transition-all duration-150 hover:scale-110 hover:bg-[#102A71]">
+                          <MapPin className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#F5C400]" />
+                        </div>
+                        <div className="w-0.5 h-2.5 bg-[#001840]" />
+                        <div
+                          className="absolute bottom-full mb-1 px-2 py-1 rounded-lg text-xs font-semibold whitespace-nowrap shadow-lg pointer-events-none bg-[#001840] text-[#FFDC5F] opacity-0 group-hover:opacity-100 transition-all"
+                          style={{ bottom: "calc(100% + 4px)" }}
+                        >
+                          {building.name || building.shortName}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

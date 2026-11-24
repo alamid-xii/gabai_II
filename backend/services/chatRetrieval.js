@@ -26,7 +26,13 @@ function tokens(text) {
   return [...new Set(String(text || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').split(/\s+/).filter(w => (w.length > 1 || /^\d$/.test(w)) && !STOP.has(w) && w !== 'mag').map(w => ALIASES[w] || w))];
 }
 function keywordList(value) {
-  try { const parsed = Array.isArray(value) ? value : JSON.parse(value || '[]'); return Array.isArray(parsed) ? parsed.filter(x => typeof x === 'string') : []; } catch { return []; }
+  if (Array.isArray(value)) return value.filter(x => typeof x === 'string');
+  if (typeof value !== 'string' || !value.trim()) return [];
+  try {
+    const parsed = JSON.parse(value);
+    if (Array.isArray(parsed)) return parsed.filter(x => typeof x === 'string');
+  } catch { }
+  return value.split(/[,;]+/).map(item => item.trim()).filter(Boolean);
 }
 const HIGH_VALUE_TOKENS = new Set(['ssc', 'transferee', 'returnee', 'strand', 'stem', 'abm', 'humss', 'tvl', 'forgot', 'reset', 'password', 'tour', '360', 'upload', 'file', 'format', 'size', 'email', 'phone', 'location', 'registrar', 'schedule', 'status', 'f138', 'f137', 'birth', 'moral', 'subject', 'building', 'library', 'canteen', 'clinic', 'gym']);
 function tokenWeight(word) {
@@ -43,7 +49,7 @@ export function scoreFAQ(message, faq) {
   if (faq.topic === 'programs' && !/program|course|offered|offering|education|level|grade|jhs|shs|junior|senior|strand|track|meron|aral/i.test(normalized)) return 0;
   if (faq.topic === 'documents' && (!input.some(w => ['requirement', 'document', 'credential', 'f138', 'f137', 'birth', 'moral', 'transferee', 'returnee', 'continuing', 'new'].includes(w)) || /scholarship|tuition|payment|job|visa|college/i.test(normalized))) return 0;
   const question = tokens(faq.question);
-  const keys = tokens(keywordList(faq.keywords).join(' '));
+  const keys = tokens([...keywordList(faq.keywords), faq.category || ''].join(' '));
   const answer = tokens(faq.answer).slice(0, 120);
   const qAndKeys = [...new Set([...question, ...keys])];
   const sumWeight = words => words.reduce((acc, w) => acc + tokenWeight(w), 0);
@@ -68,21 +74,31 @@ const list = value => {
 // Explicit public column allowlist: no users, grades, applications, documents,
 // personal exam results, credentials, or arbitrary filesystem reads.
 const SOURCES = [
-  { name: 'Current programs', pattern: /program|course|strand|stem|abm|humss|tvl|offering|offered/i,
+  {
+    name: 'Current programs', pattern: /program|course|strand|stem|abm|humss|tvl|offering|offered/i,
     sql: 'SELECT code, name, majors FROM programs WHERE isActive = 1 ORDER BY code LIMIT 60',
-    format: r => `${r.code}: ${r.name}${r.majors ? `; majors: ${list(r.majors)}` : ''}` },
-  { name: 'Subjects and curriculum', pattern: /subject|curriculum|units|grade \d|asignatura/i,
+    format: r => `${r.code}: ${r.name}${r.majors ? `; majors: ${list(r.majors)}` : ''}`
+  },
+  {
+    name: 'Subjects and curriculum', pattern: /subject|curriculum|units|grade \d|asignatura/i,
     sql: 'SELECT code, description, units, programCode, strand, gradeLevel, semester FROM subjects WHERE isActive = 1 ORDER BY programCode, gradeLevel, semester, code LIMIT 100',
-    format: r => `${r.code}: ${r.description}; ${r.programCode}${r.strand ? ` / ${r.strand}` : ''}; Grade ${r.gradeLevel}; ${r.units} units; semester ${r.semester}` },
-  { name: 'Class sections and schedules', pattern: /section|class|room|schedule|iskedyul/i,
+    format: r => `${r.code}: ${r.description}; ${r.programCode}${r.strand ? ` / ${r.strand}` : ''}; Grade ${r.gradeLevel}; ${r.units} units; semester ${r.semester}`
+  },
+  {
+    name: 'Class sections and schedules', pattern: /section|class|room|schedule|iskedyul/i,
     sql: 'SELECT code, course, yearLevel, strand, semester, schoolYear, schedule, room FROM sections WHERE isActive = 1 ORDER BY course, yearLevel LIMIT 60',
-    format: r => `${r.code}: ${r.course}${r.strand ? ` / ${r.strand}` : ''}; Grade ${r.yearLevel}; SY ${r.schoolYear}; semester ${r.semester}; schedule: ${r.schedule || 'not recorded'}; room: ${r.room || 'not recorded'}` },
-  { name: 'Campus buildings and offices', pattern: /building|office|location|where|saan|campus|registrar|library|gym|canteen|clinic|hours|oras|facilit/i,
+    format: r => `${r.code}: ${r.course}${r.strand ? ` / ${r.strand}` : ''}; Grade ${r.yearLevel}; SY ${r.schoolYear}; semester ${r.semester}; schedule: ${r.schedule || 'not recorded'}; room: ${r.room || 'not recorded'}`
+  },
+  {
+    name: 'Campus buildings and offices', pattern: /building|office|location|where|saan|campus|registrar|library|gym|canteen|clinic|hours|oras|facilit/i,
     sql: 'SELECT name, shortName, category, description, offices, hours FROM Buildings WHERE isActive = 1 LIMIT 60',
-    format: r => `${r.name}${r.shortName ? ` (${r.shortName})` : ''}: ${r.category}; ${r.description || ''}; offices: ${list(r.offices) || 'not recorded'}; hours: ${r.hours || 'not recorded'}` },
-  { name: 'Active school year', pattern: /school year|academic year|taon|current year/i,
+    format: r => `${r.name}${r.shortName ? ` (${r.shortName})` : ''}: ${r.category}; ${r.description || ''}; offices: ${list(r.offices) || 'not recorded'}; hours: ${r.hours || 'not recorded'}`
+  },
+  {
+    name: 'Active school year', pattern: /school year|academic year|taon|current year/i,
     sql: 'SELECT year FROM school_years WHERE isActive = 1 LIMIT 1',
-    format: r => r.year }
+    format: r => r.year
+  }
 ];
 
 export async function retrieve(message) {
@@ -96,9 +112,11 @@ export async function retrieve(message) {
     const document = await EnrollmentGuide.findByPk(1);
     const content = document?.content;
     if (content) {
-      guideFAQs = content.steps.map(step => ({ id: null, source: 'portal', question: step.title,
+      guideFAQs = content.steps.map(step => ({
+        id: null, source: 'portal', question: step.title,
         keywords: JSON.stringify([step.title, step.requirements.join(' '), 'enrollment guide']),
-        answer: `According to the current published enrollment guide: ${step.description}\n${step.requirements.join('\n')}\n${step.tips}${step.estimatedTime ? `\nEstimated time: ${step.estimatedTime}` : ''}` }));
+        answer: `According to the current published enrollment guide: ${step.description}\n${step.requirements.join('\n')}\n${step.tips}${step.estimatedTime ? `\nEstimated time: ${step.estimatedTime}` : ''}`
+      }));
       guideFAQs.push({ id: null, source: 'portal', question: 'What are the enrollment guide steps?', keywords: '["guide", "steps", "process"]', answer: content.steps.map((step, index) => `${index + 1}. ${step.title}: ${step.description}`).join('\n') });
       guideFAQs.push({ id: null, source: 'portal', question: 'When is the enrollment period and deadline?', keywords: '["deadline", "period", "dates", "schedule"]', answer: [content.enrollmentPeriod || 'The enrollment schedule has not been announced in the guide.', content.enrollmentAudience, content.importantNotice, content.importantDetail].filter(Boolean).join('\n') });
 

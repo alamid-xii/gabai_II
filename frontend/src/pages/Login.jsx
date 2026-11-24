@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { SchoolName } from "../components/SchoolName";
-import { Link, Navigate, useNavigate } from "react-router";
+import { Link, Navigate, useLocation, useNavigate } from "react-router";
 import { roleHome } from "../utils/roleHome";
 import { Eye, EyeOff, LogIn, Mail, Lock, AlertCircle, Loader2, CheckCircle } from "lucide-react";
 import { Button } from "../components/ui/button";
@@ -23,6 +23,8 @@ export function Login() {
   });
   const { login, isLoggedIn, user } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const redirectTo = location.state?.from;
   const googleCallbackHandled = useRef(false);
 
   useEffect(() => {
@@ -103,7 +105,12 @@ export function Login() {
       // Use auth context to update login state
       login(data.user, data.token);
       if (data.user.profileCompleted === false) {
-        navigate("/complete-profile", { replace: true });
+        navigate("/complete-profile", { replace: true, state: redirectTo ? { from: redirectTo } : undefined });
+        return;
+      }
+
+      if (redirectTo && typeof redirectTo === "string" && redirectTo.startsWith("/")) {
+        navigate(redirectTo, { replace: true });
         return;
       }
 

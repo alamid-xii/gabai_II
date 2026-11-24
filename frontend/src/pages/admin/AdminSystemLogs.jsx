@@ -1,4 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
+import { createPortal } from "react-dom";
+import { usePortalSlot } from "../../hooks/usePortalSlot";
 import {
   Activity,
   Search,
@@ -127,6 +129,11 @@ export function AdminSystemLogs() {
   });
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
+  const headerContainer = usePortalSlot(
+    "admin-header-slot",
+    true,
+    "flex items-center justify-end gap-2 flex-wrap ml-auto"
+  );
 
   // Filters
   const [search, setSearch] = useState("");
@@ -357,41 +364,37 @@ export function AdminSystemLogs() {
     Boolean(startDate) ||
     Boolean(endDate);
 
+  const headerActions = (
+    <div className="flex items-center gap-2">
+      <button
+        type="button"
+        onClick={fetchLogs}
+        disabled={loading}
+        className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl border border-gray-200 bg-white text-sm font-medium text-[#001840] hover:bg-gray-50 transition-colors disabled:opacity-50 cursor-pointer"
+      >
+        <RefreshCw size={15} className={loading ? "animate-spin" : ""} />
+        Refresh
+      </button>
+      <button
+        type="button"
+        onClick={openExportModal}
+        disabled={exporting || summary.totalLogs === 0}
+        className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#001840] text-white text-sm font-semibold hover:bg-[#102A71] transition-colors disabled:opacity-50 cursor-pointer"
+      >
+        <Download size={15} />
+        Export CSV
+      </button>
+    </div>
+  );
+
   return (
     <div className="space-y-5">
-      {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div>
-          <h2 className="text-xl font-bold text-[#001840] flex items-center gap-2">
-            <Activity size={22} className="text-[#F5C400]" />
-            System Audit Logs
-          </h2>
-          <p className="text-sm text-gray-500 mt-0.5">
-            Complete audit trail of authentication, enrollment actions, scheduling, grading, and administrative changes
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={fetchLogs}
-            disabled={loading}
-            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl border border-gray-200 bg-white text-sm font-medium text-[#001840] hover:bg-gray-50 transition-colors disabled:opacity-50"
-          >
-            <RefreshCw size={15} className={loading ? "animate-spin" : ""} />
-            Refresh
-          </button>
-          <button
-            type="button"
-            onClick={openExportModal}
-            disabled={exporting || summary.totalLogs === 0}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#001840] text-white text-sm font-semibold hover:bg-[#102A71] transition-colors disabled:opacity-50"
-          >
-            <Download size={15} />
-            Export CSV
-          </button>
-        </div>
-      </div>
+      {/* Header Slot Action or Fallback */}
+      {headerContainer ? (
+        createPortal(headerActions, headerContainer)
+      ) : (
+        <div className="flex justify-end">{headerActions}</div>
+      )}
 
       {/* KPI Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -441,7 +444,7 @@ export function AdminSystemLogs() {
       </div>
 
       {/* Filters Card */}
-      <div className="bg-white rounded-2xl border border-gray-100 p-4 shadow-sm space-y-3">
+      <div className="bg-white rounded-2xl border border-gray-100 p-4 shadow-sm">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-3">
           {/* Search */}
           <div className="lg:col-span-2 relative">
@@ -466,10 +469,10 @@ export function AdminSystemLogs() {
               aria-label="Filter by category"
               className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white text-[#001840] focus:outline-none focus:ring-2 focus:ring-[#001840]/20"
             >
-              <option value="all">All Categories</option>
+              <option value="all">All Categories ({summary.totalLogs})</option>
               {Object.entries(CATEGORY_META).map(([key, meta]) => (
                 <option key={key} value={key}>
-                  {meta.label}
+                  {meta.label} ({summary.categoryBreakdown?.[key] || 0})
                 </option>
               ))}
             </select>
@@ -541,49 +544,8 @@ export function AdminSystemLogs() {
           </div>
         </div>
 
-        {/* Category Quick Pills + Clear Filters */}
-        <div className="flex items-center justify-between flex-wrap gap-2 pt-1 border-t border-gray-100">
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="text-xs font-medium text-gray-400 mr-1 flex items-center gap-1">
-              <Filter size={12} /> Quick Filter:
-            </span>
-            <button
-              type="button"
-              onClick={() => {
-                setCategory("all");
-                setPage(1);
-              }}
-              className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors ${
-                category === "all"
-                  ? "bg-[#001840] text-white"
-                  : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-              }`}
-            >
-              All ({summary.totalLogs})
-            </button>
-            {Object.entries(CATEGORY_META).map(([key, meta]) => {
-              const count = summary.categoryBreakdown?.[key] || 0;
-              return (
-                <button
-                  key={key}
-                  type="button"
-                  onClick={() => {
-                    setCategory(key);
-                    setPage(1);
-                  }}
-                  className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors ${
-                    category === key
-                      ? "bg-[#001840] text-[#F5C400]"
-                      : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                  }`}
-                >
-                  {meta.label} ({count})
-                </button>
-              );
-            })}
-          </div>
-
-          {hasActiveFilters && (
+        {hasActiveFilters && (
+          <div className="flex justify-end pt-2 mt-2 border-t border-gray-100">
             <button
               type="button"
               onClick={handleClearFilters}
@@ -591,8 +553,8 @@ export function AdminSystemLogs() {
             >
               <X size={13} /> Clear filters
             </button>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
       {/* Logs Table */}

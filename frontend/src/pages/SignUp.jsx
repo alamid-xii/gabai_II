@@ -276,15 +276,18 @@ export function SignUp() {
             </div>
 
             {/* Terms & Conditions */}
-            <div className="flex items-start gap-3 pt-1">
+            <div className="flex items-center gap-2 pt-1">
               <input
                 type="checkbox"
                 id="terms"
                 checked={agreedToTerms}
                 onChange={(e) => setAgreedToTerms(e.target.checked)}
-                className="w-5 h-5 rounded border-[#102A71] text-[#102A71] focus:ring-[#102A71] mt-0.5 shrink-0"
+                className="w-4 h-4 rounded border-[#102A71] text-[#102A71] focus:ring-[#102A71] shrink-0"
               />
-              <label htmlFor="terms" className="text-sm text-[#001840] leading-tight">
+              <label
+                htmlFor="terms"
+                className="text-[11px] min-[380px]:text-xs sm:text-[13px] text-[#001840] leading-none whitespace-nowrap"
+              >
                 I agree to the{" "}
                 <button
                   type="button"
@@ -292,7 +295,7 @@ export function SignUp() {
                     e.preventDefault();
                     setLegalModalTab("terms");
                   }}
-                  className="text-[#102A71] hover:text-[#001840] font-semibold underline decoration-[#102A71]/40 underline-offset-2 hover:decoration-[#001840] transition-colors cursor-pointer"
+                  className="inline p-0 m-0 text-[length:inherit] leading-none text-[#102A71] hover:text-[#001840] font-semibold underline decoration-[#102A71]/40 underline-offset-2 hover:decoration-[#001840] transition-colors cursor-pointer"
                 >
                   Terms and Conditions
                 </button>{" "}
@@ -303,7 +306,7 @@ export function SignUp() {
                     e.preventDefault();
                     setLegalModalTab("privacy");
                   }}
-                  className="text-[#102A71] hover:text-[#001840] font-semibold underline decoration-[#102A71]/40 underline-offset-2 hover:decoration-[#001840] transition-colors cursor-pointer"
+                  className="inline p-0 m-0 text-[length:inherit] leading-none text-[#102A71] hover:text-[#001840] font-semibold underline decoration-[#102A71]/40 underline-offset-2 hover:decoration-[#001840] transition-colors cursor-pointer"
                 >
                   Privacy Policy
                 </button>

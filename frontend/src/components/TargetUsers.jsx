@@ -1,27 +1,22 @@
-import { GraduationCap, Users, MapPinned, Globe } from "lucide-react";
+import { GraduationCap, Users, MapPinned } from "lucide-react";
 import { ImageWithFallback } from "./figma/ImageWithFallback";
 
 export function TargetUsers() {
   const users = [
     {
       icon: GraduationCap,
-      title: "Incoming Freshmen",
-      description: "New students beginning their Eastern Mindoro College journey"
+      title: "Incoming Grade 7 & Grade 11 Students",
+      description: "New Junior & Senior High School students beginning their Eastern Mindoro College journey"
     },
     {
       icon: Users,
-      title: "Transfer Students",
-      description: "Students transitioning from other institutions"
+      title: "Continuing & Transfer Students",
+      description: "Returning EMC learners and transferees transitioning from other schools"
     },
     {
       icon: MapPinned,
-      title: "Campus Visitors",
-      description: "Prospective students and families exploring the campus"
-    },
-    {
-      icon: Globe,
-      title: "Remote Students",
-      description: "Students from underserved or distant areas needing virtual access"
+      title: "Parents & Campus Visitors",
+      description: "Families and prospective students exploring campus buildings and admission requirements"
     }
   ];
 
@@ -76,24 +71,24 @@ export function TargetUsers() {
 
           {/* Right Image */}
           <div className="relative">
-            <div className="relative rounded-2xl overflow-hidden shadow-2xl">
+            <div className="relative rounded-2xl overflow-hidden shadow-2xl border border-gray-100">
               <ImageWithFallback
-                src="https://images.unsplash.com/photo-1758270705518-b61b40527e76?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxkaXZlcnNlJTIwc3R1ZGVudHMlMjBzdHVkeWluZyUyMHRvZ2V0aGVyfGVufDF8fHx8MTc3MjA1MDI0Nnww&ixlib=rb-4.1.0&q=80&w=1080"
-                alt="Diverse group of students studying together"
-                className="w-full h-[600px] object-cover"
+                src="/emc_campus_map.webp"
+                alt="Eastern Mindoro College Campus Map"
+                className="w-full h-[520px] sm:h-[580px] object-contain bg-white p-3"
               />
-              <div className="absolute inset-0 bg-linear-to-t from-[#001840]/50 to-transparent"></div>
+              <div className="absolute inset-0 bg-linear-to-t from-[#001840]/60 via-[#001840]/15 to-transparent"></div>
             </div>
 
             {/* Floating Stats */}
             <div className="absolute bottom-8 left-8 right-8 grid grid-cols-2 gap-4">
               <div className="bg-white p-4 rounded-xl shadow-lg">
-                <div className="text-2xl font-bold text-[#102A71]">100%</div>
-                <div className="text-sm text-gray-600">Inclusive</div>
+                <div className="text-2xl font-bold text-[#102A71]">JHS &amp; SHS</div>
+                <div className="text-sm text-gray-600">Grades 7 to 12</div>
               </div>
               <div className="bg-white p-4 rounded-xl shadow-lg">
                 <div className="text-2xl font-bold text-[#102A71]">24/7</div>
-                <div className="text-sm text-gray-600">Support</div>
+                <div className="text-sm text-gray-600">AI &amp; Virtual Tour</div>
               </div>
             </div>
           </div>

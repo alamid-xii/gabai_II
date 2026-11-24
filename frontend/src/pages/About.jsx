@@ -1,4 +1,5 @@
 import { useSchoolProfile } from "../hooks/useSchoolProfile";
+import { useAdmissionSettings } from "../hooks/useAdmissionSettings";
 import { Link } from "react-router";
 import {
   GraduationCap,
@@ -19,8 +20,13 @@ import {
 
 export function About() {
   const { profile } = useSchoolProfile();
+  const { settings } = useAdmissionSettings();
   const schoolName = profile?.schoolName || "Eastern Mindoro College, Inc.";
   const tagline = profile?.tagline || "Excellence in Academics and Character Formation";
+  const activeStrands = settings?.content?.strands
+    ? settings.content.strands.filter(item => item.active).map(item => item.name)
+    : ["STEM", "ABM", "HUMSS", "TVL"];
+  const sscEnabled = settings?.content?.ssc?.enabled !== false;
 
   const pillars = [
     {
@@ -55,14 +61,14 @@ export function About() {
       grades: "Grades 7 to 10",
       description:
         "Comprehensive foundational education fostering critical thinking, ethical values, and creative problem solving.",
-      tags: ["Regular Curriculum", "Special Science Class (SSC)"],
+      tags: sscEnabled ? ["Regular Curriculum", "Special Science Class (SSC)"] : ["Regular Curriculum"],
     },
     {
       title: "Senior High School (SHS)",
       grades: "Grades 11 to 12",
       description:
         "DepEd-recognized tracks tailored to prepare students for college excellence, entrepreneurship, or employment.",
-      tags: ["STEM Strand", "ABM Strand", "HUMSS Strand", "TVL Track"],
+      tags: activeStrands.length ? activeStrands : ["No active strands"],
     },
   ];
 

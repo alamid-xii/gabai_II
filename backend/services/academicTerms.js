@@ -46,3 +46,23 @@ export async function ensureSubjectTeacher(db) {
   const columns = await db.getQueryInterface().describeTable('subjects');
   if (!columns.teacherId) await db.query('ALTER TABLE subjects ADD COLUMN teacherId INTEGER NULL');
 }
+
+export async function ensureSchoolYearColumns(db) {
+  const columns = await db.getQueryInterface().describeTable('school_years');
+  if (!columns.startMonth) await db.query('ALTER TABLE school_years ADD COLUMN startMonth INTEGER NULL DEFAULT 6');
+  if (!columns.endMonth) await db.query('ALTER TABLE school_years ADD COLUMN endMonth INTEGER NULL DEFAULT 3');
+  if (!columns.activeEnrollmentTypes) await db.query('ALTER TABLE school_years ADD COLUMN activeEnrollmentTypes JSON NULL');
+  await db.query(
+    `UPDATE school_years
+     SET startMonth = COALESCE(startMonth, 6),
+         endMonth = COALESCE(endMonth, 3),
+         activeEnrollmentTypes = COALESCE(activeEnrollmentTypes, '{"new":true,"old":true,"transferee":true,"returnee":true}')
+     WHERE startMonth IS NULL OR endMonth IS NULL OR activeEnrollmentTypes IS NULL`
+  );
+}
+
+export async function ensureSectionGradeRangeColumns(db) {
+  const columns = await db.getQueryInterface().describeTable('sections');
+  if (!columns.minGrade) await db.query('ALTER TABLE sections ADD COLUMN minGrade DECIMAL(5,2) NULL');
+  if (!columns.maxGrade) await db.query('ALTER TABLE sections ADD COLUMN maxGrade DECIMAL(5,2) NULL');
+}

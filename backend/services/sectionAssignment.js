@@ -44,6 +44,85 @@ export async function autoEnrollSubjects(enrollmentId, enrollment, section, tran
   return subjects.length;
 }
 
+async function resolveStudentGeneralAverage(query, enrollment) {
+  if (enrollment.grade6Average !== null && enrollment.grade6Average !== undefined && enrollment.grade6Average !== '') {
+    const direct = Number(enrollment.grade6Average);
+    if (Number.isFinite(direct)) return direct;
+  }
+  if (!enrollment.userId) return null;
+  const [[prevGrade]] = await query(
+    `SELECT AVG(es.finalGrade) AS gwa
+     FROM enrollment_subjects es
+     JOIN enrollment_records er ON er.id = es.enrollmentId
+     WHERE er.userId = ? AND er.id <> ? AND es.finalGrade IS NOT NULL AND es.status = 'enrolled'
+     GROUP BY er.id
+     ORDER BY er.id DESC
+     LIMIT 1`,
+    { replacements: [enrollment.userId, enrollment.id] }
+  );
+  if (prevGrade?.gwa !== null && prevGrade?.gwa !== undefined) {
+    const gwa = Number(prevGrade.gwa);
+    if (Number.isFinite(gwa)) return Math.round(gwa * 100) / 100;
+  }
+  return null;
+}
+
+const hasGradeRange = section =>
+  (section.minGrade !== null && section.minGrade !== undefined && section.minGrade !== '') ||
+  (section.maxGrade !== null && section.maxGrade !== undefined && section.maxGrade !== '');
+
+const parseBound = (value, fallback) =>
+  value !== null && value !== undefined && value !== '' ? Number(value) : fallback;
+
+export function selectBestSectionForStudent(candidates, generalAverage = null) {
+  const available = candidates.filter(({ section, count }) => count < Number(section.capacity));
+  if (!available.length) return null;
+
+  const avg = generalAverage !== null && generalAverage !== undefined && Number.isFinite(Number(generalAverage))
+    ? Number(generalAverage)
+    : null;
+
+  if (avg === null) {
+    const sorted = [...available].sort((a, b) =>
+      Number(hasGradeRange(a.section)) - Number(hasGradeRange(b.section)) ||
+      a.count - b.count ||
+      Number(a.section.id) - Number(b.section.id)
+    );
+    return { ...sorted[0], placementMode: hasGradeRange(sorted[0].section) ? 'fallback_no_grade' : 'no_grade' };
+  }
+
+  const inRange = [];
+  const open = [];
+  const outOfRange = [];
+
+  for (const item of available) {
+    if (!hasGradeRange(item.section)) {
+      open.push(item);
+      continue;
+    }
+    const min = parseBound(item.section.minGrade, -Infinity);
+    const max = parseBound(item.section.maxGrade, Infinity);
+    if (avg >= min && avg <= max) {
+      const span = Number.isFinite(min) && Number.isFinite(max) ? max - min : 50;
+      inRange.push({ ...item, span });
+    } else {
+      const distance = avg < min ? min - avg : avg - max;
+      outOfRange.push({ ...item, distance });
+    }
+  }
+
+  if (inRange.length) {
+    inRange.sort((a, b) => a.span - b.span || a.count - b.count || Number(a.section.id) - Number(b.section.id));
+    return { ...inRange[0], placementMode: 'exact_range' };
+  }
+  if (open.length) {
+    open.sort((a, b) => a.count - b.count || Number(a.section.id) - Number(b.section.id));
+    return { ...open[0], placementMode: 'open_section' };
+  }
+  outOfRange.sort((a, b) => a.distance - b.distance || a.count - b.count || Number(a.section.id) - Number(b.section.id));
+  return { ...outOfRange[0], placementMode: 'fallback_nearest' };
+}
+
 export async function autoAssignSection(enrollmentId) {
   try {
     return await sequelize.transaction(transactionOptions, async transaction => {
@@ -65,13 +144,19 @@ export async function autoAssignSection(enrollmentId) {
         AND isActive = 1 ORDER BY currentEnrollment, id FOR UPDATE`, {
         replacements: [enrollment.educationLevel, gradeNumber(enrollment.gradeLevel), enrollment.academicYear, ...(track === 'Regular' ? [] : [track])],
       });
+      const candidates = [];
       for (const section of sections) {
         assertSectionCompatible(enrollment, section);
         const count = await sectionCount(query, section.id);
-        if (count >= Number(section.capacity)) continue;
+        candidates.push({ section, count });
+      }
+      const generalAverage = await resolveStudentGeneralAverage(query, enrollment);
+      const chosen = selectBestSectionForStudent(candidates, generalAverage);
+      if (chosen) {
+        const { section, count, placementMode } = chosen;
         await query("UPDATE enrollment_records SET sectionId = ?, sectionName = ?, status = 'enrolled', updatedAt = NOW() WHERE id = ?", { replacements: [section.id, section.code, enrollmentId] });
         await query('UPDATE sections SET currentEnrollment = ?, updatedAt = NOW() WHERE id = ?', { replacements: [count + 1, section.id] });
-        return { assigned: true, section, subjectsEnrolled: await autoEnrollSubjects(enrollmentId, enrollment, section, transaction) };
+        return { assigned: true, section, placementMode, generalAverage, subjectsEnrolled: await autoEnrollSubjects(enrollmentId, enrollment, section, transaction) };
       }
       return { assigned: false, reason: `No available ${enrollment.educationLevel} Grade ${gradeNumber(enrollment.gradeLevel)} ${track} section for ${enrollment.academicYear}.` };
     });

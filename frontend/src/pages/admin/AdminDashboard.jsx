@@ -1,5 +1,6 @@
 import { AdminAdmissionSettings } from "./AdminAdmissionSettings";
 import { confirmAction } from "../../utils/confirmAction";
+import { toast } from "sonner";
 import { AdminSchoolProfile } from "./AdminSchoolProfile";
 import { AdminEnrollmentGuide } from "./AdminEnrollmentGuide";
 import { useState, useEffect, useCallback } from "react";
@@ -116,11 +117,16 @@ export function AdminDashboard({ initialTab = "dashboard" }) {
       });
 
       if (response.ok) {
+        toast.success("FAQ created successfully");
         fetchDashboardData();
         setShowFAQForm(false);
+      } else {
+        const data = await response.json().catch(() => ({}));
+        toast.error(data.error || "Failed to create FAQ");
       }
     } catch (error) {
       console.error("Error creating FAQ:", error);
+      toast.error("Failed to create FAQ");
     }
   }
 
@@ -137,11 +143,16 @@ export function AdminDashboard({ initialTab = "dashboard" }) {
       });
 
       if (response.ok) {
+        toast.success("FAQ updated successfully");
         fetchDashboardData();
         setEditingFAQ(null);
+      } else {
+        const data = await response.json().catch(() => ({}));
+        toast.error(data.error || "Failed to update FAQ");
       }
     } catch (error) {
       console.error("Error updating FAQ:", error);
+      toast.error("Failed to update FAQ");
     }
   }
 
@@ -158,10 +169,16 @@ export function AdminDashboard({ initialTab = "dashboard" }) {
       });
 
       if (response.ok) {
+        setFAQs((prev) => prev.filter((item) => item.id !== id));
+        toast.success("FAQ deleted successfully");
         fetchDashboardData();
+      } else {
+        const data = await response.json().catch(() => ({}));
+        toast.error(data.error || "Failed to delete FAQ");
       }
     } catch (error) {
       console.error("Error deleting FAQ:", error);
+      toast.error("Failed to delete FAQ");
     }
   }
 
@@ -194,11 +211,18 @@ export function AdminDashboard({ initialTab = "dashboard" }) {
     <div className="min-h-screen bg-gray-100 lg:pl-65">
       <Navbar variant="admin" activeTab={activeTab} onTabChange={(tab) => { setActiveTab(tab); if (tab !== activeTab) navigate("/admin", { state: { tab } }); }} />
       <div className="flex-1 flex flex-col min-h-screen">
-        <header className="bg-white border-b border-gray-100 px-6 py-4 flex items-center gap-4 sticky top-0 z-20 shadow-sm mt-16 lg:mt-0">
-          <div className="flex-1">
+        <header className="bg-white border-b border-gray-100 px-6 py-4 flex items-center gap-4 flex-wrap sticky top-0 z-20 shadow-sm mt-16 lg:mt-0">
+          <div className="flex-1 min-w-[240px]">
             <h1 className="text-2xl font-bold text-[#001840]">
-              {menuItems.find((item) => item.id === activeTab)?.label}
+              {activeTab === "logs"
+                ? "System Audit Logs"
+                : menuItems.find((item) => item.id === activeTab)?.label}
             </h1>
+            {activeTab === "logs" && (
+              <p className="text-xs sm:text-sm text-gray-500 mt-0.5">
+                Complete audit trail of authentication, enrollment actions, scheduling, grading, and administrative changes
+              </p>
+            )}
           </div>
           <div id="admin-header-slot" className="flex items-center justify-end gap-2 ml-auto"></div>
           {activeTab === "dashboard" && (

@@ -28,10 +28,22 @@ export function BuildingVoiceoverEditor({ buildingId, script, onScriptLoaded, on
   async function action(kind, body) {
     setBusy(true); setError('');
     try {
+      const token = localStorage.getItem('token');
+      if (kind === 'generate' && unsaved && script.trim()) {
+        const saveRes = await fetch(`${API}/admin/buildings/${buildingId}`, {
+          method: 'PUT',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ voiceoverScript: script.trim() })
+        });
+        if (!saveRes.ok) {
+          const errData = await saveRes.json().catch(() => ({}));
+          throw Error(errData.error || 'Could not save voiceover script');
+        }
+      }
       const response = await fetch(`${API}/admin/buildings/${buildingId}/voiceover/${kind}`, {
         method: kind === 'generate' ? 'POST' : 'PUT',
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(kind === 'generate' ? { ...body, script: script.trim() } : body)
       });
       const data = await response.json();
       if (!response.ok) throw Error(data.error || 'Voiceover request failed');
@@ -44,13 +56,13 @@ export function BuildingVoiceoverEditor({ buildingId, script, onScriptLoaded, on
   return <div className="space-y-3 text-sm">
     {!buildingId ? <p className="text-gray-500">Save this building first, then generate and preview its narration here.</p> : <>
       {!configured && <p className="text-amber-800">Voice generation needs setup: add the ElevenLabs API key and voice ID to the backend environment, then restart the backend.</p>}
-      <p className="text-gray-600">{unsaved ? 'Save the building to apply your script changes before generating.' : current ? (building?.voiceoverPublished ? 'Published: students can hear this narration.' : 'Audio ready. Preview it, then publish when approved.') : 'Voiceover needs generation for the saved script.'}</p>
+      <p className="text-gray-600">{unsaved ? 'Script modified — click Generate audio below to save and generate the new narration.' : current ? (building?.voiceoverPublished ? 'Published: students can hear this narration.' : 'Audio ready. Preview it, then publish when approved.') : 'Voiceover needs generation for the saved script.'}</p>
       <div className="flex flex-wrap gap-2">
-        <button type="button" disabled={busy || !building || !configured || unsaved || !script.trim()}
+        <button type="button" disabled={busy || !building || !configured || !script.trim()}
           onClick={async () => {
             if (current && !(await confirmAction({ title: 'Regenerate Audio', message: 'Generate a new take? This uses ElevenLabs credits.', confirmText: 'Regenerate', variant: 'warning' }))) return;
             action('generate', { regenerate: current });
-          }} className="px-3 py-2 rounded-lg bg-[#001840] text-white disabled:opacity-40">
+          }} className="px-3 py-2 rounded-lg bg-[#001840] text-white disabled:opacity-40 cursor-pointer">
           {busy ? 'Working…' : current ? 'Regenerate audio' : 'Generate audio'}
         </button>
         {building?.voiceoverAudioUrl && <button type="button" disabled={busy || (!building.voiceoverPublished && (!current || unsaved || !previewed))}

@@ -1,4 +1,5 @@
 import { currentAdmission, policyFor, validateSelection, validateBirthDate, sscContinuationEligibility } from "../services/admissionPolicy.js";
+import { normalizeEnrollmentTypes } from "./academicController.js";
 import { needsProfileCompletion, serializeUser } from "../services/userProfile.js";
 /*
 MIT License
@@ -199,7 +200,7 @@ export const createEnrollment = async (req, res) => {
   try {
     const requestedSscClass = req.body.sscClass;
     const body = { ...req.body };
-    for (const key of ['id','userId','admissionPolicy','admissionRevision','sscQualified','sscClass','sscResult','sscExamScore','sectionId','sectionName','previousGeneralAverage']) delete body[key];
+    for (const key of ['id', 'userId', 'admissionPolicy', 'admissionRevision', 'sscQualified', 'sscClass', 'sscResult', 'sscExamScore', 'sectionId', 'sectionName', 'previousGeneralAverage']) delete body[key];
     let { policy, revision } = await currentAdmission();
     let sscQualified = null;
     let sscClass = null;
@@ -222,7 +223,7 @@ export const createEnrollment = async (req, res) => {
           { replacements: [req.user.id] }
         );
         if (prevRows && prevRows.length > 0) prevEnrollment = prevRows[0];
-      } catch (_) {}
+      } catch (_) { }
 
       const gradeSummary = prevEnrollment
         ? await computeEnrollmentGradesSummary(prevEnrollment.id)
@@ -253,6 +254,22 @@ export const createEnrollment = async (req, res) => {
       sscClass = 'SSC';
       body.sscChoiceMade = true;
       body.sscApplied = false;
+    } else if (body.educationLevel === 'JHS' && body.enrollmentType === 'transferee' && requestedSscClass === 'SSC') {
+      const maintainingAverage = Number(policy?.ssc?.maintainingAverage ?? policy?.ssc?.minimumAverage ?? 85);
+      const rawReported = req.body.previousGeneralAverage ?? req.body.grade6Average;
+      if (rawReported !== undefined && rawReported !== null && rawReported !== '') {
+        const reportedAvg = Number(rawReported);
+        if (!Number.isFinite(reportedAvg) || reportedAvg < maintainingAverage || reportedAvg > 100) {
+          return res.status(400).json({
+            message: `SSC transferees must meet the SSC maintaining grade of ${maintainingAverage}.`,
+            sscDisqualified: Number.isFinite(reportedAvg) && reportedAvg < maintainingAverage,
+            maintainingAverage,
+          });
+        }
+      }
+      sscClass = 'SSC';
+      body.sscChoiceMade = true;
+      body.sscApplied = false;
     } else if (body.educationLevel === 'JHS' && requestedSscClass === 'Regular') {
       sscClass = 'Regular';
       body.sscChoiceMade = true;
@@ -262,12 +279,14 @@ export const createEnrollment = async (req, res) => {
     // ── One enrollment per student per school year ────────────────────────────
     // Fetch the active school year first so we can scope the uniqueness check
     let activeYear = null;
+    let activeEnrollmentTypes = null;
     try {
       const [[activeSY]] = await sequelize.query(
-        "SELECT year FROM school_years WHERE isActive = 1 LIMIT 1"
+        "SELECT year, activeEnrollmentTypes FROM school_years WHERE isActive = 1 LIMIT 1"
       );
       if (activeSY?.year) activeYear = activeSY.year;
-    } catch (_) {}
+      if (activeSY) activeEnrollmentTypes = normalizeEnrollmentTypes(activeSY.activeEnrollmentTypes);
+    } catch (_) { }
 
     // Allow if the only existing record for this year is an SSC-only placeholder (no firstName yet)
     const [existing] = await sequelize.query(
@@ -295,17 +314,17 @@ export const createEnrollment = async (req, res) => {
         if (!existingRecord.sscResult) return res.status(409).json({ message: 'Wait for your SSC exam result before completing the enrollment form.' });
         validateSelection(policy, { ...body, sscApplied: false });
         body.admissionPolicy = policy; body.admissionRevision = revision;
-        const safeFields = ['admissionPolicy','admissionRevision','educationLevel','gradeLevel','strand','studentType','academicYear','dateEnrolled',
-          'lrn','familyName','firstName','middleName','sex','dateOfBirth','placeOfBirth',
-          'fatherMobileNumber','motherMobileNumber','fatherName','fatherOccupation','motherName','motherOccupation','parentsAddress',
-          'guardianName','guardianOccupation','guardianAddress','guardianTelephone',
-          'grade6School','grade6SchoolAddress','grade6Section','grade6SYStart','grade6SYEnd',
-          'grade6Average','grade6Remarks','lastHSSchool','lastHSCurriculumYear','lastHSSection',
-          'lastHSSYStart','lastHSSYEnd','admissionCredentials','studentSignature','parentGuardianSignature'];
+        const safeFields = ['admissionPolicy', 'admissionRevision', 'educationLevel', 'gradeLevel', 'strand', 'studentType', 'academicYear', 'dateEnrolled',
+          'lrn', 'familyName', 'firstName', 'middleName', 'sex', 'dateOfBirth', 'placeOfBirth',
+          'fatherMobileNumber', 'motherMobileNumber', 'fatherName', 'fatherOccupation', 'motherName', 'motherOccupation', 'parentsAddress',
+          'guardianName', 'guardianOccupation', 'guardianAddress', 'guardianTelephone',
+          'grade6School', 'grade6SchoolAddress', 'grade6Section', 'grade6SYStart', 'grade6SYEnd',
+          'grade6Average', 'grade6Remarks', 'lastHSSchool', 'lastHSCurriculumYear', 'lastHSSection',
+          'lastHSSYStart', 'lastHSSYEnd', 'admissionCredentials', 'studentSignature', 'parentGuardianSignature'];
         const updates = safeFields.filter(k => body[k] !== undefined);
         if (updates.length > 0) {
           const setClause = updates.map(k => `${k} = ?`).join(', ');
-          const values = updates.map(k => ['admissionCredentials','admissionPolicy'].includes(k) ? JSON.stringify(body[k]) : body[k]);
+          const values = updates.map(k => ['admissionCredentials', 'admissionPolicy'].includes(k) ? JSON.stringify(body[k]) : body[k]);
           await sequelize.query(
             `UPDATE enrollment_records SET ${setClause}, status = 'draft', updatedAt = NOW() WHERE id = ?`,
             { replacements: [...values, existingRecord.id] }
@@ -320,7 +339,7 @@ export const createEnrollment = async (req, res) => {
       });
     }
 
-    validateSelection(policy, body);
+    validateSelection(policy, body, { activeEnrollmentTypes });
 
     // LRN uniqueness check: ensure no other student is using this LRN
     if (body.lrn) {
@@ -363,7 +382,7 @@ export const createEnrollment = async (req, res) => {
         if (prevIdRow?.studentNumber) {
           recordedStudentId = String(prevIdRow.studentNumber).trim().toUpperCase();
         }
-      } catch (_) {}
+      } catch (_) { }
 
       if (recordedStudentId) {
         if (recordedStudentId !== enteredStudentId) {
@@ -383,7 +402,7 @@ export const createEnrollment = async (req, res) => {
               message: `This Student ID (${enteredStudentId}) is already registered to another student account. Please check your Student ID and try again.`
             });
           }
-        } catch (_) {}
+        } catch (_) { }
         body.studentNumber = enteredStudentId;
       }
     } else if (!body.studentNumber) {
@@ -397,7 +416,7 @@ export const createEnrollment = async (req, res) => {
         if (prev?.studentNumber) {
           body.studentNumber = prev.studentNumber;
         }
-      } catch (_) {}
+      } catch (_) { }
     }
 
     // Check if returning student was marked retained in previous enrollment
@@ -416,7 +435,7 @@ export const createEnrollment = async (req, res) => {
             });
           }
         }
-      } catch (_) {}
+      } catch (_) { }
     }
 
     const enrollmentData = {
@@ -444,7 +463,7 @@ export const createEnrollment = async (req, res) => {
         }
         await req.user.update(userUpdates);
       }
-    } catch (_) {}
+    } catch (_) { }
 
     if (body.previousEnrollmentId) {
       try {
@@ -642,7 +661,7 @@ export const getEnrollmentById = async (req, res) => {
           { replacements: [enrollment.sectionId] }
         );
         if (section?.instructor) adviserName = section.instructor;
-      } catch (_) {}
+      } catch (_) { }
     }
 
     // Lookup previous section if student had a prior enrollment with section or grade6Section
@@ -670,7 +689,7 @@ export const getEnrollmentById = async (req, res) => {
           };
         }
       }
-    } catch (_) {}
+    } catch (_) { }
 
     const enrollmentData = enrollment.toJSON();
     enrollmentData.adviserName = adviserName;
@@ -919,6 +938,11 @@ export const downloadEnrollmentPDF = async (req, res) => {
     if (req.user.role !== 'admin' && req.user.role !== 'registrar' && enrollment.userId !== req.user.id) {
       return res.status(403).json({
         message: 'You do not have permission to download this enrollment PDF'
+      });
+    }
+    if (!['new', 'transferee'].includes(enrollment.enrollmentType || 'new')) {
+      return res.status(403).json({
+        message: 'Enrollment form PDF is only available for new and transferee applications.'
       });
     }
 

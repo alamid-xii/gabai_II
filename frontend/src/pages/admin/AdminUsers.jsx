@@ -1,11 +1,12 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import {
   Users, Search, X, Plus, ChevronLeft, ChevronRight,
-  UserPlus, Target, MapPin, Pencil, KeyRound, UserCheck, UserX, Copy, Check, Loader2
+  UserPlus, Target, MapPin, Pencil, KeyRound, UserCheck, UserX, Copy, Check, Loader2, Trash2
 } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "../../components/ui/badge";
 import { API } from "../../config/api";
+import { confirmAction } from "../../utils/confirmAction";
 
 export function AdminUsers({ users: initialUsers = [] }) {
   const [users, setUsers] = useState(initialUsers);
@@ -17,6 +18,7 @@ export function AdminUsers({ users: initialUsers = [] }) {
   const [editingUser, setEditingUser] = useState(null);
   const [resetPasswordUser, setResetPasswordUser] = useState(null);
   const [togglingId, setTogglingId] = useState(null);
+  const [deletingId, setDeletingId] = useState(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
 
   const currentAuthUser = useMemo(() => {
@@ -72,6 +74,42 @@ export function AdminUsers({ users: initialUsers = [] }) {
   function handleUserCreated(newUser) {
     setUsers(prev => [newUser, ...prev]);
     setShowCreateModal(false);
+  }
+
+  async function handleDeleteUser(u) {
+    if (currentAuthUser.id === u.id) {
+      toast.error("You cannot delete your own account.");
+      return;
+    }
+    if (u.role === 'admin' || u.role === 'registrar') {
+      toast.error("Admin and registrar accounts cannot be deleted.");
+      return;
+    }
+    const ok = await confirmAction({
+      title: `Delete ${u.name || u.email}?`,
+      message: "This will permanently delete this account and any associated enrollment records. This action cannot be undone.",
+      confirmText: "Delete account",
+      variant: "danger",
+    });
+    if (!ok) return;
+
+    setDeletingId(u.id);
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${API}/admin/users/${u.id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || data.message || 'Failed to delete user');
+
+      setUsers(prev => prev.filter(user => user.id !== u.id));
+      toast.success(data.message || `Deleted ${u.email}`);
+    } catch (err) {
+      toast.error(err.message || 'Failed to delete user');
+    } finally {
+      setDeletingId(null);
+    }
   }
 
   const filtered = useMemo(() => {
@@ -352,6 +390,27 @@ export function AdminUsers({ users: initialUsers = [] }) {
                                 <UserX size={15} />
                               ) : (
                                 <UserCheck size={15} />
+                              )}
+                            </button>
+
+                            {/* 4. Delete User */}
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteUser(u)}
+                              disabled={deletingId === u.id || currentAuthUser.id === u.id || u.role === 'admin' || u.role === 'registrar'}
+                              title={
+                                currentAuthUser.id === u.id
+                                  ? "Cannot delete own account"
+                                  : u.role === 'admin' || u.role === 'registrar'
+                                  ? "Admin and registrar accounts cannot be deleted"
+                                  : "Delete user"
+                              }
+                              className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-red-600 hover:text-red-800 hover:bg-red-50 border border-transparent hover:border-red-200 transition-colors disabled:opacity-35 disabled:cursor-not-allowed"
+                            >
+                              {deletingId === u.id ? (
+                                <Loader2 size={15} className="animate-spin text-red-500" />
+                              ) : (
+                                <Trash2 size={15} />
                               )}
                             </button>
                           </div>
@@ -910,10 +969,9 @@ export function AerialPinPicker({ position, onPositionChange, onClose }) {
   }
 
   return (
-    <div className="fixed inset-0 z-9999 flex items-center justify-center p-4 bg-black/70">
+    <div className="fixed inset-0 z-9999 flex items-center justify-center p-3 sm:p-4 bg-black/70">
       <div
-        className="bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden"
-        style={{ width: '100%', maxWidth: '780px', maxHeight: '90vh' }}
+        className="bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden w-full max-w-3xl h-[88vh] max-h-[820px]"
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100 shrink-0 bg-[#FFFDF0]">
@@ -930,23 +988,30 @@ export function AerialPinPicker({ position, onPositionChange, onClose }) {
           </button>
         </div>
 
-        <div className="flex-1 overflow-auto relative cursor-crosshair select-none bg-gray-100">
-          <div className="relative inline-block w-full" onClick={handleImageClick}>
+        <div className="flex-1 min-h-0 p-3 flex items-center justify-center bg-gray-100 overflow-hidden select-none">
+          <div
+            onClick={handleImageClick}
+            className="relative shadow-md rounded-xl overflow-hidden border border-gray-200 aspect-[1922/2048] h-full w-auto max-w-full max-h-full cursor-crosshair"
+          >
             <img
               ref={imgRef}
               src="/emc_aerial.jpg"
               alt="EMC Campus"
-              className="w-full h-auto block"
+              className="w-full h-full object-contain block pointer-events-none select-none"
               draggable={false}
             />
             {localPos && (
               <div
-                style={{ left: `${localPos.x}%`, top: `${localPos.y}%`, position: 'absolute', transform: 'translate(-50%, -50%)', pointerEvents: 'none' }}
+                style={{ left: `${localPos.x}%`, top: `${localPos.y}%`, position: 'absolute', transform: 'translate(-50%, -100%)', pointerEvents: 'none' }}
+                className="flex flex-col items-center"
               >
-                <div className="w-9 h-9 bg-[#F5C400] border-2 border-white rounded-full shadow-xl flex items-center justify-center">
-                  <MapPin className="w-4 h-4 text-[#001840]" />
+                <div className="relative">
+                  <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full border-2 bg-[#001840] border-[#F5C400] flex items-center justify-center shadow-lg">
+                    <MapPin className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#F5C400]" />
+                  </div>
+                  <div className="absolute inset-0 rounded-full bg-[#F5C400] opacity-30 animate-ping" />
                 </div>
-                <div className="absolute inset-0 rounded-full bg-[#F5C400] opacity-30 animate-ping" />
+                <div className="w-0.5 h-2.5 bg-[#001840]" />
               </div>
             )}
           </div>

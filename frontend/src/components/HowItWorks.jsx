@@ -1,6 +1,9 @@
-import { MessageCircle, FileText, Smartphone, CheckCircle } from "lucide-react";
+import { MessageCircle, FileText, Smartphone, CheckCircle, ArrowRight } from "lucide-react";
+import { Link } from "react-router";
+import { useAuth } from "../contexts/authState";
 
 export function HowItWorks() {
+  const { isLoggedIn } = useAuth();
   const steps = [
     {
       number: "01",
@@ -12,7 +15,7 @@ export function HowItWorks() {
       number: "02",
       icon: FileText,
       title: "Review Requirements",
-      description: "Get personalized admission requirements, document checklists, and important timelines for your program"
+      description: "Check the JHS & SHS admission requirements, document checklists, and important enrollment guidelines"
     },
     {
       number: "03",
@@ -24,7 +27,7 @@ export function HowItWorks() {
       number: "04",
       icon: CheckCircle,
       title: "Complete Enrollment",
-      description: "Follow the guided enrollment steps with progress tracking to ensure you don't miss any important tasks"
+      description: "Submit your online enrollment form and track your application status from assessment to section assignment"
     }
   ];
 
@@ -90,9 +93,13 @@ export function HowItWorks() {
           <p className="text-lg text-gray-700 mb-6">
             Ready to simplify your enrollment process?
           </p>
-          <button className="bg-[#102A71] hover:bg-[#1a3a8f] text-white px-8 py-4 rounded-lg font-semibold transition-colors duration-200">
+          <Link
+            to={isLoggedIn ? "/enroll" : "/signup"}
+            className="inline-flex items-center gap-2 bg-[#102A71] hover:bg-[#1a3a8f] text-white px-8 py-4 rounded-lg font-semibold transition-colors duration-200 shadow-md hover:shadow-lg"
+          >
             Start Your Journey
-          </button>
+            <ArrowRight className="w-5 h-5" />
+          </Link>
         </div>
       </div>
     </section>

@@ -5,8 +5,7 @@ import { confirmAction } from '../../utils/confirmAction';
 
 const fields = {
   enrollmentPeriod: 'Enrollment period / dates', enrollmentAudience: 'Who can enroll',
-  importantNotice: 'Important notice', importantDetail: 'Additional notice', completionTitle: 'Checklist completion heading',
-  completionMessage: 'Checklist completion message', completionDetail: 'Additional completion message'
+  importantNotice: 'Important notice', importantDetail: 'Additional notice'
 };
 const icons = ['FileText', 'ClipboardList', 'CreditCard', 'UserCheck', 'BookOpen', 'Camera'];
 export function AdminEnrollmentGuide() {
@@ -62,10 +61,7 @@ export function AdminEnrollmentGuide() {
           <div className="grid sm:grid-cols-2 gap-3">
             <label className="text-sm">Estimated time<input maxLength={100} value={step.estimatedTime} onChange={event => stepField(index, 'estimatedTime', event.target.value)} className={inputClass} /></label>
             <label className="text-sm">Icon<select value={step.icon} onChange={event => stepField(index, 'icon', event.target.value)} className={inputClass}>{icons.map(icon => <option key={icon}>{icon}</option>)}</select></label>
-            <label className="text-sm">Download button text<input maxLength={100} value={step.downloadLabel} onChange={event => stepField(index, 'downloadLabel', event.target.value)} className={inputClass} /></label>
-            <label className="text-sm">Download link (optional)<input maxLength={1000} value={step.downloadUrl} onChange={event => stepField(index, 'downloadUrl', event.target.value)} placeholder="https://… or /uploads/…" className={inputClass} /></label>
           </div>
-          <p className="text-xs text-gray-500">Without a link, Download provides a text checklist using this step's saved content.</p>
         </section>)}
         <div className="flex flex-wrap gap-3">
           <button type="button" disabled={guide.content.steps.length >= 20} onClick={() => field('steps', [...guide.content.steps, { id: Math.max(0, ...guide.content.steps.map(step => step.id)) + 1, icon: 'FileText', title: '', description: '', requirements: [], tips: '', estimatedTime: '', downloadLabel: 'Download checklist', downloadUrl: '' }])} className="rounded-lg border px-4 py-2">Add step</button>

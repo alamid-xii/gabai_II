@@ -65,7 +65,8 @@ export function checklist(policy, enrollment) {
   const rules = policy.requirements[enrollment.educationLevel]?.[enrollment.enrollmentType || 'new'] || [];
   return rules.map(rule => ({ ...rule, label: policy.documents.find(doc => doc.key === rule.key)?.label || rule.key }));
 }
-export function validateSelection(policy, body, { sscPlaceholder = false } = {}) {
+export function validateSelection(policy, body, { sscPlaceholder = false, activeEnrollmentTypes = null } = {}) {
+  if (activeEnrollmentTypes && activeEnrollmentTypes[body.enrollmentType || 'new'] === false) throw fail('This enrollment type is currently deactivated for the active academic year.');
   if (!LEVELS.includes(body.educationLevel) || !TYPES.includes(body.enrollmentType || 'new')) throw fail('Select a valid education level and applicant type.');
   const grades = GRADES_BY_LEVEL[body.educationLevel];
   if (!grades.includes(body.gradeLevel)) throw fail('Choose a valid grade for your education level.');

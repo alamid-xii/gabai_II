@@ -811,7 +811,7 @@ export function EnrollmentDetail({ enrollmentId, enrollment: rowData, onClose, o
               <UserX size={13} /> Update Student Status
             </button>
           )}
-          {e.enrollmentType !== 'old' && <EnrollmentPdfButton key={`${enrollmentId}:${e.updatedAt || ''}`} enrollmentId={enrollmentId} />}
+          {['new', 'transferee'].includes(e.enrollmentType || 'new') && <EnrollmentPdfButton key={`${enrollmentId}:${e.updatedAt || ''}`} enrollmentId={enrollmentId} />}
         </div>
       </div>
 

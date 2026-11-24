@@ -105,17 +105,16 @@ function BirthdayPicker({ value, onChange, error }) {
           type="button"
           aria-label="Choose date of birth"
           aria-invalid={!!error}
-          className={`flex w-full items-center justify-between gap-2 rounded-xl border bg-white px-4 py-2.5 text-left text-sm ${
-            error ? "border-red-400" : "border-gray-200"
-          } focus:outline-none focus:ring-2 focus:ring-[#102A71]/20`}
+          className={`flex w-full items-center justify-between gap-2 rounded-xl border bg-white px-4 py-2.5 text-left text-sm ${error ? "border-red-400" : "border-gray-200"
+            } focus:outline-none focus:ring-2 focus:ring-[#102A71]/20`}
         >
           <span className={parsed ? "text-[#001840]" : "text-gray-400"}>
             {parsed
               ? parsed.date.toLocaleDateString("en-PH", {
-                  month: "long",
-                  day: "numeric",
-                  year: "numeric",
-                })
+                month: "long",
+                day: "numeric",
+                year: "numeric",
+              })
               : "Select your birthday"}
           </span>
           <CalendarDays size={18} className="shrink-0 text-[#102A71]" />
@@ -221,10 +220,10 @@ function BirthdayPicker({ value, onChange, error }) {
           <span className="text-[11px] text-gray-500">
             {parsed
               ? parsed.date.toLocaleDateString("en-PH", {
-                  month: "short",
-                  day: "numeric",
-                  year: "numeric",
-                })
+                month: "short",
+                day: "numeric",
+                year: "numeric",
+              })
               : "Pick month, year & day"}
           </span>
           <button
@@ -350,11 +349,10 @@ function PhAutocompleteInput({
             setOpen(false);
           }
         }}
-        className={`w-full px-4 py-2.5 rounded-xl border text-sm focus:outline-none focus:ring-2 transition-all ${
-          error
-            ? "border-red-400 focus:ring-red-200"
-            : "border-gray-200 focus:ring-[#102A71]/20 focus:border-[#102A71]"
-        } bg-white text-[#001840]`}
+        className={`w-full px-4 py-2.5 rounded-xl border text-sm focus:outline-none focus:ring-2 transition-all ${error
+          ? "border-red-400 focus:ring-red-200"
+          : "border-gray-200 focus:ring-[#102A71]/20 focus:border-[#102A71]"
+          } bg-white text-[#001840]`}
       />
       {open && matches.length > 0 && (
         <ul
@@ -378,9 +376,8 @@ function PhAutocompleteInput({
                   commitSelection(item);
                 }}
                 onMouseEnter={() => setHighlightIndex(idx)}
-                className={`flex items-start gap-2 px-3 py-2 text-xs cursor-pointer transition-colors ${
-                  active ? "bg-[#EEF2FF] text-[#001840] font-semibold" : "text-gray-700 hover:bg-gray-50"
-                }`}
+                className={`flex items-start gap-2 px-3 py-2 text-xs cursor-pointer transition-colors ${active ? "bg-[#EEF2FF] text-[#001840] font-semibold" : "text-gray-700 hover:bg-gray-50"
+                  }`}
               >
                 <MapPin size={13} className="mt-0.5 shrink-0 text-[#102A71]" />
                 <div className="min-w-0">
@@ -517,6 +514,7 @@ export function HSEnrollmentForm({ enrollmentId: propId, readOnly = false }) {
         ...base,
         gradeLevel: presetGrade,
         strand: base.gradeLevel === presetGrade ? base.strand : "",
+        sscClass: location.state?.sscClass ?? base.sscClass ?? null,
         enrollmentType: normalizeEnrollmentType(initialLevel, presetGrade, location.state?.enrollmentType),
         grade6SYStart: g6.syStart,
         grade6SYEnd: g6.syEnd,
@@ -529,31 +527,41 @@ export function HSEnrollmentForm({ enrollmentId: propId, readOnly = false }) {
   const [isSSCCompletion, setIsSSCCompletion] = useState(false);
 
   const [sscChosenClass, setSscChosenClass] = useState(null); // 'SSC' | 'Regular'
+  const [activeEnrollmentTypes, setActiveEnrollmentTypes] = useState(null);
 
   // Sync active school year from backend for new enrollments and adjust default Grade 6 SY
   useEffect(() => {
-    if (isEditMode || readOnly) return;
     let cancelled = false;
     fetch(`${API}/academic/school-years/active`)
       .then(r => r.ok ? r.json() : null)
       .then(sy => {
-        if (cancelled || !sy?.year) return;
+        if (cancelled || !sy) return;
+        const activeTypes = sy.activeEnrollmentTypes || null;
+        setActiveEnrollmentTypes(activeTypes);
+        if (isEditMode || readOnly || !sy.year) return;
         setF(prev => {
           const prevDefaults = computeDefaultGrade6SY(prev.academicYear, prev.gradeLevel || initialGrade);
           const nextDefaults = computeDefaultGrade6SY(sy.year, prev.gradeLevel || initialGrade);
           const shouldSyncG6 =
             (!prev.grade6SYStart && !prev.grade6SYEnd) ||
             (prev.grade6SYStart === prevDefaults.syStart && prev.grade6SYEnd === prevDefaults.syEnd);
+          const gradeAllowed = allowedEnrollmentTypes(prev.gradeLevel).filter(
+            typeKey => !activeTypes || activeTypes[typeKey] !== false
+          );
+          const nextType = gradeAllowed.length && !gradeAllowed.includes(prev.enrollmentType)
+            ? gradeAllowed[0]
+            : prev.enrollmentType;
           return {
             ...prev,
             academicYear: sy.year,
+            enrollmentType: nextType,
             ...(shouldSyncG6
               ? { grade6SYStart: nextDefaults.syStart, grade6SYEnd: nextDefaults.syEnd }
               : {}),
           };
         });
       })
-      .catch(() => {});
+      .catch(() => { });
     return () => { cancelled = true; };
   }, [isEditMode, readOnly, initialGrade]);
 
@@ -599,7 +607,7 @@ export function HSEnrollmentForm({ enrollmentId: propId, readOnly = false }) {
       if (active) {
         navigate('/my-enrollments', { replace: true });
       }
-    }).catch(() => {});
+    }).catch(() => { });
     return () => { cancelled = true; };
   }, [isEditMode, readOnly, user?.id, navigate]);
 
@@ -747,7 +755,9 @@ export function HSEnrollmentForm({ enrollmentId: propId, readOnly = false }) {
     }, 500);
   };
   const isSHS = form.educationLevel === "SHS";
-  const allowedTypes = allowedEnrollmentTypes(form.gradeLevel);
+  const allowedTypes = allowedEnrollmentTypes(form.gradeLevel).filter(
+    typeKey => !activeEnrollmentTypes || activeEnrollmentTypes[typeKey] !== false
+  );
   const enrollmentTypeOptions = ["new", "old", "transferee", "returnee"].map(value => ({
     value,
     label: value === "old" ? "Old / Continuing" : ENROLLMENT_TYPE_LABELS[value],
@@ -782,7 +792,7 @@ export function HSEnrollmentForm({ enrollmentId: propId, readOnly = false }) {
       // Validate student ID only if filled (optional for new students)
       if (form.enrollmentType === 'old' && (!form.studentNumber || !form.studentNumber.trim())) {
         e.studentNumber = "Student ID is required for continuing students (e.g. A-9869 or 2025-00123)";
-      } else if (!isIncomingGrade7 && form.studentNumber && form.studentNumber.trim()) {
+      } else if (!isIncomingGrade7 && !isTransferee && form.studentNumber && form.studentNumber.trim()) {
         const idPattern = /^([A-Z]{1,3}-\d{3,6}|\d{4}-\d{4,6})$/i;
         if (!idPattern.test(form.studentNumber.trim())) {
           e.studentNumber = "Invalid format. Use EMC ID (e.g. A-9869) or YYYY-NNNNN (e.g. 2025-00123)";
@@ -815,7 +825,12 @@ export function HSEnrollmentForm({ enrollmentId: propId, readOnly = false }) {
     }
     if (s === 4) {
       if (form.grade6Average && (!Number.isFinite(Number(form.grade6Average)) || Number(form.grade6Average) < 0 || Number(form.grade6Average) > 100)) e.grade6Average = "Enter a value from 0 to 100";
-      for (const field of (isGrade7 ? ["grade6SYStart", "grade6SYEnd"] : ["grade6SYStart", "grade6SYEnd", "lastHSSYStart", "lastHSSYEnd"])) { if (form[field] && !/^\d{4}$/.test(form[field])) e[field] = "Enter a four-digit year"; }
+      const syFields = isTransferee && !isGrade7
+        ? ["lastHSSYStart", "lastHSSYEnd"]
+        : isGrade7
+          ? ["grade6SYStart", "grade6SYEnd"]
+          : ["grade6SYStart", "grade6SYEnd", "lastHSSYStart", "lastHSSYEnd"];
+      for (const field of syFields) { if (form[field] && !/^\d{4}$/.test(form[field])) e[field] = "Enter a four-digit year"; }
       // Transferees must fill in their last HS school info
       if (isTransferee && !isGrade7) {
         if (!form.lastHSSchool?.trim()) e.lastHSSchool = "Required for transferees";
@@ -834,7 +849,7 @@ export function HSEnrollmentForm({ enrollmentId: propId, readOnly = false }) {
     if (s === 1) { const fields = [form.gradeLevel, isSHS ? form.strand : null].filter(f => f !== null); const filled = fields.filter(Boolean).length; return Math.round((filled / (fields.length || 1)) * 100); }
     if (s === 2) { const fields = [form.familyName, form.firstName, form.sex, form.dateOfBirth]; const filled = fields.filter(Boolean).length; return Math.round((filled / (fields.length || 1)) * 100); }
     if (s === 3) { const fields = ['father', 'mother', 'guardian'].filter(key => familySections[key]).flatMap(key => [form[`${key}Name`], form[key === 'guardian' ? 'guardianTelephone' : `${key}MobileNumber`], form[key === 'guardian' ? 'guardianAddress' : 'parentsAddress']]); const filled = fields.filter(Boolean).length; return Math.round((filled / (fields.length || 1)) * 100); }
-    if (s === 4) { const fields = [form.grade6School, form.grade6Average]; const filled = fields.filter(Boolean).length; return Math.round((filled / (fields.length || 1)) * 100); }
+    if (s === 4) { const fields = isTransferee && !isGrade7 ? [form.lastHSSchool, form.lastHSCurriculumYear] : [form.grade6School, form.grade6Average]; const filled = fields.filter(Boolean).length; return Math.round((filled / (fields.length || 1)) * 100); }
     if (s === docStep) { const uploaded = activeCreds.filter(c => form.docFiles[c.key]).length; return activeCreds.length ? Math.round((uploaded / activeCreds.length) * 100) : 100; }
     return 0;
   }
@@ -879,7 +894,7 @@ export function HSEnrollmentForm({ enrollmentId: propId, readOnly = false }) {
         strand: form.strand || null,
         enrollmentType: form.enrollmentType || 'new',
         studentType: form.studentType,
-        studentNumber: isIncomingGrade7 ? null : form.studentNumber || null,
+        studentNumber: (isIncomingGrade7 || isTransferee) ? null : form.studentNumber || null,
         academicYear: form.academicYear,
         dateEnrolled: form.dateEnrolled || null,
         lrn: form.lrn,
@@ -1018,8 +1033,13 @@ export function HSEnrollmentForm({ enrollmentId: propId, readOnly = false }) {
       <div className="bg-white border-b border-gray-100 shadow-sm sticky top-16 lg:top-20 z-40">
         <div className="max-w-4xl mx-auto px-3 sm:px-4 py-3 sm:py-4">
           {/* Back button */}
-          <button onClick={handleBack} className="flex items-center gap-1.5 text-sm text-[#102A71] hover:text-[#001840] font-medium mb-3 transition-colors">
-            <ArrowLeft size={15} /> Back to Level Selection
+          <button
+            onClick={handleBack}
+            aria-label="Back to Level Selection"
+            title="Back to Level Selection"
+            className="inline-flex items-center justify-center min-h-0 w-8 h-8 rounded-lg bg-[#001840]/[0.04] hover:bg-[#001840]/[0.09] text-[#102A71] hover:text-[#001840] mb-2 transition-colors"
+          >
+            <ArrowLeft size={16} />
           </button>
           <div className="flex items-center justify-between mb-3 relative">
             <div className="absolute top-4 left-0 right-0 h-0.5 bg-gray-200 z-0" />
@@ -1050,23 +1070,20 @@ export function HSEnrollmentForm({ enrollmentId: propId, readOnly = false }) {
                 </button>
               );
             })}          </div>
-          <div className="w-full bg-gray-100 rounded-full h-1.5"><div className="bg-linear-to-r from-[#102A71] to-[#F5C400] h-1.5 rounded-full transition-all duration-500" style={{ width: `${pct}%` }} /></div>
-          <p className="text-xs text-gray-400 mt-1 text-right">Step {step} of {lastRequiredStep}</p>
         </div>
       </div>
       <div className="max-w-4xl mx-auto px-3 sm:px-4 pt-4 pb-24 sm:pb-8">
-
-        <div className="text-center mb-6">
-          <h2 className="text-2xl font-bold text-[#001840]">{labels[step - 1]}</h2>
-          <p className="text-sm text-gray-500 mt-1">Step {step} of {lastRequiredStep}</p>
-        </div>
         <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6 sm:p-8">
+          <div className="text-center mb-6 pb-4 border-b border-gray-100">
+            <h2 className="text-2xl font-bold text-[#001840]">{labels[step - 1]}</h2>
+            <p className="text-sm text-gray-500 mt-1">Step {step} of {lastRequiredStep}</p>
+          </div>
           {step === 1 && (<div className="space-y-5">
             {/* Lock education level and grade level for SSC completion */}
             {isSSCCompletion ? (
               <div className={`flex gap-3 p-3 rounded-xl border ${sscChosenClass === 'Regular'
-                  ? 'bg-blue-50 border-blue-200'
-                  : 'bg-yellow-50 border-yellow-200'
+                ? 'bg-blue-50 border-blue-200'
+                : 'bg-yellow-50 border-yellow-200'
                 }`}>
                 <div>
                   <p className={`text-xs font-semibold ${sscChosenClass === 'Regular' ? 'text-blue-800' : 'text-yellow-800'}`}>Education Level</p>
@@ -1093,14 +1110,14 @@ export function HSEnrollmentForm({ enrollmentId: propId, readOnly = false }) {
                   {["JHS", "SHS"].map(lvl => (
                     <button key={lvl} type="button" disabled={lvl !== form.educationLevel}
                       className={`px-6 py-2.5 rounded-xl border-2 font-semibold text-sm transition-all ${form.educationLevel === lvl
-                          ? "border-[#102A71] bg-[#EEF2FF] text-[#001840]"
-                          : "border-gray-100 text-gray-300 cursor-not-allowed"
+                        ? "border-[#102A71] bg-[#EEF2FF] text-[#001840]"
+                        : "border-gray-100 text-gray-300 cursor-not-allowed"
                         }`}>
                       {lvl}
                     </button>
                   ))}
                 </div>
-                <F label="Grade Level" required error={errors.gradeLevel}><S value={form.gradeLevel} error={errors.gradeLevel} onChange={e => { const gradeLevel = e.target.value; setF(prev => { const prevDef = computeDefaultGrade6SY(prev.academicYear, prev.gradeLevel || initialGrade); const nextDef = computeDefaultGrade6SY(prev.academicYear, gradeLevel || initialGrade); const syncG6 = (!prev.grade6SYStart && !prev.grade6SYEnd) || (prev.grade6SYStart === prevDef.syStart && prev.grade6SYEnd === prevDef.syEnd); return { ...prev, gradeLevel, strand: "", enrollmentType: normalizeEnrollmentType(prev.educationLevel, gradeLevel, prev.enrollmentType), ...(syncG6 ? { grade6SYStart: nextDef.syStart, grade6SYEnd: nextDef.syEnd } : {}) }; }); }}><option value="">Select grade level</option>{grades.map(g => <option key={g} value={g}>{g}</option>)}</S></F>
+                <F label="Grade Level" required error={errors.gradeLevel}><S value={form.gradeLevel} error={errors.gradeLevel} onChange={e => { const gradeLevel = e.target.value; setF(prev => { const prevDef = computeDefaultGrade6SY(prev.academicYear, prev.gradeLevel || initialGrade); const nextDef = computeDefaultGrade6SY(prev.academicYear, gradeLevel || initialGrade); const syncG6 = (!prev.grade6SYStart && !prev.grade6SYEnd) || (prev.grade6SYStart === prevDef.syStart && prev.grade6SYEnd === prevDef.syEnd); const gradeAllowed = allowedEnrollmentTypes(gradeLevel).filter(typeKey => !activeEnrollmentTypes || activeEnrollmentTypes[typeKey] !== false); const normalized = normalizeEnrollmentType(prev.educationLevel, gradeLevel, prev.enrollmentType); const nextType = gradeAllowed.length && !gradeAllowed.includes(normalized) ? gradeAllowed[0] : normalized; return { ...prev, gradeLevel, strand: "", enrollmentType: nextType, ...(syncG6 ? { grade6SYStart: nextDef.syStart, grade6SYEnd: nextDef.syEnd } : {}) }; }); }}><option value="">Select grade level</option>{grades.map(g => <option key={g} value={g}>{g}</option>)}</S></F>
                 {isSHS && (<F label="Strand" required error={errors.strand}><S value={form.strand} error={errors.strand} onChange={e => set("strand", e.target.value)}><option value="">Select strand</option>{SHS_STRANDS.map(s => <option key={s} value={s}>{s}</option>)}</S></F>)}
               </>
             )}
@@ -1119,23 +1136,23 @@ export function HSEnrollmentForm({ enrollmentId: propId, readOnly = false }) {
               </F>
             )}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <F label="School Year"><I value={form.academicYear} placeholder="2026-2027" maxLength={20} onChange={e => { const nextSY = e.target.value; setF(prev => { const prevDef = computeDefaultGrade6SY(prev.academicYear, prev.gradeLevel || initialGrade); const nextDef = computeDefaultGrade6SY(nextSY, prev.gradeLevel || initialGrade); const syncG6 = (!prev.grade6SYStart && !prev.grade6SYEnd) || (prev.grade6SYStart === prevDef.syStart && prev.grade6SYEnd === prevDef.syEnd); return { ...prev, academicYear: nextSY, ...(syncG6 ? { grade6SYStart: nextDef.syStart, grade6SYEnd: nextDef.syEnd } : {}) }; }); }} /></F>
-              {!isIncomingGrade7 && (
-              <F label="Student ID Number" required={form.enrollmentType === 'old'} error={errors.studentNumber}>
-                <I
-                  value={form.studentNumber}
-                  error={errors.studentNumber}
-                  placeholder="e.g. A-9869 or 2025-00123"
-                  maxLength={20}
-                  onChange={e => {
-                    const cleaned = e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, "");
-                    set("studentNumber", cleaned);
-                  }}
-                />
-                <p className="text-[10px] text-gray-400 mt-1">Format: A-9869 or YYYY-NNNNN · Required for continuing students</p>
+              <F label="School Year"><I value={form.academicYear} readOnly disabled className="bg-gray-100 text-gray-600 cursor-not-allowed" /></F>
+              {!isIncomingGrade7 && !isTransferee && (
+                <F label="Student ID Number" required={form.enrollmentType === 'old'} error={errors.studentNumber}>
+                  <I
+                    value={form.studentNumber}
+                    error={errors.studentNumber}
+                    placeholder="e.g. A-9869 or 2025-00123"
+                    maxLength={20}
+                    onChange={e => {
+                      const cleaned = e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, "");
+                      set("studentNumber", cleaned);
+                    }}
+                  />
+                  <p className="text-[10px] text-gray-400 mt-1">Format: A-9869 or YYYY-NNNNN · Required for continuing students</p>
 
-                {errors.studentNumber && <p className="text-xs text-red-500 mt-0.5">{errors.studentNumber}</p>}
-              </F>
+                  {errors.studentNumber && <p className="text-xs text-red-500 mt-0.5">{errors.studentNumber}</p>}
+                </F>
               )}
             </div>
             {needsReportedAverage && <F label="Previous Year General Average" required error={errors.previousGeneralAverage}><I type="number" min={maintainingAverage} max="100" step="0.01" value={form.previousGeneralAverage ?? ''} onChange={event => set('previousGeneralAverage', event.target.value)} placeholder={`At least ${maintainingAverage}`} /></F>}
@@ -1183,19 +1200,19 @@ export function HSEnrollmentForm({ enrollmentId: propId, readOnly = false }) {
                   </F>
                 )}
               </div></section>
-              {key === 'mother' && (
-                <F label="Parent Address" required={familySections.father || familySections.mother} error={errors.parentsAddress}>
-                  <PhAutocompleteInput
-                    value={form.parentsAddress}
-                    error={errors.parentsAddress}
-                    maxLength={500}
-                    placeholder="e.g. Brgy. Bagong Bayan II, Bongabong, Oriental Mindoro"
-                    suggestions={PH_ADDRESS_SUGGESTIONS}
-                    preserveStreetPrefix
-                    onChange={val => set('parentsAddress', val)}
-                  />
-                </F>
-              )}
+                {key === 'mother' && (
+                  <F label="Parent Address" required={familySections.father || familySections.mother} error={errors.parentsAddress}>
+                    <PhAutocompleteInput
+                      value={form.parentsAddress}
+                      error={errors.parentsAddress}
+                      maxLength={500}
+                      placeholder="e.g. Brgy. Bagong Bayan II, Bongabong, Oriental Mindoro"
+                      suggestions={PH_ADDRESS_SUGGESTIONS}
+                      preserveStreetPrefix
+                      onChange={val => set('parentsAddress', val)}
+                    />
+                  </F>
+                )}
               </Fragment>;
             })}
 
@@ -1207,116 +1224,122 @@ export function HSEnrollmentForm({ enrollmentId: propId, readOnly = false }) {
               const hsEndDefault = String(Number(hsStartDefault) + 1);
               return (
                 <>
-                  <div>
-                    <h3 className="text-sm font-bold text-[#001840] mb-3 pb-2 border-b border-gray-100">Grade VI School</h3>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <F label="School Name">
-                        <PhAutocompleteInput
-                          value={form.grade6School}
-                          maxLength={200}
-                          placeholder="e.g. Bongabong Central School"
-                          suggestions={LOCAL_ELEMENTARY_SCHOOLS}
-                          onChange={val => set("grade6School", val)}
-                          onSelectSuggestion={item => {
-                            if (typeof item === "object" && item.address && !form.grade6SchoolAddress?.trim()) {
-                              set("grade6SchoolAddress", item.address);
-                            }
-                          }}
-                        />
-                      </F>
-                      <F label="School Address">
-                        <PhAutocompleteInput
-                          value={form.grade6SchoolAddress}
-                          maxLength={200}
-                          placeholder="e.g. Brgy. Poblacion, Bongabong, Oriental Mindoro"
-                          suggestions={PH_ADDRESS_SUGGESTIONS}
-                          preserveStreetPrefix
-                          onChange={val => set("grade6SchoolAddress", val)}
-                        />
-                      </F>
-                      <F label="Section"><I value={form.grade6Section} maxLength={50} placeholder="Section" onChange={e => set("grade6Section", autoCapitalizeWords(e.target.value))} /></F>
-                      <F label="General Average" error={errors.grade6Average}><I type="number" min="0" max="100" step="0.01" inputMode="decimal" value={form.grade6Average} placeholder="e.g. 88" error={errors.grade6Average} onChange={e => set("grade6Average", e.target.value)} /></F>
-                      <F label="SY Start" error={errors.grade6SYStart}>
-                        <I
-                          value={form.grade6SYStart}
-                          placeholder={g6Default.syStart}
-                          maxLength={4}
-                          inputMode="numeric"
-                          onKeyDown={onlyDigits}
-                          error={errors.grade6SYStart}
-                          onChange={e => {
-                            const startVal = keepDigits(e.target.value, 4);
-                            setF(prev => ({
-                              ...prev,
-                              grade6SYStart: startVal,
-                              ...(startVal.length === 4 ? { grade6SYEnd: String(Number(startVal) + 1) } : {}),
-                            }));
-                          }}
-                        />
-                      </F>
-                      <F label="SY End" error={errors.grade6SYEnd}>
-                        <I
-                          value={form.grade6SYEnd}
-                          placeholder={g6Default.syEnd}
-                          maxLength={4}
-                          inputMode="numeric"
-                          onKeyDown={onlyDigits}
-                          error={errors.grade6SYEnd}
-                          onChange={e => {
-                            const endVal = keepDigits(e.target.value, 4);
-                            setF(prev => ({
-                              ...prev,
-                              grade6SYEnd: endVal,
-                              ...(endVal.length === 4 && (!prev.grade6SYStart || prev.grade6SYStart.length < 4)
-                                ? { grade6SYStart: String(Number(endVal) - 1) }
-                                : {}),
-                            }));
-                          }}
-                        />
-                      </F>
+                  {!(isTransferee && !isGrade7) && (
+                    <div>
+                      <h3 className="text-sm font-bold text-[#001840] mb-3 pb-2 border-b border-gray-100">Grade VI School</h3>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <F label="School Name">
+                          <PhAutocompleteInput
+                            value={form.grade6School}
+                            maxLength={200}
+                            placeholder="e.g. Bongabong Central School"
+                            suggestions={LOCAL_ELEMENTARY_SCHOOLS}
+                            onChange={val => set("grade6School", val)}
+                            onSelectSuggestion={item => {
+                              if (typeof item === "object" && item.address && !form.grade6SchoolAddress?.trim()) {
+                                set("grade6SchoolAddress", item.address);
+                              }
+                            }}
+                          />
+                        </F>
+                        <F label="School Address">
+                          <PhAutocompleteInput
+                            value={form.grade6SchoolAddress}
+                            maxLength={200}
+                            placeholder="e.g. Brgy. Poblacion, Bongabong, Oriental Mindoro"
+                            suggestions={PH_ADDRESS_SUGGESTIONS}
+                            preserveStreetPrefix
+                            onChange={val => set("grade6SchoolAddress", val)}
+                          />
+                        </F>
+                        <F label="Section"><I value={form.grade6Section} maxLength={50} placeholder="Section" onChange={e => set("grade6Section", autoCapitalizeWords(e.target.value))} /></F>
+                        <F label="General Average" error={errors.grade6Average}><I type="number" min="0" max="100" step="0.01" inputMode="decimal" value={form.grade6Average} placeholder="e.g. 88" error={errors.grade6Average} onChange={e => set("grade6Average", e.target.value)} /></F>
+                        <F label="SY Start" error={errors.grade6SYStart}>
+                          <I
+                            value={form.grade6SYStart}
+                            placeholder={g6Default.syStart}
+                            maxLength={4}
+                            inputMode="numeric"
+                            onKeyDown={onlyDigits}
+                            error={errors.grade6SYStart}
+                            onChange={e => {
+                              const startVal = keepDigits(e.target.value, 4);
+                              setF(prev => ({
+                                ...prev,
+                                grade6SYStart: startVal,
+                                ...(startVal.length === 4 ? { grade6SYEnd: String(Number(startVal) + 1) } : {}),
+                              }));
+                            }}
+                          />
+                        </F>
+                        <F label="SY End" error={errors.grade6SYEnd}>
+                          <I
+                            value={form.grade6SYEnd}
+                            placeholder={g6Default.syEnd}
+                            maxLength={4}
+                            inputMode="numeric"
+                            onKeyDown={onlyDigits}
+                            error={errors.grade6SYEnd}
+                            onChange={e => {
+                              const endVal = keepDigits(e.target.value, 4);
+                              setF(prev => ({
+                                ...prev,
+                                grade6SYEnd: endVal,
+                                ...(endVal.length === 4 && (!prev.grade6SYStart || prev.grade6SYStart.length < 4)
+                                  ? { grade6SYStart: String(Number(endVal) - 1) }
+                                  : {}),
+                              }));
+                            }}
+                          />
+                        </F>
+                      </div>
                     </div>
-                  </div>
+                  )}
                   {!isGrade7 && (
-                  <div>
-                    <h3 className="text-sm font-bold text-[#001840] mb-1 pb-2 border-b border-gray-100">
-                      Last High School Attended
-                      {isTransferee && <span className="ml-2 text-[10px] font-bold uppercase tracking-wide bg-orange-100 text-orange-600 px-1.5 py-0.5 rounded-full">Required for Transferees</span>}
-                    </h3>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <F label="School Name" required={isTransferee} error={errors.lastHSSchool}><I value={form.lastHSSchool} maxLength={200} placeholder="School name" error={errors.lastHSSchool} onChange={e => set("lastHSSchool", autoCapitalizeWords(e.target.value))} /></F>
-                      <F label="Curriculum Year" required={isTransferee} error={errors.lastHSCurriculumYear}><I value={form.lastHSCurriculumYear} maxLength={20} placeholder="e.g. G7" error={errors.lastHSCurriculumYear} onChange={e => set("lastHSCurriculumYear", autoCapitalizeWords(e.target.value))} /></F>
-                      <F label="Section"><I value={form.lastHSSection} maxLength={50} placeholder="Section" onChange={e => set("lastHSSection", autoCapitalizeWords(e.target.value))} /></F>
-                      <F label="SY Start" required={isTransferee} error={errors.lastHSSYStart}>
-                        <I
-                          value={form.lastHSSYStart}
-                          placeholder={hsStartDefault}
-                          maxLength={4}
-                          inputMode="numeric"
-                          onKeyDown={onlyDigits}
-                          error={errors.lastHSSYStart}
-                          onChange={e => {
-                            const startVal = keepDigits(e.target.value, 4);
-                            setF(prev => ({
-                              ...prev,
-                              lastHSSYStart: startVal,
-                              ...(startVal.length === 4 ? { lastHSSYEnd: String(Number(startVal) + 1) } : {}),
-                            }));
-                          }}
-                        />
-                      </F>
-                      <F label="SY End" required={isTransferee} error={errors.lastHSSYEnd}>
-                        <I
-                          value={form.lastHSSYEnd}
-                          placeholder={hsEndDefault}
-                          maxLength={4}
-                          inputMode="numeric"
-                          onKeyDown={onlyDigits}
-                          error={errors.lastHSSYEnd}
-                          onChange={e => set("lastHSSYEnd", keepDigits(e.target.value, 4))}
-                        />
-                      </F>
+                    <div>
+                      <h3 className="text-sm font-bold text-[#001840] mb-3 pb-2 border-b border-gray-100">
+                        Last High School Attended
+                      </h3>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <F label="School Name" required={isTransferee} error={errors.lastHSSchool}><I value={form.lastHSSchool} maxLength={200} placeholder="School name" error={errors.lastHSSchool} onChange={e => set("lastHSSchool", autoCapitalizeWords(e.target.value))} /></F>
+                        <F label="Curriculum Year" required={isTransferee} error={errors.lastHSCurriculumYear}><I value={form.lastHSCurriculumYear} maxLength={20} placeholder="e.g. G7" error={errors.lastHSCurriculumYear} onChange={e => set("lastHSCurriculumYear", autoCapitalizeWords(e.target.value))} /></F>
+                        <F label="Section"><I value={form.lastHSSection} maxLength={50} placeholder="Section" onChange={e => set("lastHSSection", autoCapitalizeWords(e.target.value))} /></F>
+                        {isTransferee && (
+                          <F label="General Average (Optional)" error={errors.grade6Average}>
+                            <I type="number" min="0" max="100" step="0.01" inputMode="decimal" value={form.grade6Average} placeholder="e.g. 88 (optional)" error={errors.grade6Average} onChange={e => set("grade6Average", e.target.value)} />
+                          </F>
+                        )}
+                        <F label="SY Start" required={isTransferee} error={errors.lastHSSYStart}>
+                          <I
+                            value={form.lastHSSYStart}
+                            placeholder={hsStartDefault}
+                            maxLength={4}
+                            inputMode="numeric"
+                            onKeyDown={onlyDigits}
+                            error={errors.lastHSSYStart}
+                            onChange={e => {
+                              const startVal = keepDigits(e.target.value, 4);
+                              setF(prev => ({
+                                ...prev,
+                                lastHSSYStart: startVal,
+                                ...(startVal.length === 4 ? { lastHSSYEnd: String(Number(startVal) + 1) } : {}),
+                              }));
+                            }}
+                          />
+                        </F>
+                        <F label="SY End" required={isTransferee} error={errors.lastHSSYEnd}>
+                          <I
+                            value={form.lastHSSYEnd}
+                            placeholder={hsEndDefault}
+                            maxLength={4}
+                            inputMode="numeric"
+                            onKeyDown={onlyDigits}
+                            error={errors.lastHSSYEnd}
+                            onChange={e => set("lastHSSYEnd", keepDigits(e.target.value, 4))}
+                          />
+                        </F>
+                      </div>
                     </div>
-                  </div>
                   )}
                 </>
               );
@@ -1325,16 +1348,7 @@ export function HSEnrollmentForm({ enrollmentId: propId, readOnly = false }) {
           {step === docStep && (<div className="space-y-4">
             <div>
               <p className="text-sm font-semibold text-[#001840] mb-1">Upload Required Documents <span className="text-red-500">*</span></p>
-              {isTransferee ? (
-                <div className="bg-orange-50 border border-orange-200 rounded-xl px-4 py-3 mb-4">
-                  <p className="text-xs font-bold text-orange-800 mb-1">Transferee Requirements</p>
-                  <p className="text-xs text-orange-700 leading-relaxed">
-                    As a transferee, all four documents below are <strong>required</strong>. Make sure they are from your previous school with official dry seal.
-                  </p>
-                </div>
-              ) : (
-                <p className="text-xs text-gray-500 mb-4">Upload a clear scan or photo of each document. At least one is required.</p>
-              )}
+              <p className="text-xs text-gray-500 mb-4">Upload a clear scan or photo of each document. At least one is required.</p>
             </div>
             {activeCreds.map(cred => {
               const file = form.docFiles[cred.key];
@@ -1365,19 +1379,19 @@ export function HSEnrollmentForm({ enrollmentId: propId, readOnly = false }) {
                         className="rounded-lg p-1.5 text-red-500 hover:bg-red-50 disabled:opacity-50"><X size={14} /></button>}
                     </div>
                   </div>
-                      <input type="file" accept=".pdf,.jpg,.jpeg,.png" disabled={checkingDocument !== null || submitting} ref={node => { documentInputs.current[cred.key] = node; }} aria-label={`Upload ${cred.label}`} className="hidden" onChange={e => {
-                        const f = e.target.files[0];
-                        if (!f) return;
-                        const allowed = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png'];
-                        const allowedExt = ['.pdf', '.jpg', '.jpeg', '.png'];
-                        const ext = '.' + f.name.split('.').pop().toLowerCase();
-                        if (!allowed.includes(f.type) || !allowedExt.includes(ext)) {
-                          toast.error(`Invalid file type "${f.name}". Only PDF, JPG, JPEG, and PNG files are allowed.`);
-                          e.target.value = ''; return;
-                        }
-                        if (f.size > 10 * 1024 * 1024) { toast.error("File exceeds 10MB limit. Please choose a smaller file."); e.target.value = ''; return; }
-                        selectDocument(cred.key, f, e.target);
-                      }} />
+                  <input type="file" accept=".pdf,.jpg,.jpeg,.png" disabled={checkingDocument !== null || submitting} ref={node => { documentInputs.current[cred.key] = node; }} aria-label={`Upload ${cred.label}`} className="hidden" onChange={e => {
+                    const f = e.target.files[0];
+                    if (!f) return;
+                    const allowed = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png'];
+                    const allowedExt = ['.pdf', '.jpg', '.jpeg', '.png'];
+                    const ext = '.' + f.name.split('.').pop().toLowerCase();
+                    if (!allowed.includes(f.type) || !allowedExt.includes(ext)) {
+                      toast.error(`Invalid file type "${f.name}". Only PDF, JPG, JPEG, and PNG files are allowed.`);
+                      e.target.value = ''; return;
+                    }
+                    if (f.size > 10 * 1024 * 1024) { toast.error("File exceeds 10MB limit. Please choose a smaller file."); e.target.value = ''; return; }
+                    selectDocument(cred.key, f, e.target);
+                  }} />
                   {checkingDocument === cred.key && <p role="status" className="mt-2 text-xs text-gray-500">Checking file...</p>}
                   {documentErrors[cred.key] && <p role="alert" className="mt-2 text-xs text-red-600">{documentErrors[cred.key]}</p>}
                   <p className="text-[10px] text-gray-400 mt-2 italic">Formats: PDF, JPG, JPEG, PNG · Max file size: 10 MB</p>
@@ -1392,19 +1406,19 @@ export function HSEnrollmentForm({ enrollmentId: propId, readOnly = false }) {
           <div className="mt-6">
             {draftSaveError && <p role="alert" className="mb-3 text-sm text-red-600">{draftSaveError}</p>}
             {step === 3 && <p role={errors.family ? 'alert' : undefined} className={`mb-3 text-sm font-semibold sm:text-right ${errors.family ? 'text-red-600' : 'text-[#001840]'}`}>Provide details for at least one parent or guardian.</p>}
-          <div className="flex flex-wrap gap-3 justify-between items-center">
-            {step > 1 ? <button type="button" onClick={() => goToStep(step - 1)} className="px-4 sm:px-6 py-3 border border-gray-300 text-gray-700 rounded-xl font-semibold hover:bg-gray-50">Previous</button> : <span />}
-            <div className="flex flex-wrap gap-3 items-center">
-              <button type="button" onClick={continueStage} disabled={submitting || checkingDocument !== null} className="flex items-center gap-2 px-8 py-3 bg-[#F5C400] text-[#001840] rounded-xl font-bold hover:bg-[#FFDC5F] transition-all shadow-md disabled:opacity-60 disabled:cursor-not-allowed">
-                {submitting
-                  ? <><Loader2 size={18} className="animate-spin" /> Submitting...</>
-                  : step === lastRequiredStep
-                    ? <><CheckCircle2 size={18} /> Submit Enrollment</>
-                    : 'Continue'
-                }
-              </button>
+            <div className="flex flex-wrap gap-3 justify-between items-center">
+              {step > 1 ? <button type="button" onClick={() => goToStep(step - 1)} className="px-4 sm:px-6 py-3 border border-gray-300 text-gray-700 rounded-xl font-semibold hover:bg-gray-50">Previous</button> : <span />}
+              <div className="flex flex-wrap gap-3 items-center">
+                <button type="button" onClick={continueStage} disabled={submitting || checkingDocument !== null} className="flex items-center gap-2 px-8 py-3 bg-[#F5C400] text-[#001840] rounded-xl font-bold hover:bg-[#FFDC5F] transition-all shadow-md disabled:opacity-60 disabled:cursor-not-allowed">
+                  {submitting
+                    ? <><Loader2 size={18} className="animate-spin" /> Submitting...</>
+                    : step === lastRequiredStep
+                      ? <><CheckCircle2 size={18} /> Submit Enrollment</>
+                      : 'Continue'
+                  }
+                </button>
+              </div>
             </div>
-          </div>
           </div>
         )}
       </div>

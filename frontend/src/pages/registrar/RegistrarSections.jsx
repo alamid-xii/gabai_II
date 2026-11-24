@@ -6,10 +6,11 @@ import { toast } from "sonner";
 import {
   BookOpen, ChevronRight, ChevronDown, RefreshCw, Search,
   Users, Filter, X, Download, School, CheckCircle2, AlertCircle,
-  ArrowLeft, Clock, GraduationCap
+  ArrowLeft, Clock, GraduationCap, Plus, Edit2
 } from "lucide-react";
 import { LifeStatusBadge, RegistrarPagination } from "./RegistrarShared";
 import { API, tok } from "./registrarConfig";
+import { SectionFormModal, formatSectionGradeRange } from "../../components/sections/SectionFormModal";
 
 // ── Sections Tab ──────────────────────────────────────────────────────────────
 export function SectionsTab() {
@@ -19,6 +20,7 @@ export function SectionsTab() {
   const [sections, setSections] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeSection, setActiveSection] = useState(null);
+  const [formModal, setFormModal] = useState(null);
   const [search, setSearch] = useState('');
   const [levelFilter, setLevelFilter] = useState(() => linkedLevel === 'shs' ? 'SHS' : linkedLevel.startsWith('jhs_') ? 'JHS' : '');
   const [gradeFilter, setGradeFilter] = useState('');
@@ -386,7 +388,16 @@ export function SectionsTab() {
               <RefreshCw size={14} />
             </button>
 
-            {/* 6. Excel Export */}
+            {/* 6. Create Section */}
+            <button
+              onClick={() => setFormModal('create')}
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-[#001840] text-white rounded-lg text-sm font-semibold hover:bg-[#002a6e] transition-colors cursor-pointer"
+            >
+              <Plus size={14} />
+              New Section
+            </button>
+
+            {/* 7. Excel Export */}
             <button
               onClick={exportToExcel}
               disabled={exporting || filteredSections.length === 0}
@@ -476,6 +487,11 @@ export function SectionsTab() {
                                   {s.strand}
                                 </span>
                               ) : null}
+                              {formatSectionGradeRange(s) && (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                  Avg {formatSectionGradeRange(s)}
+                                </span>
+                              )}
                             </div>
                           </td>
 
@@ -525,16 +541,27 @@ export function SectionsTab() {
                             </div>
                           </td>
 
-                          {/* Action Button: Opens dedicated Section Detail View */}
+                          {/* Action Button: Edit & Opens dedicated Section Detail View */}
                           <td className="px-5 py-3 text-right whitespace-nowrap">
-                            <button
-                              onClick={() => setActiveSection(s)}
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-200 bg-white text-gray-700 hover:border-[#001840] hover:text-[#001840] hover:bg-[#001840]/5 transition-all shadow-2xs group"
-                            >
-                              <Users size={12} className="text-gray-400 group-hover:text-[#001840]" />
-                              <span>Students ({enrolled})</span>
-                              <ChevronRight size={13} className="text-gray-400 group-hover:text-[#001840] group-hover:translate-x-0.5 transition-transform" />
-                            </button>
+                            <div className="inline-flex items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => setFormModal(s)}
+                                title="Edit Section & Grade Range"
+                                className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-gray-200 bg-white text-blue-700 hover:border-blue-300 hover:bg-blue-50 transition-all"
+                              >
+                                <Edit2 size={12} />
+                                <span>Edit</span>
+                              </button>
+                              <button
+                                onClick={() => setActiveSection(s)}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-200 bg-white text-gray-700 hover:border-[#001840] hover:text-[#001840] hover:bg-[#001840]/5 transition-all shadow-2xs group"
+                              >
+                                <Users size={12} className="text-gray-400 group-hover:text-[#001840]" />
+                                <span>Students ({enrolled})</span>
+                                <ChevronRight size={13} className="text-gray-400 group-hover:text-[#001840] group-hover:translate-x-0.5 transition-transform" />
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       );
@@ -555,6 +582,15 @@ export function SectionsTab() {
           </>
         )}
       </div>
+
+      {formModal && (
+        <SectionFormModal
+          section={formModal === 'create' ? null : formModal}
+          apiBase="/registrar/sections"
+          onClose={() => setFormModal(null)}
+          onSaved={() => { setFormModal(null); loadSections(); }}
+        />
+      )}
     </div>
   );
 }
@@ -945,6 +981,15 @@ function SectionDetailView({ section, onBack }) {
           </>
         )}
       </div>
+
+      {formModal && (
+        <SectionFormModal
+          section={formModal === 'create' ? null : formModal}
+          apiBase="/registrar/sections"
+          onClose={() => setFormModal(null)}
+          onSaved={() => { setFormModal(null); loadSections(); }}
+        />
+      )}
     </div>
   );
 }

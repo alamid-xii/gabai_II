@@ -1,4 +1,4 @@
-import { validateSectionConfiguration, subjectMatchesScope } from '../services/academicScope.js';
+import { validateSectionConfiguration, subjectMatchesScope, normalizeGradeBound } from '../services/academicScope.js';
 import { ACADEMIC_TERMS } from '../services/academicTerms.js';
 import { User } from '../models/userModel.js';
 import { Section } from '../models/sectionModel.js';
@@ -18,7 +18,7 @@ export const getAllSections = async (req, res) => {
     const [sections] = await sequelize.query(`
       SELECT s.id, s.code, s.course, s.yearLevel, s.strand, s.semester,
              s.schoolYear, s.instructor, s.schedule, s.room,
-             s.capacity, s.teacherId, s.createdAt, s.updatedAt,
+             s.capacity, s.minGrade, s.maxGrade, s.teacherId, s.createdAt, s.updatedAt,
              COUNT(DISTINCT CASE
                WHEN er.userId IS NOT NULL AND er.userId <> 0 THEN CONCAT('user:', er.userId)
                ELSE CONCAT('record:', er.id)
@@ -74,6 +74,8 @@ export const createSection = async (req, res) => {
       schedule: schedule || null,
       room: room || null,
       capacity: capacity || 40,
+      minGrade: normalizeGradeBound(req.body.minGrade),
+      maxGrade: normalizeGradeBound(req.body.maxGrade),
       isActive: true
     });
 
@@ -93,7 +95,7 @@ export const updateSection = async (req, res) => {
     }
 
     // Explicit whitelist — prevents mass assignment
-    const { code, course, yearLevel, strand, semester, schoolYear, instructor, schedule, room, capacity, teacherId } = req.body;
+    const { code, course, yearLevel, strand, semester, schoolYear, instructor, schedule, room, capacity, teacherId, minGrade, maxGrade } = req.body;
     const updateData = {};
     if (code !== undefined)       updateData.code = code;
     if (course !== undefined)     updateData.course = course;
@@ -106,6 +108,8 @@ export const updateSection = async (req, res) => {
     if (room !== undefined)       updateData.room = room || null;
     if (capacity !== undefined)   updateData.capacity = Number(capacity);
     if (teacherId !== undefined)  updateData.teacherId = teacherId || null;
+    if (minGrade !== undefined)   updateData.minGrade = normalizeGradeBound(minGrade);
+    if (maxGrade !== undefined)   updateData.maxGrade = normalizeGradeBound(maxGrade);
 
     if (teacherId !== undefined && teacherId) {
       const teacher = await User.findOne({ where: { id: Number(teacherId), role: 'teacher', isActive: true } });

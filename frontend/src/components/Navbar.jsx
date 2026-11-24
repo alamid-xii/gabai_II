@@ -8,7 +8,7 @@ const navLinks = [
   { label: "Home", to: "/" },
   { label: "About", to: "/about" },
   { label: "Virtual Tour", to: "/ar-navigation" },
-  { label: "Enrollment Guide", to: "/enrollment-guide" },
+  { label: "Guide", to: "/enrollment-guide" },
 ];
 
 // Role-based dashboard links

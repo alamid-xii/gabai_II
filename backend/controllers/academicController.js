@@ -84,12 +84,62 @@ export { createSection, updateSection, deleteSection } from './sectionController
 // ── School Years ──────────────────────────────────────────
 export const getSchoolYears = async (req, res) => {
   const years = await SchoolYear.findAll({ order: [['year', 'DESC']] });
-  res.json(years);
+  res.json(years.map(serializeSchoolYear));
 };
+
+export const DEFAULT_ENROLLMENT_TYPES = { new: true, old: true, transferee: true, returnee: true };
+export const ENROLLMENT_TYPE_KEYS = ['new', 'old', 'transferee', 'returnee'];
+
+export function normalizeEnrollmentTypes(raw) {
+  let parsed = raw;
+  if (typeof parsed === 'string') {
+    try { parsed = JSON.parse(parsed); } catch { parsed = null; }
+  }
+  const source = parsed && typeof parsed === 'object' ? parsed : {};
+  return Object.fromEntries(ENROLLMENT_TYPE_KEYS.map(key => [key, typeof source[key] === 'boolean' ? source[key] : true]));
+}
+
+export function serializeSchoolYear(record) {
+  if (!record) return null;
+  const plain = typeof record.toJSON === 'function' ? record.toJSON() : { ...record };
+  const startMonth = Number.isInteger(Number(plain.startMonth)) && Number(plain.startMonth) >= 1 && Number(plain.startMonth) <= 12
+    ? Number(plain.startMonth)
+    : 6;
+  const endMonth = Number.isInteger(Number(plain.endMonth)) && Number(plain.endMonth) >= 1 && Number(plain.endMonth) <= 12
+    ? Number(plain.endMonth)
+    : ((startMonth - 1 + 9) % 12) + 1;
+  return {
+    ...plain,
+    startMonth,
+    endMonth,
+    activeEnrollmentTypes: normalizeEnrollmentTypes(plain.activeEnrollmentTypes),
+  };
+}
+
+export function validateAcademicYearConfig({ year, startMonth, endMonth }, currentYear = new Date().getFullYear()) {
+  const expectedYear = `${currentYear}-${currentYear + 1}`;
+  if (year !== undefined && typeof year !== 'string') {
+    throw Object.assign(new Error(`Academic year must reflect the current calendar year (${expectedYear}).`), { status: 400 });
+  }
+  const cleanYear = year === undefined ? expectedYear : year.trim();
+  if (cleanYear !== expectedYear) {
+    throw Object.assign(new Error(`Academic year must reflect the current calendar year (${expectedYear}).`), { status: 400 });
+  }
+  const start = Number(startMonth ?? 6);
+  if (!Number.isInteger(start) || start < 4 || start > 12) {
+    throw Object.assign(new Error('Start month must be between April and December so the 10-month term ends in the following calendar year.'), { status: 400 });
+  }
+  const expectedEnd = ((start - 1 + 9) % 12) + 1;
+  const end = endMonth === undefined || endMonth === null || endMonth === '' ? expectedEnd : Number(endMonth);
+  if (!Number.isInteger(end) || end !== expectedEnd) {
+    throw Object.assign(new Error('Start and end months must be 10 months apart, ending in the following calendar year.'), { status: 400 });
+  }
+  return { year: expectedYear, startMonth: start, endMonth: expectedEnd };
+}
 
 export const getActiveSchoolYear = async (req, res) => {
   const year = await SchoolYear.findOne({ where: { isActive: true } });
-  res.json(year || null);
+  res.json(serializeSchoolYear(year));
 };
 const validSchoolYear = year => typeof year === 'string' && /^\d{4}-\d{4}$/.test(year) && Number(year.slice(5)) === Number(year.slice(0, 4)) + 1;
 const activeEnrollment = "er.status IN ('enrolled', 'active', 'subjects_enrolled') AND (er.lifeStatus IS NULL OR er.lifeStatus NOT IN ('dropped', 'transferred_out'))";
@@ -143,11 +193,38 @@ export const closeSchoolYear = async (req, res) => {
 
 export const createSchoolYear = async (req, res) => {
   try {
-    const year = typeof req.body.year === 'string' ? req.body.year.trim() : '';
-    if (!validSchoolYear(year)) return res.status(400).json({ message: 'Use consecutive years, for example 2026-2027.' });
-    const sy = await SchoolYear.create({ year, isActive: false });
-    res.status(201).json(sy);
-  } catch (err) { res.status(400).json({ message: err.name === 'SequelizeUniqueConstraintError' ? 'This school year already exists.' : 'Could not add the school year.' }); }
+    const config = validateAcademicYearConfig(req.body || {});
+    const activeEnrollmentTypes = req.body?.activeEnrollmentTypes
+      ? normalizeEnrollmentTypes(req.body.activeEnrollmentTypes)
+      : { ...DEFAULT_ENROLLMENT_TYPES };
+    const sy = await SchoolYear.create({
+      ...config,
+      activeEnrollmentTypes,
+      isActive: false,
+    });
+    res.status(201).json(serializeSchoolYear(sy));
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ message: err.message });
+    res.status(400).json({ message: err.name === 'SequelizeUniqueConstraintError' ? 'This school year already exists.' : 'Could not add the school year.' });
+  }
+};
+
+export const updateSchoolYearEnrollmentTypes = async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isSafeInteger(id) || id < 1) return res.status(400).json({ message: 'Invalid school year.' });
+    const raw = req.body?.activeEnrollmentTypes;
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+      return res.status(400).json({ message: 'Provide activeEnrollmentTypes for New, Continuing, Transferee, and Returnee.' });
+    }
+    const year = await SchoolYear.findByPk(id);
+    if (!year) return res.status(404).json({ message: 'School year not found.' });
+    const merged = normalizeEnrollmentTypes({ ...normalizeEnrollmentTypes(year.activeEnrollmentTypes), ...raw });
+    await year.update({ activeEnrollmentTypes: merged });
+    res.json(serializeSchoolYear(year));
+  } catch {
+    res.status(500).json({ message: 'Could not update enrollment types for the school year.' });
+  }
 };
 
 export const setActiveSchoolYear = async (req, res) => {

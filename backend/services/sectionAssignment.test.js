@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { sequelize } from '../models/db.js';
-import { autoAssignSection, moveToSection } from './sectionAssignment.js';
+import { autoAssignSection, moveToSection, selectBestSectionForStudent } from './sectionAssignment.js';
 import { assertSectionCompatible, validateProgramGrade, validateSectionConfiguration } from './academicScope.js';
 
 const enrollment = { id: 1, status: 'approved', sectionId: 2, educationLevel: 'JHS', gradeLevel: 'Grade 7', academicYear: '2026-2027', studentNumber: '2026-00001' };
@@ -96,3 +96,43 @@ test('approved and enrolled records can keep their compatible section without re
     assert.equal(result.success, true, status); assert.equal(updated, true);
   }
 }));
+
+test('section configuration allows overlapping grade ranges but rejects inverted or out-of-bounds ranges', () => {
+  validateSectionConfiguration({ code: '7-A', course: 'JHS', yearLevel: 7, schoolYear: '2026-2027', capacity: 40, minGrade: 75, maxGrade: 85 });
+  validateSectionConfiguration({ code: '7-B', course: 'JHS', yearLevel: 7, schoolYear: '2026-2027', capacity: 40, minGrade: 80, maxGrade: 90 });
+  assert.throws(() => validateSectionConfiguration({ code: '7-C', course: 'JHS', yearLevel: 7, schoolYear: '2026-2027', capacity: 40, minGrade: 90, maxGrade: 80 }));
+  assert.throws(() => validateSectionConfiguration({ code: '7-D', course: 'JHS', yearLevel: 7, schoolYear: '2026-2027', capacity: 40, minGrade: -1, maxGrade: 85 }));
+});
+
+test('selectBestSectionForStudent prioritizes exact grade range, narrowest overlap, open section, then nearest fallback', () => {
+  const secA = { id: 1, code: '7-A', capacity: 40, minGrade: 75, maxGrade: 85 };
+  const secB = { id: 2, code: '7-B', capacity: 40, minGrade: 80, maxGrade: 90 };
+  const secC = { id: 3, code: '7-C', capacity: 40, minGrade: null, maxGrade: null };
+  const secNarrow = { id: 4, code: '7-N', capacity: 40, minGrade: 82, maxGrade: 85 };
+
+  // Overlapping exact match picks narrowest span
+  const overlapPick = selectBestSectionForStudent([
+    { section: secA, count: 10 },
+    { section: secB, count: 10 },
+    { section: secNarrow, count: 15 },
+  ], 83);
+  assert.equal(overlapPick.section.code, '7-N');
+  assert.equal(overlapPick.placementMode, 'exact_range');
+
+  // Full exact-range falls back to open section
+  const openPick = selectBestSectionForStudent([
+    { section: secA, count: 40 },
+    { section: secC, count: 5 },
+    { section: secB, count: 5 },
+  ], 78);
+  assert.equal(openPick.section.code, '7-C');
+  assert.equal(openPick.placementMode, 'open_section');
+
+  // Out of range with no open sections picks nearest guideline
+  const nearestPick = selectBestSectionForStudent([
+    { section: secA, count: 10 },
+    { section: secB, count: 10 },
+  ], 93);
+  assert.equal(nearestPick.section.code, '7-B');
+  assert.equal(nearestPick.placementMode, 'fallback_nearest');
+});

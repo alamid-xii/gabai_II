@@ -69,7 +69,10 @@ export const getDashboardStats = async (req, res) => {
 // FAQ Management
 export const getAllFAQs = async (req, res) => {
   try {
-    const faqs = await FAQ.findAll({ order: [['createdAt', 'DESC']] });
+    const faqs = await FAQ.findAll({
+      where: { isActive: true },
+      order: [['createdAt', 'DESC']]
+    });
     res.json(faqs);
   } catch (error) {
     res.status(500).json({ error: "Failed to fetch FAQs" });

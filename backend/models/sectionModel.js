@@ -54,6 +54,16 @@ export const Section = sequelize.define("Section", {
     defaultValue: 40,
     comment: 'Maximum student capacity'
   },
+  minGrade: {
+    type: DataTypes.DECIMAL(5, 2),
+    allowNull: true,
+    comment: 'Optional minimum general average guideline for auto-placement'
+  },
+  maxGrade: {
+    type: DataTypes.DECIMAL(5, 2),
+    allowNull: true,
+    comment: 'Optional maximum general average guideline for auto-placement'
+  },
   currentEnrollment: { 
     type: DataTypes.INTEGER, 
     defaultValue: 0,

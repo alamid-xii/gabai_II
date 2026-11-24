@@ -40,7 +40,7 @@ export async function sendMessage(req, res) {
       const query = followup && previous ? `${previous}\n${message}` : message;
       const { faqs, topFAQs, bestMatch, liveContext, schoolProfile } = await retrieve(query);
       const customFAQs = faqs.filter(f => f.source !== 'portal' && !topFAQs.some(t => t.faq === f));
-      const contextFAQs = [...topFAQs.map(({ faq }) => faq), ...customFAQs, ...faqs.filter(f => f.source === 'portal' && !topFAQs.some(t => t.faq === f))].slice(0, 14);
+      const contextFAQs = [...topFAQs.map(({ faq }) => faq), ...customFAQs, ...faqs.filter(f => f.source === 'portal' && !topFAQs.some(t => t.faq === f))].slice(0, 20);
       const sources = JSON.stringify(contextFAQs.map(faq => ({ question: faq.question, answer: faq.answer }))) + (liveContext ? `\n\n${liveContext}` : '') + (schoolProfile ? `\n\n${JSON.stringify(schoolProfile)}` : '');
       const compound = /\b(and|also|pati|at saka)\b/i.test(message);
       const localAnswers = compound

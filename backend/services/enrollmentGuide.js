@@ -24,5 +24,22 @@ export function validateGuide(input) {
   return value;
 }
 export async function initializeEnrollmentGuide() {
-  await EnrollmentGuide.findOrCreate({ where: { id: 1 }, defaults: { content: validateGuide(initialGuide), revision: 1 } });
+  const validatedDefaults = validateGuide(initialGuide);
+  const [guide, created] = await EnrollmentGuide.findOrCreate({
+    where: { id: 1 },
+    defaults: { content: validatedDefaults, revision: 1 },
+  });
+  if (!created && guide) {
+    const firstStepTitle = guide.content?.steps?.[0]?.title || '';
+    const hasLegacyDefault =
+      firstStepTitle === 'Gather Required Documents' ||
+      JSON.stringify(guide.content || '').includes('UniFAST') ||
+      JSON.stringify(guide.content || '').includes('EMCEE');
+    if (hasLegacyDefault) {
+      await guide.update({
+        content: validatedDefaults,
+        revision: (Number(guide.revision) || 1) + 1,
+      });
+    }
+  }
 }

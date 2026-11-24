@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { ACADEMIC_TERMS, ensureAcademicTerms, subjectInput } from './academicTerms.js';
+import { validateAcademicYearConfig, normalizeEnrollmentTypes } from '../controllers/academicController.js';
+import { scoreFAQ } from './chatRetrieval.js';
 
 const valid = { code: ' ENG7 ', description: ' English 7 ', programCode: 'JHS', gradeLevel: '7', units: '1', semester: '1st Trimester', strand: '' };
 test('subjects accept each trimester and legacy semester without losing its meaning', () => {
@@ -40,4 +42,22 @@ test('subject teacher input supports assigning and clearing a teacher ID', () =>
 
 test('subject APIs reject unknown programs and mismatched program-grade pairs', () => {
   for (const patch of [{ programCode: 'ALIEN', gradeLevel: 1 }, { programCode: 'JHS', gradeLevel: 12 }, { programCode: 'SHS', gradeLevel: 7 }]) assert.throws(() => subjectInput({ ...valid, ...patch }));
+});
+
+test('academic year validation enforces current calendar year and 10-month span', () => {
+  const validConfig = validateAcademicYearConfig({ year: '2026-2027', startMonth: 6, endMonth: 3 }, 2026);
+  assert.deepEqual(validConfig, { year: '2026-2027', startMonth: 6, endMonth: 3 });
+  assert.throws(() => validateAcademicYearConfig({ year: '2025-2026', startMonth: 6, endMonth: 3 }, 2026));
+  assert.throws(() => validateAcademicYearConfig({ year: '2026-2027', startMonth: 6, endMonth: 4 }, 2026));
+  assert.throws(() => validateAcademicYearConfig({ year: '2026-2027', startMonth: 2 }, 2026));
+  assert.deepEqual(normalizeEnrollmentTypes({ transferee: false }), { new: true, old: true, transferee: false, returnee: true });
+});
+
+test('chatbot FAQ scoring supports comma-separated keywords on admin FAQs', () => {
+  const customFaq = {
+    question: 'Uniform policy',
+    keywords: 'uniform, dress code, attire',
+    answer: 'Students wear the prescribed school uniform Monday to Thursday.',
+  };
+  assert.ok(scoreFAQ('what is the dress code', customFaq) > 0.35);
 });

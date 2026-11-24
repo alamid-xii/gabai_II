@@ -12,11 +12,21 @@ const tx = { LOCK: { UPDATE: 'UPDATE' } };
 test('school years require consecutive years and cannot be made active through creation', async () => {
   const original = SchoolYear.create;
   try {
-    SchoolYear.create = async body => { assert.deepEqual(body, { year: '2026-2027', isActive: false }); return body; };
+    SchoolYear.create = async body => {
+      assert.deepEqual(body, {
+        year: `${new Date().getFullYear()}-${new Date().getFullYear() + 1}`,
+        startMonth: 6,
+        endMonth: 3,
+        activeEnrollmentTypes: { new: true, old: true, transferee: true, returnee: true },
+        isActive: false,
+      });
+      return body;
+    };
     for (const year of ['', '2026', '2026-2028', 2026]) {
       const res = response(); await createSchoolYear({ body: { year } }, res); assert.equal(res.code, 400);
     }
-    const res = response(); await createSchoolYear({ body: { year: ' 2026-2027 ', isActive: true } }, res); assert.equal(res.code, 201);
+    const currentYear = `${new Date().getFullYear()}-${new Date().getFullYear() + 1}`;
+    const res = response(); await createSchoolYear({ body: { year: ` ${currentYear} `, isActive: true } }, res); assert.equal(res.code, 201);
   } finally { SchoolYear.create = original; }
 });
 test('activating a nonexistent year never deactivates the existing year', async () => {

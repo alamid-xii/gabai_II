@@ -580,7 +580,7 @@ export function MyEnrollments() {
                           </button>
                         )}
 
-                        {enrollment.status !== 'pending_exam' && !isSSCApplication && (<button
+                        {['new', 'transferee'].includes(enrollment.enrollmentType || 'new') && enrollment.status !== 'pending_exam' && !isSSCApplication && (<button
                           onClick={() => handleDownloadPDF(enrollment.id)}
                           className="flex-1 lg:flex-none px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-all font-medium flex items-center justify-center gap-2"
                         >
@@ -672,7 +672,7 @@ export function MyEnrollments() {
                             >
                               View
                             </button>
-                            {enrollment.status !== 'pending_exam' && (<button
+                            {['new', 'transferee'].includes(enrollment.enrollmentType || 'new') && enrollment.status !== 'pending_exam' && (<button
                               onClick={() => handleDownloadPDF(enrollment.id)}
                               className="px-3 py-1.5 text-xs border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 transition-colors font-medium"
                             >

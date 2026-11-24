@@ -240,6 +240,11 @@ export const bulkExportPDFs = async (req, res) => {
       return res.status(404).json({ error: 'No enrollments found' });
     }
 
+    const pdfEligible = results.filter(enrollment => ['new', 'transferee'].includes(enrollment.enrollmentType || 'new'));
+    if (pdfEligible.length === 0) {
+      return res.status(400).json({ error: 'Enrollment form PDF is only generated for new and transferee applications.' });
+    }
+
     // Set response headers for ZIP download
     res.setHeader('Content-Type', 'application/zip');
     res.setHeader('Content-Disposition', `attachment; filename=enrollments-${Date.now()}.zip`);
@@ -256,7 +261,7 @@ export const bulkExportPDFs = async (req, res) => {
     archive.pipe(res);
 
     // Generate PDFs and add to archive
-    for (const enrollment of results) {
+    for (const enrollment of pdfEligible) {
       try {
         const pdfBuffer = await generateEnrollmentPDF(enrollment);
         const filename = `enrollment-${enrollment.student_number || enrollment.id}.pdf`;
