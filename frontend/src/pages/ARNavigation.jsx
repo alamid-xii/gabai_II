@@ -204,12 +204,12 @@ export function ARNavigation() {
             {selectedBuilding ? (
               <div ref={detailsRef} className="bg-white text-[#001840] border border-gray-200/90 rounded-2xl lg:overflow-y-auto shadow-sm flex-1 lg:min-h-0 flex flex-col scroll-mt-20">
                 {/* Header */}
-                <div className="flex items-start justify-between gap-3 p-5 sm:p-6 pb-4 border-b border-gray-100 shrink-0 flex-wrap">
-                  <div className="flex items-start gap-3.5 flex-1 min-w-0">
+                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 p-5 sm:p-6 pb-4 border-b border-gray-100 shrink-0">
+                  <div className="flex items-start gap-3.5 min-w-0 sm:flex-1">
                     <div className="bg-[#F5C400] w-12 h-12 rounded-xl flex items-center justify-center shrink-0 shadow-xs">
                       <Building2 className="w-6 h-6 text-[#001840]" />
                     </div>
-                    <div className="min-w-0">
+                    <div className="min-w-0 flex-1">
                       {selectedBuilding.category && (
                         <span className="inline-block bg-[#FFF4C2] text-[#001840] border border-[#F5C400]/50 text-[11px] font-bold uppercase tracking-wide px-2.5 py-0.5 rounded-full">
                           {selectedBuilding.category}
@@ -223,8 +223,8 @@ export function ARNavigation() {
                       )}
                     </div>
                   </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <BuildingNarration key={selectedBuilding.id} building={selectedBuilding} muted={narrationMuted} onMutedChange={setNarrationMuted} />
+                  <div className="flex items-center gap-2 flex-wrap shrink-0">
+                    <BuildingNarration key={`${selectedBuilding.id}-${selectedBuilding.voiceoverAudioUrl || ""}`} building={selectedBuilding} muted={narrationMuted} onMutedChange={setNarrationMuted} />
                     <button
                       type="button"
                       onClick={() => setSelectedBuilding(null)}

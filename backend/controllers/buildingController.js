@@ -7,7 +7,7 @@ import { validateLabels } from "../services/panoramaLabels.js";
 */
 
 import { Building } from "../models/buildingModel.js";
-import { publicBuilding, MAX_SCRIPT_LENGTH } from "../services/buildingVoiceover.js";
+import { publicBuilding, MAX_SCRIPT_LENGTH, normalizeScript } from "../services/buildingVoiceover.js";
 import multer from "multer";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -97,7 +97,7 @@ export const updateBuilding = async (req, res) => {
     }
     
     const updateData = buildingInput(req.body);
-    if (updateData.voiceoverScript !== undefined && updateData.voiceoverScript !== (building.voiceoverScript || "")) updateData.voiceoverPublished = false;
+    if (updateData.voiceoverScript !== undefined && updateData.voiceoverScript !== normalizeScript(building.voiceoverScript || "")) updateData.voiceoverPublished = false;
     
     // If a new file was uploaded, update the imageUrl
     if (req.file) {
@@ -149,8 +149,10 @@ function buildingInput(body) {
   const allowed = ['name', 'shortName', 'category', 'description', 'offices', 'hours', 'coordinates', 'imageUrl', 'color', 'voiceoverScript', 'panoramaLabels'];
   const value = Object.fromEntries(allowed.filter(key => body[key] !== undefined).map(key => [key, body[key]]));
   if (value.voiceoverScript !== undefined) {
-    if (typeof value.voiceoverScript !== 'string' || value.voiceoverScript.length > MAX_SCRIPT_LENGTH) throw Object.assign(new Error('Voiceover script must be at most 2,500 characters.'), { status: 400 });
-    value.voiceoverScript = value.voiceoverScript.trim();
+    if (typeof value.voiceoverScript !== 'string') throw Object.assign(new Error('Voiceover script must be at most 2,500 characters.'), { status: 400 });
+    const normalized = normalizeScript(value.voiceoverScript);
+    if (normalized.length > MAX_SCRIPT_LENGTH) throw Object.assign(new Error('Voiceover script must be at most 2,500 characters.'), { status: 400 });
+    value.voiceoverScript = normalized;
   }
   if (value.panoramaLabels !== undefined) value.panoramaLabels = validateLabels(value.panoramaLabels);
   return value;

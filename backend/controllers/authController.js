@@ -273,7 +273,8 @@ export const registerUser = async (req, res) => {
 // POST /api/auth/verify-otp
 export const verifyEmail = async (req, res) => {
   try {
-    const { email, otp } = req.body;
+    const email = normalizeAccountEmail(req.body?.email);
+    const otp = typeof req.body?.otp === "string" ? req.body.otp.trim() : "";
     if (!email || !otp) return res.status(400).json({ success: false, message: "Email and OTP are required." });
 
     const result = await sequelize.transaction(async (transaction) => {
@@ -291,7 +292,7 @@ export const verifyEmail = async (req, res) => {
         });
         if (!legacyUser) return { status: 400, message: "No pending registration found with that email." };
         if (legacyUser.isVerified) return { success: true, alreadyVerified: true, user: legacyUser };
-        if (!legacyUser.verificationToken || legacyUser.verificationToken !== otp.trim()) {
+        if (!legacyUser.verificationToken || legacyUser.verificationToken !== otp) {
           return { status: 400, message: "Incorrect OTP. Please try again." };
         }
         if (legacyUser.verificationExpires && new Date(legacyUser.verificationExpires) < new Date()) {
@@ -304,7 +305,7 @@ export const verifyEmail = async (req, res) => {
         return { success: true, user: legacyUser };
       }
 
-      if (!pending.verificationToken || pending.verificationToken !== otp.trim()) {
+      if (!pending.verificationToken || pending.verificationToken !== otp) {
         return { status: 400, message: "Incorrect OTP. Please try again." };
       }
       if (pending.verificationExpires && new Date(pending.verificationExpires) < new Date()) {
@@ -348,7 +349,7 @@ export const verifyEmail = async (req, res) => {
 // POST /api/auth/resend-verification
 export const resendVerification = async (req, res) => {
   try {
-    const { email } = req.body;
+    const email = normalizeAccountEmail(req.body?.email);
     if (!email) return res.status(400).json({ message: "Email is required" });
 
     const pending = await PendingRegistration.findOne({ where: { email } });

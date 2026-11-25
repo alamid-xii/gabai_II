@@ -206,7 +206,7 @@ export function MyEnrollments() {
   
 
   return (
-    <div className="min-h-[calc(100svh-4rem)] lg:min-h-[calc(100svh-5rem)] bg-linear-to-br from-[#FFFDF0] via-[#FFF9E6] to-[#FFFDF0] py-4 sm:py-8">
+    <div className="min-h-[calc(100svh-4rem)] lg:min-h-[calc(100svh-5rem)] bg-white py-4 sm:py-8">
       <div className="max-w-6xl mx-auto px-4">
         {/* Header */}
         <div className="mb-6">

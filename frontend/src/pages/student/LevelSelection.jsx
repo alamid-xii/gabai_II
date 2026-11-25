@@ -149,7 +149,7 @@ export function LevelSelection() {
   // If student already has an active enrollment, block and redirect
   if (checking || (!settings && !settingsError)) {
     return (
-      <div className="min-h-[calc(100svh-4rem)] lg:min-h-[calc(100svh-5rem)] flex items-center justify-center bg-[#FFFDF0]">
+      <div className="min-h-[calc(100svh-4rem)] lg:min-h-[calc(100svh-5rem)] flex items-center justify-center bg-white">
         <Loader2 className="w-8 h-8 animate-spin text-[#102A71]" />
       </div>
     );
@@ -170,7 +170,7 @@ export function LevelSelection() {
       } catch (error) { toast.error(error.message); }
       finally { setSavingClassChoice(false); }
     };
-    return <div className="min-h-[70vh] flex items-center justify-center bg-[#FFFDF0] p-4"><section className="w-full max-w-xl rounded-2xl border border-gray-200 bg-white p-6 sm:p-8 shadow-sm">
+    return <div className="min-h-[70vh] flex items-center justify-center bg-white p-4"><section className="w-full max-w-xl rounded-2xl border border-gray-200 bg-white p-6 sm:p-8 shadow-sm">
       <h1 className="text-2xl font-bold text-[#001840]">Choose your Grade 7 class</h1>
       <p className="mt-3 text-sm leading-relaxed text-gray-600">You passed the SSC entrance exam. You may proceed with the Special Science Class or choose the Regular class before completing the five-step enrollment form.</p>
       <div role="group" aria-label="Class selection" className="my-6 grid gap-3 sm:grid-cols-2">{[{ value: 'SSC', title: 'Special Science Class', detail: 'Proceed with the SSC curriculum.' }, { value: 'Regular', title: 'Regular Class', detail: 'Proceed with the regular curriculum.' }].map(option => <button key={option.value} type="button" disabled={savingClassChoice} aria-pressed={classChoice === option.value} onClick={() => setClassChoice(option.value)} className={`rounded-xl border-2 p-4 text-left ${classChoice === option.value ? 'border-[#102A71] bg-blue-50' : 'border-gray-200 hover:bg-gray-50'}`}><span className="block font-semibold text-[#001840]">{option.title}</span><span className="mt-2 block text-xs text-gray-500">{option.detail}</span></button>)}</div>
@@ -180,7 +180,7 @@ export function LevelSelection() {
 
   if (failedSSCApplication) {
     return (
-      <div className="min-h-[70vh] flex items-center justify-center bg-[#FFFDF0] p-4">
+      <div className="min-h-[70vh] flex items-center justify-center bg-white p-4">
         <section className="w-full max-w-xl rounded-2xl border border-gray-200 bg-white p-6 sm:p-8 shadow-sm">
           <h1 className="text-2xl font-bold text-[#001840]">Continue Grade 7 Regular Class Enrollment</h1>
           <p className="mt-3 text-sm leading-relaxed text-gray-600">
@@ -200,7 +200,7 @@ export function LevelSelection() {
   if (existingEnrollment) {
     const isPendingSSC = existingEnrollment.status === 'pending_exam' || (existingEnrollment.sscApplied && !existingEnrollment.sscResult && !existingEnrollment.firstName);
     return (
-      <div className="min-h-[calc(100svh-4rem)] lg:min-h-[calc(100svh-5rem)] bg-linear-to-br from-[#FFFDF0] via-[#FFF9E6] to-[#FFFDF0] flex items-center justify-center px-4">
+      <div className="min-h-[calc(100svh-4rem)] lg:min-h-[calc(100svh-5rem)] bg-white flex items-center justify-center px-4">
         <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-8 max-w-md w-full text-center">
           <div className={`w-16 h-16 ${isPendingSSC ? 'bg-yellow-100' : 'bg-blue-100'} rounded-full flex items-center justify-center mx-auto mb-4`}>
             {isPendingSSC ? <FlaskConical className="w-8 h-8 text-yellow-600" /> : <FileText className="w-8 h-8 text-blue-600" />}
@@ -316,7 +316,8 @@ export function LevelSelection() {
       setSscGwaError('');
     }
     const prevAvg = sscPreviousGwa || next.previousGwa;
-    if (openFullForm || !record.studentNumber) {
+    const continuingRequiredDocs = (settings?.content?.requirements?.[finalLvl]?.old || []).some(rule => rule.required);
+    if (openFullForm || !record.studentNumber || continuingRequiredDocs) {
       proceedContinuingEnrollment(finalLvl, finalG, finalS, finalSscClass, prevAvg);
       return;
     }
@@ -611,7 +612,7 @@ export function LevelSelection() {
   };
 
   return (
-    <div className="min-h-[calc(100svh-4rem)] lg:min-h-[calc(100svh-5rem)] bg-linear-to-br from-[#FFFDF0] via-[#FFF9E6] to-[#FFFDF0] flex items-start justify-center pt-10 pb-6 px-4">
+    <div className="min-h-[calc(100svh-4rem)] lg:min-h-[calc(100svh-5rem)] bg-white flex items-start justify-center pt-10 pb-6 px-4">
       {/* Back button */}
       <button
         onClick={() => navigate('/my-enrollments')}

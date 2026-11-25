@@ -40,6 +40,10 @@ export function AdminUsers({ users: initialUsers = [] }) {
       toast.error("You cannot change the status of your own account.");
       return;
     }
+    if (u.role === 'admin') {
+      toast.error("Administrator accounts cannot be deactivated.");
+      return;
+    }
     setTogglingId(u.id);
     try {
       const token = localStorage.getItem('token');
@@ -370,10 +374,12 @@ export function AdminUsers({ users: initialUsers = [] }) {
                             <button
                               type="button"
                               onClick={() => handleToggleStatus(u)}
-                              disabled={togglingId === u.id || currentAuthUser.id === u.id}
+                              disabled={togglingId === u.id || currentAuthUser.id === u.id || u.role === 'admin'}
                               title={
                                 currentAuthUser.id === u.id
                                   ? "Cannot modify own status"
+                                  : u.role === 'admin'
+                                  ? "Administrator accounts cannot be deactivated"
                                   : u.isActive !== false
                                   ? "Suspend account"
                                   : "Reactivate account"

@@ -771,12 +771,15 @@ export function HSEnrollmentForm({ enrollmentId: propId, readOnly = false }) {
   const total = 5;
   const isContinuing = form.enrollmentType === 'old' || isCarryOver;
   const isIncomingGrade7 = form.educationLevel === 'JHS' && form.gradeLevel === 'Grade 7' && !isContinuing;
-  const lastRequiredStep = isContinuing ? 3 : total;
+  const continuingNeedsDocs = isContinuing && activeCreds.length > 0;
+  const lastRequiredStep = isContinuing ? (continuingNeedsDocs ? 4 : 3) : total;
   const isContinuingSSC = isContinuing && form.educationLevel === 'JHS' && form.sscClass === 'SSC';
   const needsReportedAverage = isContinuingSSC && !form.gradesComplete && !isEditMode;
   const maintainingAverage = Number(policy?.ssc?.maintainingAverage ?? policy?.ssc?.minimumAverage ?? 85);
-  const docStep = 5;
-  const labels = ["Grade & Type", "Personal Info", "Family", "Education", "Documents"].slice(0, lastRequiredStep);
+  const docStep = isContinuing ? 4 : 5;
+  const labels = isContinuing
+    ? (continuingNeedsDocs ? ["Grade & Type", "Personal Info", "Family", "Documents"] : ["Grade & Type", "Personal Info", "Family"])
+    : ["Grade & Type", "Personal Info", "Family", "Education", "Documents"];
   // Active credential list depends on enrollment type
 
   function validate(s) {
@@ -823,7 +826,7 @@ export function HSEnrollmentForm({ enrollmentId: propId, readOnly = false }) {
       if ((familySections.father || familySections.mother) && !form.parentsAddress.trim()) e.parentsAddress = 'Required';
       if (familySections.guardian && !form.guardianAddress.trim()) e.guardianAddress = 'Required';
     }
-    if (s === 4) {
+    if (s === 4 && !isContinuing) {
       if (form.grade6Average && (!Number.isFinite(Number(form.grade6Average)) || Number(form.grade6Average) < 0 || Number(form.grade6Average) > 100)) e.grade6Average = "Enter a value from 0 to 100";
       const syFields = isTransferee && !isGrade7
         ? ["lastHSSYStart", "lastHSSYEnd"]
@@ -849,7 +852,7 @@ export function HSEnrollmentForm({ enrollmentId: propId, readOnly = false }) {
     if (s === 1) { const fields = [form.gradeLevel, isSHS ? form.strand : null].filter(f => f !== null); const filled = fields.filter(Boolean).length; return Math.round((filled / (fields.length || 1)) * 100); }
     if (s === 2) { const fields = [form.familyName, form.firstName, form.sex, form.dateOfBirth]; const filled = fields.filter(Boolean).length; return Math.round((filled / (fields.length || 1)) * 100); }
     if (s === 3) { const fields = ['father', 'mother', 'guardian'].filter(key => familySections[key]).flatMap(key => [form[`${key}Name`], form[key === 'guardian' ? 'guardianTelephone' : `${key}MobileNumber`], form[key === 'guardian' ? 'guardianAddress' : 'parentsAddress']]); const filled = fields.filter(Boolean).length; return Math.round((filled / (fields.length || 1)) * 100); }
-    if (s === 4) { const fields = isTransferee && !isGrade7 ? [form.lastHSSchool, form.lastHSCurriculumYear] : [form.grade6School, form.grade6Average]; const filled = fields.filter(Boolean).length; return Math.round((filled / (fields.length || 1)) * 100); }
+    if (s === 4 && !isContinuing) { const fields = isTransferee && !isGrade7 ? [form.lastHSSchool, form.lastHSCurriculumYear] : [form.grade6School, form.grade6Average]; const filled = fields.filter(Boolean).length; return Math.round((filled / (fields.length || 1)) * 100); }
     if (s === docStep) { const uploaded = activeCreds.filter(c => form.docFiles[c.key]).length; return activeCreds.length ? Math.round((uploaded / activeCreds.length) * 100) : 100; }
     return 0;
   }
@@ -1217,7 +1220,7 @@ export function HSEnrollmentForm({ enrollmentId: propId, readOnly = false }) {
             })}
 
           </div>)}
-          {step === 4 && (<div className="space-y-5">
+          {step === 4 && !isContinuing && (<div className="space-y-5">
             {(() => {
               const g6Default = computeDefaultGrade6SY(form.academicYear, form.gradeLevel || initialGrade);
               const hsStartDefault = String((Number(String(form.academicYear || '').slice(0, 4)) || new Date().getFullYear()) - 1);
@@ -1347,8 +1350,16 @@ export function HSEnrollmentForm({ enrollmentId: propId, readOnly = false }) {
           </div>)}
           {step === docStep && (<div className="space-y-4">
             <div>
-              <p className="text-sm font-semibold text-[#001840] mb-1">Upload Required Documents <span className="text-red-500">*</span></p>
-              <p className="text-xs text-gray-500 mb-4">Upload a clear scan or photo of each document. At least one is required.</p>
+              <p className="text-sm font-semibold text-[#001840] mb-1">
+                Upload Documents {activeCreds.some(c => c.required) && <span className="text-red-500">*</span>}
+              </p>
+              <p className="text-xs text-gray-500 mb-4">
+                {activeCreds.length === 0
+                  ? "No documents are required for this level and applicant type."
+                  : activeCreds.some(c => c.required)
+                    ? "Upload a clear scan or photo of each required document below."
+                    : "All listed documents below are optional for this applicant type."}
+              </p>
             </div>
             {activeCreds.map(cred => {
               const file = form.docFiles[cred.key];

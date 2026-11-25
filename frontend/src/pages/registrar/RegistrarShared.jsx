@@ -8,7 +8,7 @@ import {
   Search, ChevronDown, ChevronUp, FileText, CheckCircle2,
   RotateCcw, Calendar, ClipboardCheck,
   Clock, RefreshCw, Filter, Users, UserX, UserCheck, ArrowRightLeft,
-  ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight
+  ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Hash
 } from 'lucide-react';
 
 import { Navbar } from '../../components/Navbar';
@@ -49,16 +49,65 @@ function Modal({ title, onClose, children }) {
   );
 }
 
+const STUDENT_ID_PATTERN = /^([A-Z]-\d{4,6}|\d{4}-\d{4,5})$/;
+
 // ── Approve Modal (replaces Verify — registrar now verifies AND approves) ──────
 function ApproveModal({ enrollment, onClose, onSuccess }) {
+  const isNewOrTransferee = ['new', 'transferee'].includes(enrollment.enrollmentType || 'new');
+  const [studentNumber, setStudentNumber] = useState(enrollment.studentNumber || '');
+  const [suggesting, setSuggesting] = useState(!enrollment.studentNumber);
   const [remarks, setRemarks] = useState('');
   const [loading, setLoading] = useState(false);
+
+  const fetchSuggestedId = useCallback(async () => {
+    setSuggesting(true);
+    try {
+      const res = await fetch(`${API}/registrar/enrollments/next-student-number`, { headers: tok() });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Could not generate Student ID');
+      if (data.studentNumber) setStudentNumber(data.studentNumber);
+    } catch (err) {
+      toast.error(err.message);
+    } finally {
+      setSuggesting(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (enrollment.studentNumber) return;
+    const controller = new AbortController();
+    fetch(`${API}/registrar/enrollments/next-student-number`, { headers: tok(), signal: controller.signal })
+      .then(async res => {
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Could not generate Student ID');
+        if (!controller.signal.aborted && data.studentNumber) setStudentNumber(data.studentNumber);
+      })
+      .catch(err => {
+        if (err.name !== 'AbortError') toast.error(err.message);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setSuggesting(false);
+      });
+    return () => controller.abort();
+  }, [enrollment.studentNumber]);
+
   async function submit(e) {
     e.preventDefault();
+    const cleanedId = studentNumber.trim().toUpperCase();
+    if (isNewOrTransferee && !cleanedId) {
+      toast.error('Student ID Number is required before approving a new or transferee student.');
+      return;
+    }
+    if (cleanedId && !STUDENT_ID_PATTERN.test(cleanedId)) {
+      toast.error('Invalid Student ID format. Use YYYY-NNNN (e.g. 2026-0001) or EMC ID (e.g. A-9869).');
+      return;
+    }
     setLoading(true);
     try {
       const res = await fetch(`${API}/registrar/enrollments/${enrollment.id}/approve`, {
-        method: 'POST', headers: tok(), body: JSON.stringify({ remarks }),
+        method: 'POST',
+        headers: tok(),
+        body: JSON.stringify({ remarks, studentNumber: cleanedId || undefined }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || data.message || 'Failed');
@@ -72,6 +121,36 @@ function ApproveModal({ enrollment, onClose, onSuccess }) {
       <form onSubmit={submit} className="space-y-4">
         <p className="text-sm text-gray-600">Documents reviewed and complete for <span className="font-medium text-[#001840]">{enrollment.firstName} {enrollment.familyName}</span>. This will approve the enrollment directly.</p>
         <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Student ID Number {isNewOrTransferee && <span className="text-red-500">*</span>}
+          </label>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={studentNumber}
+              onChange={e => setStudentNumber(e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, ''))}
+              maxLength={12}
+              required={isNewOrTransferee}
+              placeholder="e.g. 2026-0001 or A-9869"
+              className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-green-400"
+            />
+            <button
+              type="button"
+              onClick={fetchSuggestedId}
+              disabled={suggesting || loading}
+              className="shrink-0 inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-[#102A71]/30 bg-[#EEF2FF] text-[#102A71] text-xs font-semibold hover:bg-[#102A71] hover:text-white transition-colors disabled:opacity-50"
+            >
+              <RefreshCw size={13} className={suggesting ? 'animate-spin' : ''} />
+              Auto-generate
+            </button>
+          </div>
+          <p className="text-xs text-gray-400 mt-1">
+            {isNewOrTransferee
+              ? 'Suggested next YYYY-NNNN ID is pre-filled. You may edit it if using a custom EMC ID.'
+              : 'Existing Student ID is preserved. You may edit it if needed.'}
+          </p>
+        </div>
+        <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Remarks (optional)</label>
           <textarea value={remarks} onChange={e => setRemarks(e.target.value)} rows={3}
             maxLength={1000}
@@ -81,8 +160,104 @@ function ApproveModal({ enrollment, onClose, onSuccess }) {
         </div>
         <div className="flex gap-3">
           <button type="button" onClick={onClose} className="flex-1 px-4 py-2 border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">Cancel</button>
-          <button type="submit" disabled={loading} className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 transition-colors disabled:opacity-60">
+          <button type="submit" disabled={loading || suggesting} className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 transition-colors disabled:opacity-60">
             {loading ? 'Approving...' : 'Approve'}
+          </button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+// ── Edit Student ID Number Modal (for already-enrolled students) ──────────────
+export function EditStudentIdModal({ enrollment, onClose, onSuccess }) {
+  const [studentNumber, setStudentNumber] = useState(enrollment.studentNumber || '');
+  const [suggesting, setSuggesting] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  const displayName = (enrollment.firstName || enrollment.familyName)
+    ? `${enrollment.firstName || ''} ${enrollment.familyName || ''}`.trim()
+    : (enrollment.user_name || `Student #${enrollment.id}`);
+
+  async function fetchSuggestedId() {
+    setSuggesting(true);
+    try {
+      const res = await fetch(`${API}/registrar/enrollments/next-student-number`, { headers: tok() });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Could not generate Student ID');
+      if (data.studentNumber) setStudentNumber(data.studentNumber);
+    } catch (err) {
+      toast.error(err.message);
+    } finally {
+      setSuggesting(false);
+    }
+  }
+
+  async function submit(e) {
+    e.preventDefault();
+    const cleanedId = studentNumber.trim().toUpperCase();
+    if (!cleanedId) {
+      toast.error('Please enter a Student ID Number.');
+      return;
+    }
+    if (!STUDENT_ID_PATTERN.test(cleanedId)) {
+      toast.error('Invalid Student ID format. Use YYYY-NNNN (e.g. 2026-0001) or EMC ID (e.g. A-9869).');
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await fetch(`${API}/registrar/enrollments/${enrollment.id}/student-number`, {
+        method: 'PUT',
+        headers: tok(),
+        body: JSON.stringify({ studentNumber: cleanedId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || data.message || 'Failed to update Student ID');
+      toast.success(`Student ID updated to ${cleanedId}`);
+      onSuccess();
+    } catch (err) {
+      toast.error(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <Modal title="Edit Student ID Number" onClose={onClose}>
+      <form onSubmit={submit} className="space-y-4">
+        <p className="text-sm text-gray-600">
+          Assign or update the official EMC Student ID Number for <span className="font-semibold text-[#001840]">{displayName}</span>.
+        </p>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Student ID Number <span className="text-red-500">*</span>
+          </label>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={studentNumber}
+              onChange={e => setStudentNumber(e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, ''))}
+              maxLength={12}
+              required
+              placeholder="e.g. 2026-0001 or A-9869"
+              className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[#001840]/20 focus:border-[#001840]"
+            />
+            <button
+              type="button"
+              onClick={fetchSuggestedId}
+              disabled={suggesting || loading}
+              className="shrink-0 inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-[#102A71]/30 bg-[#EEF2FF] text-[#102A71] text-xs font-semibold hover:bg-[#102A71] hover:text-white transition-colors disabled:opacity-50"
+            >
+              <RefreshCw size={13} className={suggesting ? 'animate-spin' : ''} />
+              Auto-generate
+            </button>
+          </div>
+          <p className="text-xs text-gray-400 mt-1">Format: YYYY-NNNN (e.g. 2026-0001) or EMC ID (e.g. A-9869).</p>
+        </div>
+        <div className="flex gap-3">
+          <button type="button" onClick={onClose} className="flex-1 px-4 py-2 border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">Cancel</button>
+          <button type="submit" disabled={loading || suggesting} className="flex-1 px-4 py-2 bg-[#102A71] text-white rounded-lg text-sm font-semibold hover:bg-[#001840] transition-colors disabled:opacity-60">
+            {loading ? 'Saving...' : 'Save Student ID'}
           </button>
         </div>
       </form>
@@ -740,7 +915,14 @@ export function EnrollmentDetail({ enrollmentId, enrollment: rowData, onClose, o
         {/* Header */}
         <div className="flex items-start justify-between">
           <div>
-            <p className="font-semibold text-[#001840]">{displayName}</p>
+            <div className="flex items-center gap-2 flex-wrap">
+              <p className="font-semibold text-[#001840]">{displayName}</p>
+              {e.studentNumber && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-mono font-semibold bg-[#EEF2FF] text-[#102A71] border border-[#102A71]/15">
+                  <Hash size={10} /> {e.studentNumber}
+                </span>
+              )}
+            </div>
             <p className="text-xs text-gray-400 mt-0.5">
               {e.educationLevel} &bull; {e.course || e.gradeLevel || '—'} &bull; {e.academicYear || e.semester || '—'}
             </p>
@@ -803,6 +985,13 @@ export function EnrollmentDetail({ enrollmentId, enrollment: rowData, onClose, o
               <ClipboardCheck size={13} /> Record SSC Result
             </button>
           )}
+          {/* Edit Student ID — for approved/enrolled students */}
+          {['enrolled', 'active', 'approved', 'subjects_enrolled'].includes(status) && (
+            <button onClick={() => setActiveModal('edit-student-id')}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#EEF2FF] text-[#102A71] border border-[#102A71]/25 rounded-lg text-xs font-semibold hover:bg-[#102A71] hover:text-white transition-colors">
+              <Hash size={13} /> {e.studentNumber ? 'Edit Student ID' : 'Assign Student ID'}
+            </button>
+          )}
           {/* Life status — only for enrolled students not already dropped/transferred */}
           {['enrolled', 'active', 'approved', 'subjects_enrolled'].includes(status) &&
            !['dropped', 'transferred_out'].includes(e.lifeStatus) && (
@@ -816,6 +1005,7 @@ export function EnrollmentDetail({ enrollmentId, enrollment: rowData, onClose, o
       </div>
 
       {activeModal === 'approve' && <ApproveModal enrollment={e} onClose={() => setActiveModal(null)} onSuccess={handleModalSuccess} />}
+      {activeModal === 'edit-student-id' && <EditStudentIdModal enrollment={e} onClose={() => setActiveModal(null)} onSuccess={handleModalSuccess} />}
       {activeModal === 'return' && <ReturnModal enrollment={e} onClose={() => setActiveModal(null)} onSuccess={handleModalSuccess} />}
       {activeModal === 'ssc-schedule' && <SSCScheduleModal enrollment={e} onClose={() => setActiveModal(null)} onSuccess={handleModalSuccess} />}
       {activeModal === 'ssc-result' && <SSCResultModal enrollment={e} onClose={() => setActiveModal(null)} onSuccess={handleModalSuccess} />}

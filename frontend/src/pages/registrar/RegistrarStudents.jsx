@@ -2,8 +2,8 @@ import { usePortalSlot } from '../../hooks/usePortalSlot';
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
-import { Archive, Download, RefreshCw, Search, UserX, Users, X } from "lucide-react";
-import { LifeStatusBadge, LifeStatusModal, RegistrarPagination } from "./RegistrarShared";
+import { Archive, Download, Hash, RefreshCw, Search, UserX, Users, X } from "lucide-react";
+import { LifeStatusBadge, LifeStatusModal, EditStudentIdModal, RegistrarPagination } from "./RegistrarShared";
 import { API, tok, LIFE_STATUS_CFG } from "./registrarConfig";
 
 const ARCHIVED_STATUSES = ['dropped', 'transferred_out'];
@@ -35,6 +35,7 @@ export function StudentsTab() {
   const [, setSchoolYears] = useState([]);
   const [activeYear, setActiveYear] = useState('');
   const [selectedStudent, setSelectedStudent] = useState(null);
+  const [editingIdStudent, setEditingIdStudent] = useState(null);
   const [page, setPage] = useState(1);
   const [pageSize] = useState(10);
   const [exporting, setExporting] = useState(false);
@@ -638,12 +639,18 @@ export function StudentsTab() {
                               )}
                             </td>
                             <td className="px-5 py-3">
-                              <div className="flex flex-col gap-1.5">
+                              <div className="flex flex-wrap gap-1.5">
                                 {canUpdate ? (
-                                  <button onClick={() => setSelectedStudent(s)}
-                                    className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-[#001840] text-white rounded-lg text-xs font-medium hover:bg-[#102A71] transition-colors">
-                                    <UserX size={11} /> Update Status
-                                  </button>
+                                  <>
+                                    <button onClick={() => setEditingIdStudent(s)}
+                                      className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-[#EEF2FF] text-[#102A71] border border-[#102A71]/25 rounded-lg text-xs font-semibold hover:bg-[#102A71] hover:text-white transition-colors">
+                                      <Hash size={11} /> {s.studentNumber ? 'Edit ID' : 'Assign ID'}
+                                    </button>
+                                    <button onClick={() => setSelectedStudent(s)}
+                                      className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-[#001840] text-white rounded-lg text-xs font-medium hover:bg-[#102A71] transition-colors">
+                                      <UserX size={11} /> Update Status
+                                    </button>
+                                  </>
                                 ) : (
                                   <span className="text-xs text-gray-300 italic">archived</span>
                                 )}
@@ -677,6 +684,15 @@ export function StudentsTab() {
           enrollment={selectedStudent}
           onClose={() => setSelectedStudent(null)}
           onSuccess={() => { setSelectedStudent(null); fetchStudents(); }}
+        />
+      )}
+
+      {/* Edit Student ID Modal */}
+      {editingIdStudent && (
+        <EditStudentIdModal
+          enrollment={editingIdStudent}
+          onClose={() => setEditingIdStudent(null)}
+          onSuccess={() => { setEditingIdStudent(null); fetchStudents(); }}
         />
       )}
     </div>

@@ -94,14 +94,12 @@ export function sscContinuationEligibility(summary, policy) {
   return !summary.hasFailedSubject && summary.computedGwa >= maintainingAverage;
 }
 export function validateDocuments(policy, enrollment, uploaded) {
-  // Continuing students have past records on file; direct submission without new documents is permitted
-  if (['old', 'returnee'].includes(enrollment.enrollmentType)) {
-    return;
-  }
   const keys = new Set(uploaded.map(doc => doc.documentType));
   const missing = checklist(policy, enrollment).filter(doc => doc.required && !keys.has(doc.key));
   if (missing.length) throw fail(`Upload required documents: ${missing.map(doc => doc.label).join(', ')}.`);
-  if (policy.minimumDocuments && !(enrollment.sscApplied && enrollment.sscResult) && !uploaded.some(doc => doc.documentType !== 'sscCard')) throw fail('Upload at least one enrollment document.');
+  if (policy.minimumDocuments && !['old', 'returnee'].includes(enrollment.enrollmentType) && !(enrollment.sscApplied && enrollment.sscResult) && !uploaded.some(doc => doc.documentType !== 'sscCard')) {
+    throw fail('Upload at least one enrollment document.');
+  }
 }
 export async function initializeAdmission(sequelize) {
   await AdmissionSettings.findOrCreate({ where: { id: 1 }, defaults: { content: validateAdmission(initialAdmission), revision: 1 } });

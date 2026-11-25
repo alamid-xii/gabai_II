@@ -729,8 +729,8 @@ export function AdminBuildings({ buildings = [], onRefresh }) {
               className="bg-white text-[#001840] border border-gray-200/90 rounded-2xl lg:overflow-y-auto shadow-sm flex-1 lg:min-h-0 flex flex-col"
             >
               {/* Header */}
-              <div className="flex items-start justify-between gap-3 p-4 sm:p-6 pb-4 border-b border-gray-100 shrink-0 flex-wrap">
-                <div className="flex items-start gap-3 flex-1 min-w-0">
+              <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 p-4 sm:p-6 pb-4 border-b border-gray-100 shrink-0">
+                <div className="flex items-start gap-3 min-w-0 sm:flex-1">
                   <div className="bg-[#F5C400] w-12 h-12 rounded-xl flex items-center justify-center shrink-0 shadow-xs">
                     <Building2 className="w-6 h-6 text-[#001840]" />
                   </div>

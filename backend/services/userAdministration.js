@@ -18,7 +18,10 @@ export async function updateManagedUser(actorId, targetId, getUpdates) {
       if (!nextActive) fail('You cannot deactivate your own account');
       if (nextRole !== 'admin') fail('You cannot change your own admin role');
     }
-    if (user.role === 'admin' && active(user.isActive) && (!nextActive || nextRole !== 'admin')) {
+    if (user.role === 'admin' && !nextActive) {
+      fail('Administrator accounts cannot be deactivated');
+    }
+    if (user.role === 'admin' && active(user.isActive) && nextRole !== 'admin') {
       if (administrators.filter(item => active(item.isActive)).length <= 1) fail('At least one active administrator must remain');
     }
     if ((updates.role !== undefined && updates.role !== user.role) ||

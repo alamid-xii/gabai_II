@@ -1,4 +1,9 @@
-import { generateStudentNumber } from "../services/studentNumbers.js";
+import {
+  generateStudentNumber,
+  previewNextStudentNumber,
+  assertStudentNumberAvailable,
+  normalizeStudentNumber,
+} from "../services/studentNumbers.js";
 import { validateForReview } from "../services/enrollmentReview.js";
 import { sendEnrollmentVerifiedEmail, sendEnrollmentReturnedEmail, sendSSCExamScheduledEmail, sendSSCResultEmail, sendEnrollmentApprovedEmail, sendLifeStatusEmail } from '../services/emailService.js';
 import { sequelize } from '../models/db.js';
@@ -220,6 +225,51 @@ export const verifyEnrollment = async (req, res) => {
   }
 };
 
+// ── Preview next suggested Student ID Number (YYYY-NNNN) ─────────────────────
+export const getSuggestedStudentNumber = async (req, res) => {
+  try {
+    const studentNumber = await previewNextStudentNumber();
+    res.json({ studentNumber });
+  } catch (error) {
+    if (!error.status) console.error('Suggest student number error:', error);
+    res.status(error.status || 500).json({ error: error.status ? error.message : 'Failed to generate suggested student ID' });
+  }
+};
+
+// ── Update Student ID Number on an enrollment record ─────────────────────────
+export const updateStudentNumber = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const rawStudentNumber = req.body?.studentNumber;
+
+    const [[enrollment]] = await sequelize.query(
+      'SELECT * FROM enrollment_records WHERE id = ?',
+      { replacements: [id] }
+    );
+    if (!enrollment) return res.status(404).json({ error: 'Enrollment not found' });
+
+    const studentNumber = await assertStudentNumberAvailable(rawStudentNumber, enrollment.userId);
+
+    await sequelize.query(
+      `UPDATE enrollment_records
+       SET studentNumber = ?,
+           updatedAt = NOW()
+       WHERE id = ?`,
+      { replacements: [studentNumber, id] }
+    );
+
+    const [[updated]] = await sequelize.query(
+      'SELECT * FROM enrollment_records WHERE id = ?',
+      { replacements: [id] }
+    );
+
+    res.json({ message: 'Student ID Number updated successfully', enrollment: updated });
+  } catch (error) {
+    if (!error.status) console.error('Update student number error:', error);
+    res.status(error.status || 500).json({ error: error.status ? error.message : 'Failed to update Student ID Number' });
+  }
+};
+
 // ── Approve enrollment (verified → approved) ──────────────────────────────────
 export const approveEnrollment = async (req, res) => {
   try {
@@ -242,9 +292,12 @@ export const approveEnrollment = async (req, res) => {
     }
     await validateForReview(enrollment);
 
-    // Generate student number if not already assigned, preserving any existing number from previous years
+    // Use registrar-supplied student number if provided; otherwise preserve existing or auto-generate
+    const suppliedStudentNumber = normalizeStudentNumber(req.body?.studentNumber);
     let studentNumber = enrollment.studentNumber;
-    if (!studentNumber) {
+    if (suppliedStudentNumber) {
+      studentNumber = await assertStudentNumberAvailable(suppliedStudentNumber, enrollment.userId);
+    } else if (!studentNumber) {
       const [[prev]] = await sequelize.query(
         `SELECT studentNumber FROM enrollment_records
          WHERE userId = ? AND studentNumber IS NOT NULL AND studentNumber != ''

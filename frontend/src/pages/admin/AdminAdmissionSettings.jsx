@@ -50,7 +50,30 @@ export function AdminAdmissionSettings() {
     </section>
     <section className="rounded-xl border bg-white p-4 sm:p-5 space-y-4">
       <h3 className="font-bold text-[#001840]">Document checklists</h3>
-      <div className="flex flex-wrap gap-3"><select aria-label="Education level" value={level} onChange={event => setLevel(event.target.value)} className={input}><option>JHS</option><option>SHS</option></select><select aria-label="Applicant type" value={type} onChange={event => setType(event.target.value)} className={input}>{['new', 'old', 'transferee', 'returnee'].map(value => <option key={value} value={value}>{value === 'old' ? 'Old / Continuing' : value}</option>)}</select></div>
+      <div className="flex flex-wrap items-center gap-3">
+        <select aria-label="Education level" value={level} onChange={event => setLevel(event.target.value)} className={input}><option>JHS</option><option>SHS</option></select>
+        <select aria-label="Applicant type" value={type} onChange={event => setType(event.target.value)} className={input}>{['new', 'old', 'transferee', 'returnee'].map(value => <option key={value} value={value}>{value === 'old' ? 'Old / Continuing' : value}</option>)}</select>
+        <button
+          type="button"
+          onClick={() => {
+            const currentRules = content.requirements[level][type];
+            const otherLevel = level === 'JHS' ? 'SHS' : 'JHS';
+            patch({
+              requirements: {
+                ...content.requirements,
+                [otherLevel]: {
+                  ...content.requirements[otherLevel],
+                  [type]: structuredClone(currentRules),
+                },
+              },
+            });
+            toast.success(`Copied ${level} / ${type === 'old' ? 'Continuing' : type} checklist to ${otherLevel}`);
+          }}
+          className="rounded-lg border border-gray-300 bg-gray-50 hover:bg-gray-100 px-3 py-2 text-xs font-semibold text-[#001840]"
+        >
+          Copy to {level === 'JHS' ? 'SHS' : 'JHS'} ({type === 'old' ? 'Continuing' : type})
+        </button>
+      </div>
       {content.documents.map((doc, index) => {
         const rule = content.requirements[level][type].find(rule => rule.key === doc.key);
         return <div key={doc.key} className="grid sm:grid-cols-[1fr_180px] gap-2 border-t pt-3">

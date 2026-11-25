@@ -80,9 +80,16 @@ export function SignUp() {
         throw new Error(data.message || "Registration failed");
       }
 
-      setRegisteredEmail(email);
+      const verifiedEmail = data.email || email.toLowerCase();
+      setRegisteredEmail(verifiedEmail);
       setRegistered(true);
-      navigate("/verify-email", { state: { email } });
+      navigate("/verify-email", {
+        state: {
+          email: verifiedEmail,
+          emailSent: data.emailSent !== false,
+          initialError: data.emailSent === false ? data.message : "",
+        },
+      });
     } catch (err) {
       setError(err.message || "Registration failed. Please try again.");
     } finally {
@@ -116,12 +123,17 @@ export function SignUp() {
             <button
               onClick={async () => {
                 try {
-                  await fetch(`${API}/auth/resend-verification`, {
+                  const res = await fetch(`${API}/auth/resend-verification`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ email: registeredEmail }),
                   });
-                  toast.success("Verification email resent!");
+                  const resData = await res.json().catch(() => ({}));
+                  if (!res.ok) {
+                    toast.error(resData.message || "Could not resend the verification email. Please try again.");
+                    return;
+                  }
+                  toast.success(resData.message || "Verification email resent!");
                 } catch {
                   toast.error("Could not resend the verification email. Please try again.");
                 }

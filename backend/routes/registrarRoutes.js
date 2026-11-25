@@ -5,6 +5,8 @@ import { authenticateToken, requireRegistrar } from '../middleware/auth.js';
 import {
   getRegistrarStats,
   getRegistrarEnrollments,
+  getSuggestedStudentNumber,
+  updateStudentNumber,
   verifyEnrollment,
   returnEnrollment,
   approveEnrollment,
@@ -27,8 +29,10 @@ router.use(requireRegistrar);
 router.get('/dashboard', getRegistrarDashboard);
 router.get('/stats', getRegistrarStats);
 
-// Enrollment list
+// Enrollment list & Student ID Number helpers
 router.get('/enrollments', getRegistrarEnrollments);
+router.get('/enrollments/next-student-number', getSuggestedStudentNumber);
+router.put('/enrollments/:id/student-number', sanitizeBody, updateStudentNumber);
 
 // Verify enrollment
 router.post('/enrollments/:id/verify', sanitizeBody, validateRemarks, verifyEnrollment);

@@ -8,11 +8,13 @@ export function VerifyEmailPage() {
   
 
   // Email can be passed via navigation state (from SignUp) or query param fallback
-  const emailFromState = location.state?.email || "";
+  const searchParams = new URLSearchParams(location.search);
+  const emailFromState = (location.state?.email || searchParams.get("email") || "").trim().toLowerCase();
   const [email] = useState(emailFromState);
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
   const [status, setStatus] = useState("idle"); // idle | loading | success | error
-  const [errorMsg, setErrorMsg] = useState("");
+  const [errorMsg, setErrorMsg] = useState(location.state?.initialError || "");
+  const [infoMsg, setInfoMsg] = useState("");
   const [resendCooldown, setResendCooldown] = useState(0);
   const inputRefs = useRef([]);
 
@@ -83,18 +85,32 @@ export function VerifyEmailPage() {
   };
 
   const handleResend = async () => {
-    if (!email) return;
+    if (!email) {
+      setErrorMsg("Email address is missing. Please go back and register again.");
+      return;
+    }
     setResendCooldown(60);
     setErrorMsg("");
+    setInfoMsg("");
     setOtp(["", "", "", "", "", ""]);
     inputRefs.current[0]?.focus();
     try {
-      await fetch(`${API}/auth/resend-verification`, {
+      const res = await fetch(`${API}/auth/resend-verification`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email }),
       });
-    } catch { /* silent */ }
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setResendCooldown(0);
+        setErrorMsg(data.message || "The verification email could not be sent. Please try again later.");
+      } else {
+        setInfoMsg(data.message || "A new OTP has been sent to your email.");
+      }
+    } catch {
+      setResendCooldown(0);
+      setErrorMsg("Network error while resending OTP. Please try again.");
+    }
   };
 
   return (
@@ -158,6 +174,14 @@ export function VerifyEmailPage() {
                   />
                 ))}
               </div>
+
+              {/* INFO */}
+              {infoMsg && !errorMsg && (
+                <div className="flex items-center gap-2 bg-green-50 border-l-4 border-green-500 rounded-lg p-3 mb-4 text-left">
+                  <CheckCircle2 className="w-4 h-4 text-green-600 shrink-0" />
+                  <p className="text-sm text-green-800">{infoMsg}</p>
+                </div>
+              )}
 
               {/* ERROR */}
               {errorMsg && (

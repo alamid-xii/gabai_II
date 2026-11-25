@@ -1,5 +1,5 @@
 import { Building } from '../models/buildingModel.js';
-import { validateScript, voiceConfig, signature, synthesize, saveAudio, removeAudio } from '../services/buildingVoiceover.js';
+import { validateScript, normalizeScript, voiceConfig, signature, synthesize, saveAudio, removeAudio } from '../services/buildingVoiceover.js';
 
 export function createVoiceoverHandlers(deps = {}) {
   const model = deps.model || Building;
@@ -29,14 +29,14 @@ export function createVoiceoverHandlers(deps = {}) {
       try {
         const building = await find(req);
         if (!building) return res.status(404).json({ error: 'Building not found' });
-        const incomingScript = typeof req.body?.script === 'string' ? req.body.script.trim() : null;
-        if (incomingScript !== null && incomingScript !== (building.voiceoverScript || '').trim()) {
+        const incomingScript = typeof req.body?.script === 'string' ? normalizeScript(req.body.script) : null;
+        if (incomingScript !== null && incomingScript !== normalizeScript(building.voiceoverScript || '')) {
           if (!validateScript(incomingScript)) return res.status(400).json({ error: 'Save a custom voiceover script of 1–2,500 characters first.' });
           await model.update({ voiceoverScript: incomingScript, voiceoverPublished: false }, { where: { id: building.id, isActive: true } });
           building.voiceoverScript = incomingScript;
           building.voiceoverPublished = false;
         }
-        const script = building.voiceoverScript?.trim();
+        const script = normalizeScript(building.voiceoverScript);
         if (!validateScript(script)) return res.status(400).json({ error: 'Save a custom voiceover script of 1–2,500 characters first.' });
         const settings = config();
         const hash = signature(script, settings);
@@ -67,7 +67,7 @@ export function createVoiceoverHandlers(deps = {}) {
       try {
         const building = await find(req);
         if (!building) return res.status(404).json({ error: 'Building not found' });
-        if (req.body.published && (!building.voiceoverAudioUrl || !building.voiceoverScript?.trim() || building.voiceoverScript.trim() !== building.voiceoverAudioScript)) return res.status(409).json({ error: 'Generate and preview audio for the saved script before publishing.' });
+        if (req.body.published && (!building.voiceoverAudioUrl || !normalizeScript(building.voiceoverScript) || normalizeScript(building.voiceoverScript) !== normalizeScript(building.voiceoverAudioScript))) return res.status(409).json({ error: 'Generate and preview audio for the saved script before publishing.' });
         const [changed] = await model.update({ voiceoverPublished: req.body.published }, { where: { id: building.id, isActive: true, voiceoverScript: building.voiceoverScript, voiceoverAudioUrl: building.voiceoverAudioUrl } });
         if (!changed) return res.status(409).json({ error: 'Building changed. Reload and try again.' });
         return res.json({ building: await find(req) });

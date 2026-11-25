@@ -7,17 +7,23 @@ import { DataTypes } from 'sequelize';
 
 export const audioDirectory = fileURLToPath(new URL('../public/uploads/voiceovers/', import.meta.url));
 export const MAX_SCRIPT_LENGTH = 2500;
+export function normalizeScript(script) {
+  return typeof script === 'string' ? script.replace(/\r\n?/g, '\n').trim() : '';
+}
 export function validateScript(script) {
-  return typeof script === 'string' && script.trim().length > 0 && script.length <= MAX_SCRIPT_LENGTH;
+  const normalized = normalizeScript(script);
+  return typeof script === 'string' && normalized.length > 0 && normalized.length <= MAX_SCRIPT_LENGTH;
 }
 export function voiceConfig() {
   return { apiKey: process.env.ELEVENLABS_API_KEY, voiceId: process.env.ELEVENLABS_VOICE_ID, modelId: process.env.ELEVENLABS_MODEL_ID || 'eleven_multilingual_v2' };
 }
 export function signature(script, config = voiceConfig()) {
-  return crypto.createHash('sha256').update(JSON.stringify([script.trim(), config.voiceId, config.modelId])).digest('hex');
+  return crypto.createHash('sha256').update(JSON.stringify([normalizeScript(script), config.voiceId, config.modelId])).digest('hex');
 }
 export function isPublished(building) {
-  return Boolean(building.isActive && building.voiceoverPublished && building.voiceoverAudioUrl && building.voiceoverScript?.trim() && building.voiceoverScript.trim() === building.voiceoverAudioScript);
+  const script = normalizeScript(building.voiceoverScript);
+  const audioScript = normalizeScript(building.voiceoverAudioScript);
+  return Boolean(building.isActive && building.voiceoverPublished && building.voiceoverAudioUrl && script && script === audioScript);
 }
 export function publicBuilding(building) {
   const value = building.toJSON ? building.toJSON() : { ...building };

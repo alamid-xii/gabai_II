@@ -97,7 +97,7 @@ export function StudentDashboard() {
 
   if (loading) {
     return (
-      <div className="min-h-[calc(100svh-4rem)] lg:min-h-[calc(100svh-5rem)] bg-linear-to-br from-[#FFFDF0] via-[#FFF9E6] to-[#FFFDF0] flex items-center justify-center">
+      <div className="min-h-[calc(100svh-4rem)] lg:min-h-[calc(100svh-5rem)] bg-white flex items-center justify-center">
         <div className="text-center">
           <Loader className="w-12 h-12 text-[#102A71] animate-spin mx-auto mb-4" />
           <p className="text-gray-600">Loading dashboard...</p>
@@ -108,7 +108,7 @@ export function StudentDashboard() {
 
   if (!enrollment) {
     return (
-      <div className="min-h-[calc(100svh-4rem)] lg:min-h-[calc(100svh-5rem)] bg-linear-to-br from-[#FFFDF0] via-[#FFF9E6] to-[#FFFDF0] flex items-center justify-center p-4">
+      <div className="min-h-[calc(100svh-4rem)] lg:min-h-[calc(100svh-5rem)] bg-white flex items-center justify-center p-4">
         <div className="text-center bg-white rounded-2xl shadow-xl border border-gray-100 p-8 max-w-md w-full">
           <AlertCircle className="w-12 h-12 text-[#F5C400] mx-auto mb-4" />
           <h2 className="text-xl font-bold text-[#001840] mb-2">No Active Enrollment Found</h2>
@@ -139,7 +139,7 @@ export function StudentDashboard() {
 
 
   return (
-    <div className="min-h-[calc(100svh-4rem)] lg:min-h-[calc(100svh-5rem)] bg-linear-to-br from-[#FFFDF0] via-[#FFF9E6] to-[#FFFDF0] py-4 sm:py-8">
+    <div className="min-h-[calc(100svh-4rem)] lg:min-h-[calc(100svh-5rem)] bg-white py-4 sm:py-8">
       <div className="max-w-5xl mx-auto px-4">
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
