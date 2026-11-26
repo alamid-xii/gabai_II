@@ -4,8 +4,17 @@ import { API } from '../../config/api';
 import { admissionChecklist } from '../../hooks/useAdmissionSettings';
 
 const LABELS = { f138: 'Report Card (F-138)', f137a: 'Permanent Record (F-137-A)', f137e: 'Permanent Record (F-137-E)', birthCert: 'Birth Certificate', cgmc: 'Good Moral Certificate', tor: 'Transcript of Records', marriageCert: 'Marriage Certificate', cert: 'Certificate', sscCard: 'SSC Application Report Card' };
-const STEPS = ['Grade & Type', 'Personal Info', 'Family', 'Education', 'Documents'];
-const reviewSteps = enrollment => enrollment.enrollmentType === 'old' ? STEPS.slice(0, 3) : enrollment.sscApplied || enrollment.sscExamDate || enrollment.sscResult ? [...STEPS, 'SSC Exam'] : STEPS;
+const ENROLLED_STATUSES = new Set(['approved', 'enrolled', 'active', 'subjects_enrolled', 'completed']);
+const isApprovedOrEnrolled = enrollment => ENROLLED_STATUSES.has(enrollment?.status);
+const reviewSteps = enrollment => {
+  if (enrollment?.enrollmentType === 'old') return ['Grade & Type', 'Personal Info', 'Family'];
+  const base = isApprovedOrEnrolled(enrollment)
+    ? ['Grade & Type', 'Personal Info', 'Family', 'Education']
+    : ['Grade & Type', 'Personal Info', 'Family', 'Education', 'Documents'];
+  return (enrollment?.sscApplied || enrollment?.sscExamDate || enrollment?.sscResult)
+    ? [...base, 'SSC Exam']
+    : base;
+};
 
 export function EnrollmentReviewNavigation({ enrollment, onJump, disabled = false }) {
   return <nav aria-label="Enrollment form sections" className="flex flex-wrap gap-2">{reviewSteps(enrollment).map((label, index) => <button key={label} type="button" disabled={disabled} onClick={() => onJump(index)} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-[#102A71] hover:border-[#102A71] hover:bg-blue-50 disabled:cursor-wait disabled:opacity-50">{index + 1}. {label}</button>)}</nav>;
@@ -58,16 +67,18 @@ export default function EnrollmentApplicationReview({ enrollment: e, documents, 
   const requirements = e.admissionPolicy?.requirements ? admissionChecklist(e.admissionPolicy, e.educationLevel, e.enrollmentType || 'new') : [];
   const keys = [...new Set([...requirements.map(item => item.key), ...credentials.map(item => typeof item === 'string' ? item : item.key || item.type), ...documents.map(item => item.documentType)])].filter(Boolean);
   const yearRange = (start, end) => [start, end].filter(present).join(' - ');
-  function section(number, children) {
-    if (number > steps.length) return null;
-    return <section ref={node => { sections.current[number - 1] = node; }} className="scroll-mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-white" aria-label={`Step ${number}: ${steps[number - 1]}`}>
-      <div className="flex items-center gap-3 border-b border-slate-100 px-4 py-4 sm:px-5"><span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#102A71] text-sm font-bold text-white">{number}</span><h3 className="font-semibold text-[#001840]">{steps[number - 1]}</h3></div>
+  function section(label, children) {
+    const idx = steps.indexOf(label);
+    if (idx === -1) return null;
+    const number = idx + 1;
+    return <section ref={node => { sections.current[idx] = node; }} className="scroll-mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-white" aria-label={`Step ${number}: ${label}`}>
+      <div className="flex items-center gap-3 border-b border-slate-100 px-4 py-4 sm:px-5"><span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#102A71] text-sm font-bold text-white">{number}</span><h3 className="font-semibold text-[#001840]">{label}</h3></div>
       <div className="space-y-4 p-4 sm:p-5">{children}</div>
     </section>;
   }
   return <div className="space-y-4">
 
-    {section(1, <Fields rows={[
+    {section('Grade & Type', <Fields rows={[
       ['Education Level', e.educationLevel === 'JHS' ? 'Junior High School' : e.educationLevel === 'SHS' ? 'Senior High School' : e.educationLevel],
       ['Grade Level', e.gradeLevel], ['Strand', e.strand || (e.educationLevel === 'JHS' ? 'Not applicable' : null)],
       ['Enrollment Type', e.enrollmentType], ['Student Type', e.studentType], ['School Year', e.academicYear],
@@ -75,12 +86,12 @@ export default function EnrollmentApplicationReview({ enrollment: e, documents, 
       ['Class', e.sscClass || (e.sscApplied ? 'SSC applicant' : 'Regular')], ['Current Section', e.sectionName || 'Unassigned'],
       ['Previous Section', e.previousSection], ['Adviser', e.adviserName], ['Student Status', e.studentStatus || e.lifeStatus], ['Status Reason', e.lifeStatusReason], ['Destination School', e.destinationSchool],
     ].filter(([label]) => !isGrade7SSC || applicantFields.has(label))} />)}
-    {section(2, <Fields rows={[
+    {section('Personal Info', <Fields rows={[
       ['Last Name', e.familyName], ['First Name', e.firstName], ['Middle Name', e.middleName], ['LRN', e.lrn],
       ['Sex', e.sex], ['Date of Birth', date(e.dateOfBirth)], ['Place of Birth', e.placeOfBirth],
       ['Account Name', e.user?.name || e.user_name], ['Email', e.email || e.user?.email || e.user_email || e.userEmail], ['Mobile Number', e.mobileNumber || e.user_mobileNumber],
     ]} />)}
-    {section(3, <>
+    {section('Family', <>
       {['father', 'mother'].map(key => {
         const rows = [
           ['Full Name', e[`${key}Name`]], ['Mobile Number', e[`${key}MobileNumber`]], ['Occupation', e[`${key}Occupation`]],
@@ -93,7 +104,7 @@ export default function EnrollmentApplicationReview({ enrollment: e, documents, 
       ].filter(([, value]) => present(value))} /></Group>}
       {![e.fatherName, e.fatherMobileNumber, e.fatherOccupation, e.motherName, e.motherMobileNumber, e.motherOccupation, e.parentsAddress, e.guardianName, e.guardianTelephone, e.guardianOccupation, e.guardianAddress].some(present) && <p className="text-sm text-slate-500">No family details provided.</p>}
     </>)}
-    {section(4, <>
+    {section('Education', <>
       <Group title="Grade VI School"><Fields rows={[
         ['School Name', e.grade6School], ['School Address', e.grade6SchoolAddress], ['Section', e.grade6Section],
         ['School Year', yearRange(e.grade6SYStart, e.grade6SYEnd)], ['General Average', e.grade6Average],
@@ -102,7 +113,7 @@ export default function EnrollmentApplicationReview({ enrollment: e, documents, 
         ['School Name', e.lastHSSchool], ['Curriculum Year', e.lastHSCurriculumYear], ['Section', e.lastHSSection], ['School Year', yearRange(e.lastHSSYStart, e.lastHSSYEnd)],
       ]} /></Group>}
     </>)}
-    {section(5, <>
+    {section('Documents', <>
       {documentsError ? <div role="alert" className="text-sm text-red-600">{documentsError} <button type="button" onClick={onRetry} className="font-semibold underline">Retry</button></div> : keys.length ? <ul className="divide-y divide-slate-100">{keys.map(key => {
         const uploaded = documents.find(item => item.documentType === key);
         const requirement = requirements.find(item => item.key === key);
@@ -120,7 +131,7 @@ export default function EnrollmentApplicationReview({ enrollment: e, documents, 
       </div>}
       {(e.studentSignature || e.parentGuardianSignature) && <Fields rows={[["Student Signature", e.studentSignature], ["Parent / Guardian Signature", e.parentGuardianSignature]]} />}
     </>)}
-    {steps.length === 6 && section(6, <>
+    {section('SSC Exam', <>
       <Fields rows={[
         ['Exam Date', date(e.sscExamDate) || 'Not scheduled'],
         ['Passing Score', e.sscPassingScore ?? 75],
