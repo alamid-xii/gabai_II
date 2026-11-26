@@ -149,27 +149,17 @@ export const completeGoogleAuth = async (req, res) => {
         lock: transaction.LOCK.UPDATE,
       });
 
-      if (mode === 'login') {
-        if (!googleAccount || googleAccount.authProvider !== 'google') {
-          return {
-            error: emailAccount
-              ? "This account was registered with email and password. Please log in using your password."
-              : "This Google account is not registered yet. Please sign up with Google first.",
-          };
-        }
+      if (googleAccount && googleAccount.authProvider === 'google') {
         if (googleAccount.isActive === false || googleAccount.isActive === 0) {
           return { error: "This account is disabled. Please contact an administrator." };
         }
         return { user: googleAccount };
       }
 
-      if (googleAccount) {
-        return { error: "This Google account is already registered. Please log in with Google instead." };
-      }
       if (emailAccount) {
         return {
           error: emailAccount.authProvider === 'password'
-            ? "This email is already registered with a password. Please log in using your email and password."
+            ? "This account was registered with email and password. Please log in using your password."
             : "This email is already registered with another sign-in method.",
         };
       }
