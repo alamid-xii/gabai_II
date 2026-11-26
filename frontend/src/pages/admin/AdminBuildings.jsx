@@ -113,11 +113,7 @@ export function AdminBuildings({ buildings = [], onRefresh }) {
     }
   }
 
-  async function handleSubmit(e) {
-    e.preventDefault();
-    const token = localStorage.getItem("token");
-
-    // Use FormData for file upload
+  function buildFormData() {
     const formDataToSend = new FormData();
     formDataToSend.append("name", formData.name);
     formDataToSend.append("shortName", formData.name);
@@ -133,16 +129,37 @@ export function AdminBuildings({ buildings = [], onRefresh }) {
     }));
     formDataToSend.append("color", formData.color);
 
-    // Add file or embed link
     if (tourSourceMode === "embed") {
       const normalizedEmbed = parseTourEmbedInput(embedInput);
       formDataToSend.append("imageUrl", normalizedEmbed);
     } else if (selectedFile) {
       formDataToSend.append("photo360", selectedFile);
     } else if (formData.imageUrl) {
-      // Keep existing URL if no new file
       formDataToSend.append("imageUrl", formData.imageUrl);
     }
+    return formDataToSend;
+  }
+
+  async function ensureBuildingSaved() {
+    if (editingBuilding?.id) return editingBuilding;
+    if (!formData.name.trim()) throw new Error("Enter the building name first before generating audio.");
+    if (!formData.description.trim()) throw new Error("Enter the building description first before generating audio.");
+    const token = localStorage.getItem("token");
+    const response = await fetch(`${API}/admin/buildings`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: buildFormData(),
+    });
+    const saved = await response.json();
+    if (!response.ok) throw new Error(saved.error || "Could not save building before generating audio.");
+    toast.success("Building saved! Generating audio...");
+    return saved;
+  }
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    const token = localStorage.getItem("token");
+    const formDataToSend = buildFormData();
 
     try {
       const url = editingBuilding
@@ -327,7 +344,14 @@ export function AdminBuildings({ buildings = [], onRefresh }) {
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
                   <p className="text-xs text-gray-500">{formData.voiceoverScript.length}/2,500 characters. Write the exact narration students will hear; keep personal information out of the script.</p>
                   <BuildingVoiceoverEditor key={`${editingBuilding?.id || 'new'}-${editingBuilding?.updatedAt || ''}`}
-                    buildingId={editingBuilding?.id} script={formData.voiceoverScript} onScriptLoaded={onScriptLoaded} onRefresh={onRefresh} />
+                    buildingId={editingBuilding?.id} script={formData.voiceoverScript} onScriptLoaded={onScriptLoaded} onRefresh={onRefresh}
+                    onEnsureBuildingSaved={ensureBuildingSaved}
+                    onBuildingCreated={(created) => {
+                      setEditingBuilding(created);
+                      setShowForm(false);
+                      setSelectedFile(null);
+                      if (onRefresh) onRefresh();
+                    }} />
                 </section>
 
                 <div className="grid sm:grid-cols-2 gap-4">

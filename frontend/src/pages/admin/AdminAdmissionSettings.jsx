@@ -52,7 +52,7 @@ export function AdminAdmissionSettings() {
       <h3 className="font-bold text-[#001840]">Document checklists</h3>
       <div className="flex flex-wrap items-center gap-3">
         <select aria-label="Education level" value={level} onChange={event => setLevel(event.target.value)} className={input}><option>JHS</option><option>SHS</option></select>
-        <select aria-label="Applicant type" value={type} onChange={event => setType(event.target.value)} className={input}>{['new', 'old', 'transferee', 'returnee'].map(value => <option key={value} value={value}>{value === 'old' ? 'Old / Continuing' : value}</option>)}</select>
+        <select aria-label="Applicant type" value={type} onChange={event => setType(event.target.value)} className={input}>{['new', 'transferee', 'returnee'].map(value => <option key={value} value={value}>{value}</option>)}</select>
         <button
           type="button"
           onClick={() => {
@@ -67,11 +67,11 @@ export function AdminAdmissionSettings() {
                 },
               },
             });
-            toast.success(`Copied ${level} / ${type === 'old' ? 'Continuing' : type} checklist to ${otherLevel}`);
+            toast.success(`Copied ${level} / ${type} checklist to ${otherLevel}`);
           }}
           className="rounded-lg border border-gray-300 bg-gray-50 hover:bg-gray-100 px-3 py-2 text-xs font-semibold text-[#001840]"
         >
-          Copy to {level === 'JHS' ? 'SHS' : 'JHS'} ({type === 'old' ? 'Continuing' : type})
+          Copy to {level === 'JHS' ? 'SHS' : 'JHS'} ({type})
         </button>
       </div>
       {content.documents.map((doc, index) => {
@@ -85,7 +85,7 @@ export function AdminAdmissionSettings() {
         if (!/^[a-zA-Z][a-zA-Z0-9_]{0,39}$/.test(docKey) || !docLabel.trim() || ['constructor','prototype','__proto__','sscCard'].includes(docKey) || content.documents.some(doc => doc.key === docKey)) { toast.error('Use a unique upload key and document label.'); return; }
         patch({ documents: [...content.documents, { key: docKey, label: docLabel.trim() }] }); setDocKey(''); setDocLabel('');
       }} className="rounded-lg border px-3 py-2 text-sm">Add document</button></div>
-      <p className="text-xs text-gray-500">Set each document separately for every education level and applicant type. A document marked “Not requested” will not appear on that checklist.</p>
+      <p className="text-xs text-gray-500">Set each document separately for every education level and applicant type. Continuing (Old) students do not re-upload documents since their records are already on file.</p>
     </section>
     <button type="submit" className="rounded-lg bg-[#001840] px-5 py-3 text-white">{saving ? 'Saving...' : 'Save admission settings'}</button>
   </fieldset></form>;

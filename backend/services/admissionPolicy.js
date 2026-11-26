@@ -62,6 +62,7 @@ export async function policyFor(enrollment) {
   return currentAdmission();
 }
 export function checklist(policy, enrollment) {
+  if ((enrollment.enrollmentType || 'new') === 'old') return [];
   const rules = policy.requirements[enrollment.educationLevel]?.[enrollment.enrollmentType || 'new'] || [];
   return rules.map(rule => ({ ...rule, label: policy.documents.find(doc => doc.key === rule.key)?.label || rule.key }));
 }
@@ -94,6 +95,7 @@ export function sscContinuationEligibility(summary, policy) {
   return !summary.hasFailedSubject && summary.computedGwa >= maintainingAverage;
 }
 export function validateDocuments(policy, enrollment, uploaded) {
+  if ((enrollment.enrollmentType || 'new') === 'old') return;
   const keys = new Set(uploaded.map(doc => doc.documentType));
   const missing = checklist(policy, enrollment).filter(doc => doc.required && !keys.has(doc.key));
   if (missing.length) throw fail(`Upload required documents: ${missing.map(doc => doc.label).join(', ')}.`);

@@ -771,14 +771,13 @@ export function HSEnrollmentForm({ enrollmentId: propId, readOnly = false }) {
   const total = 5;
   const isContinuing = form.enrollmentType === 'old' || isCarryOver;
   const isIncomingGrade7 = form.educationLevel === 'JHS' && form.gradeLevel === 'Grade 7' && !isContinuing;
-  const continuingNeedsDocs = isContinuing && activeCreds.length > 0;
-  const lastRequiredStep = isContinuing ? (continuingNeedsDocs ? 4 : 3) : total;
+  const lastRequiredStep = isContinuing ? 3 : total;
   const isContinuingSSC = isContinuing && form.educationLevel === 'JHS' && form.sscClass === 'SSC';
   const needsReportedAverage = isContinuingSSC && !form.gradesComplete && !isEditMode;
   const maintainingAverage = Number(policy?.ssc?.maintainingAverage ?? policy?.ssc?.minimumAverage ?? 85);
-  const docStep = isContinuing ? 4 : 5;
+  const docStep = isContinuing ? -1 : 5;
   const labels = isContinuing
-    ? (continuingNeedsDocs ? ["Grade & Type", "Personal Info", "Family", "Documents"] : ["Grade & Type", "Personal Info", "Family"])
+    ? ["Grade & Type", "Personal Info", "Family"]
     : ["Grade & Type", "Personal Info", "Family", "Education", "Documents"];
   // Active credential list depends on enrollment type
 

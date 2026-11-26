@@ -316,8 +316,7 @@ export function LevelSelection() {
       setSscGwaError('');
     }
     const prevAvg = sscPreviousGwa || next.previousGwa;
-    const continuingRequiredDocs = (settings?.content?.requirements?.[finalLvl]?.old || []).some(rule => rule.required);
-    if (openFullForm || !record.studentNumber || continuingRequiredDocs) {
+    if (openFullForm || !record.studentNumber) {
       proceedContinuingEnrollment(finalLvl, finalG, finalS, finalSscClass, prevAvg);
       return;
     }
