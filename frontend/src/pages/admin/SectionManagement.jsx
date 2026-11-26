@@ -257,7 +257,6 @@ function SectionStudentsPanel({ section, allSections, onClose, onChanged }) {
                     <thead className="bg-gray-50 border-b border-gray-100">
                       <tr>
                         <th className="text-left px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wider">Subject</th>
-                        <th className="text-left px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wider">Units</th>
                         <th className="text-left px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wider w-52">Teacher</th>
                         <th className="px-4 py-2.5 w-16"></th>
                       </tr>
@@ -269,7 +268,6 @@ function SectionStudentsPanel({ section, allSections, onClose, onChanged }) {
                             <p className="font-semibold text-[#001840] text-xs font-mono">{subj.subjectCode}</p>
                             <p className="text-xs text-gray-500 mt-0.5">{subj.subjectDescription}</p>
                           </td>
-                          <td className="px-4 py-3 text-xs text-gray-600">{subj.units}</td>
                           <td className="px-4 py-3">
                             <select
                               value={localInstructors[subj.subjectCode] || ''}

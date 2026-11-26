@@ -115,11 +115,29 @@ export const deleteFAQ = async (req, res) => {
 // User Management
 export const getAllUsers = async (req, res) => {
   try {
-    const users = await User.findAll({
-      attributes: ['id', 'name', 'email', 'role', 'isActive', 'createdAt'],
-      order: [['createdAt', 'DESC']]
+    const [users, [enrolledRows]] = await Promise.all([
+      User.findAll({
+        attributes: ['id', 'name', 'email', 'role', 'isActive', 'createdAt'],
+        order: [['createdAt', 'DESC']]
+      }),
+      sequelize.query(
+        `SELECT DISTINCT userId
+         FROM enrollment_records
+         WHERE status IN ('enrolled', 'active', 'approved', 'subjects_enrolled', 'completed')`
+      ).catch(() => [[]]),
+    ]);
+    const enrolledUserIds = new Set((enrolledRows || []).map(row => Number(row.userId)));
+    const payload = users.map(u => {
+      const json = u.toJSON ? u.toJSON() : { ...u };
+      const isStudentAccount = json.role === 'student' || json.role === 'user';
+      const isEnrolled = isStudentAccount && enrolledUserIds.has(Number(json.id));
+      return {
+        ...json,
+        isEnrolled,
+        displayRole: isStudentAccount ? (isEnrolled ? 'student' : 'applicant') : json.role,
+      };
     });
-    res.json(users);
+    res.json(payload);
   } catch (error) {
     res.status(500).json({ error: "Failed to fetch users" });
   }

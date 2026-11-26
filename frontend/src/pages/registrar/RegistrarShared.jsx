@@ -950,9 +950,11 @@ export function EnrollmentDetail({ enrollmentId, enrollment: rowData, onClose, o
             <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Enrolled Subjects ({subjects.length})</p>
             <div className="space-y-1 max-h-36 overflow-y-auto">
               {subjects.map((s, i) => (
-                <div key={i} className="flex justify-between text-sm py-1 border-b border-gray-50 last:border-0">
+                <div key={i} className="flex justify-between items-center text-sm py-1.5 border-b border-gray-50 last:border-0">
                   <span className="text-gray-700">{s.subjectName || s.name || s.code}</span>
-                  <span className="text-gray-400 text-xs">{s.units} units</span>
+                  {s.code && s.subjectName && s.code !== s.subjectName && (
+                    <span className="text-gray-400 text-xs font-mono">{s.code}</span>
+                  )}
                 </div>
               ))}
             </div>

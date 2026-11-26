@@ -116,18 +116,25 @@ export function AdminUsers({ users: initialUsers = [] }) {
     }
   }
 
+  const getEffectiveRole = (u) => {
+    if (u.displayRole) return u.displayRole;
+    if (u.role === 'student' || u.role === 'user') return u.isEnrolled ? 'student' : 'applicant';
+    return u.role;
+  };
+
   const filtered = useMemo(() => {
     return users.filter(u => {
+      const effectiveRole = getEffectiveRole(u);
       // Search
       if (search.trim()) {
         const q = search.trim().toLowerCase();
         const nameMatch = (u.name || '').toLowerCase().includes(q);
         const emailMatch = (u.email || '').toLowerCase().includes(q);
-        const roleMatch = (u.role || '').toLowerCase().includes(q);
+        const roleMatch = (effectiveRole || '').toLowerCase().includes(q) || (u.role || '').toLowerCase().includes(q);
         if (!nameMatch && !emailMatch && !roleMatch) return false;
       }
       // Role filter
-      if (roleFilter !== 'all' && u.role !== roleFilter) return false;
+      if (roleFilter !== 'all' && effectiveRole !== roleFilter) return false;
       // Status filter
       if (statusFilter === 'active' && u.isActive === false) return false;
       if (statusFilter === 'inactive' && u.isActive !== false) return false;
@@ -164,7 +171,8 @@ export function AdminUsers({ users: initialUsers = [] }) {
   const counts = {
     total: users.length,
     teachers: users.filter(u => u.role === 'teacher').length,
-    students: users.filter(u => u.role === 'student' || u.role === 'user').length,
+    students: users.filter(u => getEffectiveRole(u) === 'student').length,
+    applicants: users.filter(u => getEffectiveRole(u) === 'applicant').length,
     admins: users.filter(u => u.role === 'admin').length,
   };
 
@@ -182,7 +190,9 @@ export function AdminUsers({ users: initialUsers = [] }) {
         </div>
         <div className="bg-blue-600 text-white rounded-xl p-4 shadow-xs">
           <p className="text-2xl font-bold">{counts.students}</p>
-          <p className="text-xs opacity-80 mt-0.5">Students</p>
+          <p className="text-xs opacity-80 mt-0.5">
+            Enrolled Students{counts.applicants > 0 ? ` · ${counts.applicants} Applicant${counts.applicants === 1 ? '' : 's'}` : ''}
+          </p>
         </div>
         <div className="bg-purple-600 text-white rounded-xl p-4 shadow-xs">
           <p className="text-2xl font-bold">{counts.admins}</p>
@@ -225,7 +235,8 @@ export function AdminUsers({ users: initialUsers = [] }) {
             <option value="admin">Administrators</option>
             <option value="registrar">Registrars</option>
             <option value="teacher">Teachers</option>
-            <option value="student">Students</option>
+            <option value="student">Students (Enrolled)</option>
+            <option value="applicant">Applicants (Not Enrolled)</option>
           </select>
 
           {/* Status Filter */}
@@ -318,14 +329,20 @@ export function AdminUsers({ users: initialUsers = [] }) {
 
                         {/* Role Badge */}
                         <td className="px-5 py-3.5 whitespace-nowrap">
-                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold capitalize ${
-                            u.role === 'admin' ? 'bg-purple-50 text-purple-700 border border-purple-200' :
-                            u.role === 'registrar' ? 'bg-blue-50 text-blue-700 border border-blue-200' :
-                            u.role === 'teacher' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
-                            'bg-gray-100 text-gray-700 border border-gray-200'
-                          }`}>
-                            {u.role}
-                          </span>
+                          {(() => {
+                            const effectiveRole = getEffectiveRole(u);
+                            return (
+                              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold capitalize ${
+                                effectiveRole === 'admin' ? 'bg-purple-50 text-purple-700 border border-purple-200' :
+                                effectiveRole === 'registrar' ? 'bg-blue-50 text-blue-700 border border-blue-200' :
+                                effectiveRole === 'teacher' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
+                                effectiveRole === 'student' ? 'bg-indigo-50 text-indigo-700 border border-indigo-200' :
+                                'bg-amber-50 text-amber-700 border border-amber-200'
+                              }`}>
+                                {effectiveRole}
+                              </span>
+                            );
+                          })()}
                         </td>
 
                         {/* Status */}

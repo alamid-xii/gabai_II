@@ -829,7 +829,6 @@ function SectionDetailView({ section, onBack }) {
                   <tr className="border-b border-gray-100 bg-gray-50/70 text-gray-400 uppercase font-semibold">
                     <th className="px-5 py-2.5">Code</th>
                     <th className="px-5 py-2.5">Subject Description</th>
-                    <th className="px-5 py-2.5">Units</th>
                     <th className="px-5 py-2.5">Time / Schedule</th>
                     <th className="px-5 py-2.5">Room</th>
                     <th className="px-5 py-2.5">Instructor</th>
@@ -840,7 +839,6 @@ function SectionDetailView({ section, onBack }) {
                     <tr key={subj.code || sIdx} className="hover:bg-gray-50/50 transition-colors">
                       <td className="px-5 py-2.5 font-bold text-[#001840] font-mono">{subj.code}</td>
                       <td className="px-5 py-2.5 text-gray-800 font-medium">{subj.description}</td>
-                      <td className="px-5 py-2.5 text-gray-600">{subj.units || 3}</td>
                       <td className="px-5 py-2.5 text-gray-700 font-medium">{subj.schedule || sec.schedule || 'TBA'}</td>
                       <td className="px-5 py-2.5 text-gray-600 font-mono">{subj.room || sec.room || '—'}</td>
                       <td className="px-5 py-2.5 text-gray-600">{subj.instructor || sec.instructor || 'TBA'}</td>
