@@ -208,7 +208,9 @@ export function StudentsTab() {
         'Date of Birth': s.dateOfBirth || '',
         'Education Level': s.educationLevel || '',
         'Grade Level': s.gradeLevel || '',
-        'Program / Strand': s.strand || (s.educationLevel === 'JHS' ? 'Regular' : ''),
+        'Program / Strand': s.educationLevel === 'JHS'
+          ? ((s.strand === 'SSC' || s.sscClass === 'SSC' || (!s.sscClass && Number(s.sscApplied) === 1 && s.sscResult !== 'failed')) ? 'SSC' : 'Regular')
+          : (s.strand || ''),
         'Section': s.sectionName || '',
         'Enrollment Type': s.enrollmentType || '',
         'Student Type': s.studentType || '',
@@ -590,7 +592,7 @@ export function StudentsTab() {
                             <span className="font-medium text-gray-800">{s.educationLevel}</span>
                             {s.gradeLevel && <span>· {s.gradeLevel}</span>}
                             {s.educationLevel === 'JHS' ? (
-                              s.strand === 'SSC' || s.sscClass === 'SSC' ? (
+                              s.strand === 'SSC' || s.sscClass === 'SSC' || (!s.sscClass && Number(s.sscApplied) === 1 && s.sscResult !== 'failed') ? (
                                 <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-purple-50 text-purple-700 border border-purple-200">
                                   SSC
                                 </span>

@@ -12,7 +12,7 @@ export const getRegistrarDashboard = async (req, res) => {
     const [records, sections] = academicYear ? await Promise.all([
       EnrollmentRecord.findAll({
         attributes: ['id', 'userId', 'firstName', 'familyName', 'educationLevel', 'gradeLevel', 'academicYear',
-          'enrollmentType', 'sscClass', 'sscApplied', 'sscResult', 'status', 'lifeStatus', 'sectionId',
+          'enrollmentType', 'strand', 'sscClass', 'sscApplied', 'sscResult', 'status', 'lifeStatus', 'sectionId',
           'createdAt', 'updatedAt', 'verified_at', 'approved_at'],
         where: { academicYear }, raw: true,
       }),

@@ -151,7 +151,7 @@ export const getRegistrarEnrollments = async (req, res) => {
       params.push(educationLevel);
     }
 
-    const sscPredicate = `(COALESCE(er.sscClass, '') = 'SSC' OR (COALESCE(er.sscApplied, 0) = 1 AND COALESCE(er.sscClass, '') = '' AND COALESCE(er.sscResult, '') <> 'failed'))`;
+    const sscPredicate = `(COALESCE(er.sscClass, '') = 'SSC' OR COALESCE(er.strand, '') = 'SSC' OR (COALESCE(er.sscApplied, 0) = 1 AND COALESCE(er.sscClass, '') = '' AND COALESCE(er.sscResult, '') <> 'failed'))`;
     if (schoolLevel === 'shs') query += ` AND er.educationLevel = 'SHS'`;
     if (schoolLevel === 'jhs_ssc') query += ` AND er.educationLevel = 'JHS' AND ${sscPredicate}`;
     if (schoolLevel === 'jhs_regular') query += ` AND er.educationLevel = 'JHS' AND NOT ${sscPredicate}`;
@@ -691,7 +691,9 @@ export const getStudentsByLifeStatus = async (req, res) => {
 
     let query = `
       SELECT er.id, er.userId, er.familyName, er.firstName, er.middleName,
-             er.educationLevel, er.gradeLevel, er.strand, er.sectionName, er.sectionId,
+             er.sex, er.dateOfBirth, er.studentType,
+             er.educationLevel, er.gradeLevel, er.strand, er.sscClass, er.sscApplied, er.sscResult,
+             er.sectionName, er.sectionId,
              er.enrollmentType, er.studentNumber, er.lrn, er.academicYear,
              er.status, er.lifeStatus, er.lifeStatusReason, er.lifeStatusDate,
              er.lifeStatusUpdatedBy, er.destinationSchool, er.updatedAt, er.createdAt,
@@ -723,8 +725,11 @@ export const getStudentsByLifeStatus = async (req, res) => {
     }
 
     if (strand && strand !== 'all') {
+      const sscPredicate = `(COALESCE(er.sscClass, '') = 'SSC' OR COALESCE(er.strand, '') = 'SSC' OR (COALESCE(er.sscApplied, 0) = 1 AND COALESCE(er.sscClass, '') = '' AND COALESCE(er.sscResult, '') <> 'failed'))`;
       if (strand === 'Regular') {
-        query += ` AND (er.strand IS NULL OR er.strand = '' OR er.strand = 'Regular')`;
+        query += ` AND er.educationLevel = 'JHS' AND NOT ${sscPredicate}`;
+      } else if (strand === 'SSC') {
+        query += ` AND er.educationLevel = 'JHS' AND ${sscPredicate}`;
       } else {
         query += ` AND er.strand = ?`;
         params.push(strand);

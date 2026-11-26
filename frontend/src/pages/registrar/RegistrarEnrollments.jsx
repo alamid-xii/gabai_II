@@ -155,7 +155,9 @@ export function EnrollmentsTab({ onActionSuccess }) {
         'LRN': e.lrn || '',
         'Education Level': e.educationLevel || '',
         'Grade Level': e.gradeLevel || '',
-        'Program / Strand': e.course || e.strand || '',
+        'Program / Strand': e.educationLevel === 'JHS'
+          ? ((e.strand === 'SSC' || e.sscClass === 'SSC' || (!e.sscClass && Number(e.sscApplied) === 1 && e.sscResult !== 'failed')) ? 'SSC' : 'Regular')
+          : (e.course || e.strand || ''),
         'Status': STATUS_CFG[e.status]?.label || e.status || '',
         'Life Status': e.lifeStatus || 'Active',
         'Academic Year': e.academicYear || '',
@@ -436,7 +438,7 @@ export function EnrollmentsTab({ onActionSuccess }) {
                             <span className="font-medium text-gray-800">{enrollment.educationLevel}</span>
                             {enrollment.gradeLevel && <span>· {enrollment.gradeLevel}</span>}
                             {enrollment.educationLevel === 'JHS' ? (
-                              enrollment.sscClass === 'SSC' || (!enrollment.sscClass && Number(enrollment.sscApplied) === 1 && enrollment.sscResult !== 'failed') ? (
+                              enrollment.strand === 'SSC' || enrollment.sscClass === 'SSC' || (!enrollment.sscClass && Number(enrollment.sscApplied) === 1 && enrollment.sscResult !== 'failed') ? (
                                 <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-purple-50 text-purple-700 border border-purple-200">
                                   SSC
                                 </span>

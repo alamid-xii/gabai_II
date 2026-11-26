@@ -12,6 +12,7 @@ export function schoolLevelOf(record) {
   if (record.educationLevel === 'SHS') return 'shs';
   if (record.educationLevel !== 'JHS') return null;
   const ssc = record.sscClass === 'SSC' ||
+    record.strand === 'SSC' ||
     (truthy(record.sscApplied) && !record.sscClass && record.sscResult !== 'failed');
   return ssc ? 'jhs_ssc' : 'jhs_regular';
 }
