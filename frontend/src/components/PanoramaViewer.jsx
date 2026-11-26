@@ -409,7 +409,7 @@ export function PanoramaViewer({
   }
 
   return (
-    <div style={{ position: "relative", height, borderRadius: "12px", overflow: "hidden" }}>
+    <div style={{ position: "relative", isolation: "isolate", zIndex: 0, height, borderRadius: "12px", overflow: "hidden" }}>
       {loading && (
         <div
           style={{
